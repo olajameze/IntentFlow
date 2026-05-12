@@ -1,7 +1,41 @@
 import { NextResponse } from "next/server";
 import { encryptSecret } from "@/lib/crypto";
 import { withSupabaseRoute } from "@/lib/with-supabase-route";
+import { supabaseErrorResponse } from "@/lib/supabase-error-response";
 import { z } from "zod";
+
+/** Returns null when empty/omitted; throws if user-entered value is not a valid http(s) URL. */
+function normalizeWebsiteUrl(raw: string | undefined | null): string | null {
+  if (raw === undefined || raw === null) return null;
+  const t = String(raw).trim();
+  if (!t) return null;
+  const candidate = /^https?:\/\//i.test(t) ? t : `https://${t}`;
+  try {
+    const u = new URL(candidate);
+    if (u.protocol !== "http:" && u.protocol !== "https:") {
+      throw new SyntaxError("not http(s)");
+    }
+    return u.href;
+  } catch {
+    throw new Error("INVALID_WEBSITE_URL");
+  }
+}
+
+function websiteUrlInvalidResponse() {
+  return NextResponse.json(
+    {
+      error: {
+        formErrors: [] as string[],
+        fieldErrors: {
+          website_url: [
+            "Invalid URL — use a full link like https://example.com (or leave Website empty; do not paste the Umami id here)",
+          ],
+        },
+      },
+    },
+    { status: 400 },
+  );
+}
 
 function toSafeBusiness(b: Record<string, unknown>) {
   const {
@@ -24,7 +58,7 @@ const businessSchema = z.object({
   target_audience: z.string().optional(),
   industry: z.string().optional(),
   social_accounts: z.record(z.string(), z.string()).optional(),
-  website_url: z.string().url().optional().or(z.literal("")),
+  website_url: z.string().optional(),
   goals: z.string().optional(),
   umami_website_id: z.string().optional(),
   active: z.boolean().optional(),
@@ -34,7 +68,7 @@ const businessSchema = z.object({
 export async function GET() {
   return withSupabaseRoute(async (sb) => {
     const { data, error } = await sb.from("businesses").select("*").order("name");
-    if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+    if (error) return supabaseErrorResponse(error);
     const safe = data?.map((row) => toSafeBusiness(row as Record<string, unknown>)) ?? [];
     return NextResponse.json(safe);
   });
@@ -57,13 +91,19 @@ export async function POST(req: Request) {
       stripe_secret_tag: enc.tag,
     };
   }
+  let website_url: string | null;
+  try {
+    website_url = normalizeWebsiteUrl(body.website_url);
+  } catch {
+    return websiteUrlInvalidResponse();
+  }
   const insert = {
     name: body.name,
     type: body.type,
     target_audience: body.target_audience ?? null,
     industry: body.industry ?? null,
     social_accounts: body.social_accounts ?? {},
-    website_url: body.website_url || null,
+    website_url,
     goals: body.goals ?? null,
     umami_website_id: body.umami_website_id ?? null,
     active: body.active ?? true,
@@ -71,7 +111,7 @@ export async function POST(req: Request) {
   };
   return withSupabaseRoute(async (sb) => {
     const { data, error } = await sb.from("businesses").insert(insert).select("*").single();
-    if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+    if (error) return supabaseErrorResponse(error);
     return NextResponse.json(toSafeBusiness(data as Record<string, unknown>));
   });
 }
@@ -87,8 +127,15 @@ export async function PATCH(req: Request) {
   const body = parsed.data;
   const master = process.env.STRIPE_SECRET_ENCRYPTION_KEY;
   const update: Record<string, unknown> = {};
+  if (body.website_url !== undefined) {
+    try {
+      update.website_url = normalizeWebsiteUrl(body.website_url);
+    } catch {
+      return websiteUrlInvalidResponse();
+    }
+  }
   (Object.entries(body) as [string, unknown][]).forEach(([key, value]) => {
-    if (value === undefined || key === "id" || key === "stripe_secret_key") return;
+    if (value === undefined || key === "id" || key === "stripe_secret_key" || key === "website_url") return;
     update[key] = value;
   });
   if (body.stripe_secret_key) {
@@ -103,7 +150,7 @@ export async function PATCH(req: Request) {
   }
   return withSupabaseRoute(async (sb) => {
     const { data, error } = await sb.from("businesses").update(update).eq("id", id).select("*").single();
-    if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+    if (error) return supabaseErrorResponse(error);
     return NextResponse.json(toSafeBusiness(data as Record<string, unknown>));
   });
 }

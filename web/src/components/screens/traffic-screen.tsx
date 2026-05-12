@@ -134,8 +134,8 @@ export function TrafficScreen() {
             </CardTitle>
             <span className="text-xs text-muted-foreground">Last payloads</span>
           </CardHeader>
-          <CardContent className="h-64 min-h-[256px] min-w-0">
-            <ResponsiveContainer width="100%" height="100%">
+          <CardContent className="min-w-0">
+            <ResponsiveContainer width="100%" height={256}>
               <LineChart data={chartData}>
                 <CartesianGrid strokeDasharray="3 3" opacity={0.2} />
                 <XAxis dataKey="label" />
@@ -198,8 +198,8 @@ export function TrafficScreen() {
           <CardHeader>
             <CardTitle className="text-base">Device mix</CardTitle>
           </CardHeader>
-          <CardContent className="h-56 min-h-[224px] min-w-0">
-            <ResponsiveContainer width="100%" height="100%">
+          <CardContent className="min-w-0">
+            <ResponsiveContainer width="100%" height={224}>
               <BarChart data={chartData}>
                 <CartesianGrid strokeDasharray="3 3" opacity={0.2} />
                 <XAxis dataKey="label" hide />

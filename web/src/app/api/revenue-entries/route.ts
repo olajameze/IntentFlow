@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { supabaseErrorResponse } from "@/lib/supabase-error-response";
 import { withSupabaseRoute } from "@/lib/with-supabase-route";
 import { z } from "zod";
 
@@ -22,7 +23,7 @@ export async function GET(req: Request) {
     let query = sb.from("revenue_entries").select("*").order("entry_date", { ascending: false }).limit(500);
     if (businessId) query = query.eq("business_id", businessId);
     const { data, error } = await query;
-    if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+    if (error) return supabaseErrorResponse(error);
     return NextResponse.json(data ?? []);
   });
 }
@@ -37,7 +38,7 @@ export async function POST(req: Request) {
       net_amount: parsed.data.net_amount ?? parsed.data.amount,
     };
     const { data, error } = await sb.from("revenue_entries").insert(payload).select("*").single();
-    if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+    if (error) return supabaseErrorResponse(error);
     return NextResponse.json(data);
   });
 }

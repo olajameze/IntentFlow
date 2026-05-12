@@ -77,8 +77,8 @@ export function AnalyticsScreen() {
         <CardHeader>
           <CardTitle className="text-base">Tri-line overlay</CardTitle>
         </CardHeader>
-        <CardContent className="h-72 min-h-[288px] min-w-0">
-          <ResponsiveContainer width="100%" height="100%">
+        <CardContent className="min-w-0">
+          <ResponsiveContainer width="100%" height={288}>
             <ComposedChart data={trend}>
               <CartesianGrid strokeDasharray="3 3" opacity={0.2} />
               <XAxis dataKey="label" />

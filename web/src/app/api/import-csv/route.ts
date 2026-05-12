@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { supabaseErrorResponse } from "@/lib/supabase-error-response";
 import { withSupabaseRoute } from "@/lib/with-supabase-route";
 
 function parseCsvLoose(text: string): Record<string, string>[] {
@@ -48,7 +49,7 @@ export async function POST(req: Request) {
   }
   return withSupabaseRoute(async (sb) => {
     const { data, error } = await sb.from("revenue_entries").insert(inserts).select("id");
-    if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+    if (error) return supabaseErrorResponse(error);
     return NextResponse.json({ imported: data?.length ?? 0 });
   });
 }

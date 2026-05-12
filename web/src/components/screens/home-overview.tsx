@@ -24,6 +24,16 @@ type Business = {
   active: boolean;
 };
 
+async function formatApiFailure(res: Response): Promise<string> {
+  const data = await res.json().catch(() => ({} as Record<string, unknown>));
+  const err = typeof data.error === "string" ? data.error : "";
+  const hint = typeof data.hint === "string" ? data.hint : "";
+  if (err && hint) return `${err} — ${hint}`;
+  if (err) return err;
+  if (hint) return hint;
+  return `HTTP ${res.status}`;
+}
+
 export function HomeOverview() {
   const [businesses, setBusinesses] = useState<Business[]>([]);
   const [snapshots, setSnapshots] = useState<Record<string, unknown>[]>([]);
@@ -42,12 +52,25 @@ export function HomeOverview() {
           fetch("/api/pending-posts?status=pending"),
           fetch(`/api/leads?from=${new Date().toISOString().slice(0, 10)}`),
         ]);
-        if (!bRes.ok) throw new Error("Failed to load businesses");
+        if (!bRes.ok) {
+          toast.error(await formatApiFailure(bRes), { duration: 35_000, id: "dashboard-api" });
+          return;
+        }
         setBusinesses(await bRes.json());
+
+        const parts: string[] = [];
         if (aRes.ok) setSnapshots(await aRes.json());
+        else parts.push(`Analytics: ${await formatApiFailure(aRes)}`);
         if (rRes.ok) setRevenue(await rRes.json());
+        else parts.push(`Revenue: ${await formatApiFailure(rRes)}`);
         if (pRes.ok) setPending(await pRes.json());
+        else parts.push(`Pending posts: ${await formatApiFailure(pRes)}`);
         if (lRes.ok) setLeads(await lRes.json());
+        else parts.push(`Leads: ${await formatApiFailure(lRes)}`);
+
+        if (parts.length) {
+          toast.error(parts.join("\n\n"), { duration: 35_000, id: "dashboard-api-partial" });
+        }
       } catch {
         toast.error("Could not refresh dashboard data");
       } finally {
@@ -143,16 +166,18 @@ export function HomeOverview() {
                     <p className="text-2xl font-semibold">£{revToday.toFixed(0)}</p>
                   </div>
                 </div>
-                <div className="h-32 min-h-[128px] w-full min-w-0 rounded-lg border bg-muted/30 p-2">
-                  <ResponsiveContainer width="100%" height="100%">
-                    <LineChart data={sparkData}>
-                      <XAxis dataKey="label" hide />
-                      <YAxis hide />
-                      <RTooltip />
-                      <Line type="monotone" dataKey="traffic" stroke="hsl(var(--primary))" strokeWidth={2} dot={false} />
-                      <Line type="monotone" dataKey="revenue" stroke="hsl(var(--chart-2))" strokeWidth={2} dot={false} />
-                    </LineChart>
-                  </ResponsiveContainer>
+                <div className="w-full min-w-0 rounded-lg border bg-muted/30 p-2">
+                  <div className="h-28 w-full min-w-0">
+                    <ResponsiveContainer width="100%" height={112}>
+                      <LineChart data={sparkData}>
+                        <XAxis dataKey="label" hide />
+                        <YAxis hide />
+                        <RTooltip />
+                        <Line type="monotone" dataKey="traffic" stroke="hsl(var(--primary))" strokeWidth={2} dot={false} />
+                        <Line type="monotone" dataKey="revenue" stroke="hsl(var(--chart-2))" strokeWidth={2} dot={false} />
+                      </LineChart>
+                    </ResponsiveContainer>
+                  </div>
                   <div className="mt-1 flex items-center justify-between text-[11px] text-muted-foreground">
                     <span className="flex items-center gap-1">
                       <Activity className="h-3 w-3" />

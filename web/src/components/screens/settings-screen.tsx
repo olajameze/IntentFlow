@@ -39,7 +39,18 @@ export function SettingsScreen() {
 
   const load = async () => {
     const res = await fetch("/api/businesses");
-    if (res.ok) setBusinesses(await res.json());
+    if (!res.ok) {
+      const data = await res.json().catch(() => ({}));
+      const msg =
+        typeof data?.error === "string"
+          ? data.hint
+            ? `${data.error} — ${data.hint}`
+            : data.error
+          : "Could not load businesses";
+      toast.error(msg);
+      return;
+    }
+    setBusinesses(await res.json());
   };
 
   useEffect(() => {
@@ -63,7 +74,14 @@ export function SettingsScreen() {
       }),
     });
     if (!res.ok) {
-      toast.error("Could not create business");
+      const data = await res.json().catch(() => ({}));
+      const msg =
+        typeof data?.error === "string"
+          ? data.error
+          : data?.error?.fieldErrors?.website_url?.[0] ??
+            data?.error?.formErrors?.[0] ??
+            JSON.stringify(data?.error ?? data);
+      toast.error(msg || "Could not create business");
       return;
     }
     toast.success("Business added");
