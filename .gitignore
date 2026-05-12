@@ -1,0 +1,27 @@
+# --- Root (monorepo) ---
+.DS_Store
+*.pem
+.env
+.env.local
+.env.*.local
+
+# Next.js (web/)
+web/node_modules/
+web/.next/
+web/out/
+web/build/
+web/.vercel
+web/*.tsbuildinfo
+web/npm-debug.log*
+web/yarn-debug.log*
+web/yarn-error.log*
+
+# Python (engine/)
+engine/.venv/
+engine/**/__pycache__/
+engine/**/*.pyc
+engine/.env
+
+# Tools / local
+.idea/
+.vscode/

@@ -1,0 +1,20 @@
+{
+  "name": "IntentFlow Marketing Engine",
+  "short_name": "IntentFlow",
+  "description": "Omni-channel marketing engine with Umami analytics and revenue intelligence.",
+  "id": "/",
+  "start_url": "/",
+  "scope": "/",
+  "display": "standalone",
+  "orientation": "portrait-primary",
+  "background_color": "#0a0a0a",
+  "theme_color": "#0a0a0a",
+  "icons": [
+    {
+      "src": "/icons/icon-192.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any maskable"
+    }
+  ]
+}
