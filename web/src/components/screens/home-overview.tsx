@@ -143,7 +143,7 @@ export function HomeOverview() {
                     <p className="text-2xl font-semibold">£{revToday.toFixed(0)}</p>
                   </div>
                 </div>
-                <div className="h-32 w-full rounded-lg border bg-muted/30 p-2">
+                <div className="h-32 min-h-[128px] w-full min-w-0 rounded-lg border bg-muted/30 p-2">
                   <ResponsiveContainer width="100%" height="100%">
                     <LineChart data={sparkData}>
                       <XAxis dataKey="label" hide />

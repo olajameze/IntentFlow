@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { getSupabaseAdmin } from "@/lib/supabase-admin";
+import { withSupabaseRoute } from "@/lib/with-supabase-route";
 
 function parseCsvLoose(text: string): Record<string, string>[] {
   const lines = text
@@ -30,7 +30,6 @@ export async function POST(req: Request) {
   }
   const text = await file.text();
   const rows = parseCsvLoose(text);
-  const sb = getSupabaseAdmin();
   const inserts = rows.slice(0, 500).map((r) => {
     const amount = Number(r.amount ?? r.gross ?? "0") || 0;
     return {
@@ -47,7 +46,9 @@ export async function POST(req: Request) {
   if (!inserts.length) {
     return NextResponse.json({ error: "No rows detected" }, { status: 400 });
   }
-  const { data, error } = await sb.from("revenue_entries").insert(inserts).select("id");
-  if (error) return NextResponse.json({ error: error.message }, { status: 500 });
-  return NextResponse.json({ imported: data?.length ?? 0 });
+  return withSupabaseRoute(async (sb) => {
+    const { data, error } = await sb.from("revenue_entries").insert(inserts).select("id");
+    if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+    return NextResponse.json({ imported: data?.length ?? 0 });
+  });
 }

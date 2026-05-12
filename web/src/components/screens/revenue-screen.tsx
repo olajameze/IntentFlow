@@ -140,7 +140,7 @@ export function RevenueScreen() {
             <CardHeader>
               <CardTitle className="text-base">Revenue cadence</CardTitle>
             </CardHeader>
-            <CardContent className="h-64">
+            <CardContent className="h-64 min-h-[256px] min-w-0">
               <ResponsiveContainer width="100%" height="100%">
                 <AreaChart data={chartData}>
                   <defs>
@@ -289,7 +289,7 @@ export function RevenueScreen() {
           </CardHeader>
           <CardContent className="text-sm text-muted-foreground space-y-2">
             <p>Add the restricted key under Settings → Businesses. RevenueTracker syncs every six hours via GitHub Actions.</p>
-            <div className="h-40 rounded-lg border bg-muted/40 p-4">
+            <div className="h-40 min-h-[160px] min-w-0 rounded-lg border bg-muted/40 p-4">
               <ResponsiveContainer width="100%" height="100%">
                 <BarChart
                   data={chartData.slice(-7)}

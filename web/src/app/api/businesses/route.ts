@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
-import { getSupabaseAdmin } from "@/lib/supabase-admin";
 import { encryptSecret } from "@/lib/crypto";
+import { withSupabaseRoute } from "@/lib/with-supabase-route";
 import { z } from "zod";
 
 function toSafeBusiness(b: Record<string, unknown>) {
@@ -32,11 +32,12 @@ const businessSchema = z.object({
 });
 
 export async function GET() {
-  const sb = getSupabaseAdmin();
-  const { data, error } = await sb.from("businesses").select("*").order("name");
-  if (error) return NextResponse.json({ error: error.message }, { status: 500 });
-  const safe = data?.map((row) => toSafeBusiness(row as Record<string, unknown>)) ?? [];
-  return NextResponse.json(safe);
+  return withSupabaseRoute(async (sb) => {
+    const { data, error } = await sb.from("businesses").select("*").order("name");
+    if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+    const safe = data?.map((row) => toSafeBusiness(row as Record<string, unknown>)) ?? [];
+    return NextResponse.json(safe);
+  });
 }
 
 export async function POST(req: Request) {
@@ -68,10 +69,11 @@ export async function POST(req: Request) {
     active: body.active ?? true,
     ...stripeFields,
   };
-  const sb = getSupabaseAdmin();
-  const { data, error } = await sb.from("businesses").insert(insert).select("*").single();
-  if (error) return NextResponse.json({ error: error.message }, { status: 500 });
-  return NextResponse.json(toSafeBusiness(data as Record<string, unknown>));
+  return withSupabaseRoute(async (sb) => {
+    const { data, error } = await sb.from("businesses").insert(insert).select("*").single();
+    if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+    return NextResponse.json(toSafeBusiness(data as Record<string, unknown>));
+  });
 }
 
 export async function PATCH(req: Request) {
@@ -99,8 +101,9 @@ export async function PATCH(req: Request) {
     update.stripe_secret_tag = enc.tag;
     delete update.stripe_secret_key;
   }
-  const sb = getSupabaseAdmin();
-  const { data, error } = await sb.from("businesses").update(update).eq("id", id).select("*").single();
-  if (error) return NextResponse.json({ error: error.message }, { status: 500 });
-  return NextResponse.json(toSafeBusiness(data as Record<string, unknown>));
+  return withSupabaseRoute(async (sb) => {
+    const { data, error } = await sb.from("businesses").update(update).eq("id", id).select("*").single();
+    if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+    return NextResponse.json(toSafeBusiness(data as Record<string, unknown>));
+  });
 }
