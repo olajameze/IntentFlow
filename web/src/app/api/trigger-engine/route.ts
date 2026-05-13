@@ -37,6 +37,20 @@ const DISPATCH_TOKEN_HINT =
   "Add a GitHub PAT to `web/.env.local` (next to `web/package.json`—not the monorepo root unless you symlink). Use any of: `GITHUB_ACTION_DISPATCH_TOKEN`, `GITHUB_DISPATCH_TOKEN`, or `GH_DISPATCH_TOKEN`. Fine-grained: Actions Write + Contents Read on this repo. Also set `NEXT_PUBLIC_GITHUB_REPO=owner/repo`. Restart `npm run dev` after saving.";
 
 /**
+ * GET — safe diagnostics (no secrets) to verify `.env.local` was picked up after restart.
+ */
+export async function GET() {
+  const token = dispatchToken();
+  const repo = resolveRepoFull();
+  return NextResponse.json({
+    dispatchTokenConfigured: Boolean(token),
+    repoConfigured: Boolean(repo),
+    resolvedRepoSlug: repo ?? null,
+    manualWorkflowUrl: manualWorkflowUrl(),
+  });
+}
+
+/**
  * POST — dispatches `.github/workflows/marketing-engine.yml` via GitHub API when token is configured.
  * Otherwise returns 503 + URL to open the workflow manually.
  */
