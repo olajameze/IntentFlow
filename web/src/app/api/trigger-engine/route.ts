@@ -20,6 +20,18 @@ function manualWorkflowUrl(): string | null {
   return r ? workflowActionsUrl(r) : null;
 }
 
+/** Strip accidental quotes / "Bearer " from pasted PATs in .env.local */
+function normalizePat(raw: string): string {
+  let t = raw.trim();
+  if ((t.startsWith('"') && t.endsWith('"')) || (t.startsWith("'") && t.endsWith("'"))) {
+    t = t.slice(1, -1).trim();
+  }
+  if (/^Bearer\s+/i.test(t)) {
+    t = t.replace(/^Bearer\s+/i, "").trim();
+  }
+  return t;
+}
+
 /** PAT for workflow_dispatch: first non-empty wins (avoids “I used another name” confusion). */
 function dispatchToken(): string | undefined {
   for (const key of [
@@ -27,14 +39,26 @@ function dispatchToken(): string | undefined {
     "GITHUB_DISPATCH_TOKEN",
     "GH_DISPATCH_TOKEN",
   ] as const) {
-    const t = process.env[key]?.trim();
-    if (t) return t;
+    const raw = process.env[key];
+    if (!raw?.trim()) continue;
+    return normalizePat(raw);
   }
   return undefined;
 }
 
+const BAD_CREDENTIALS_HINT =
+  "GitHub returned 401 — the token is invalid, expired, or lacks scopes. Create a new PAT: Fine-grained → select repo `olajameze/IntentFlow` → Permissions: Contents Read + Actions Read and write. (Classic: enable `repo` + `workflow`.) In `web/.env.local` put the token alone — no quotes, no `Bearer ` prefix. Restart `npm run dev`.";
+
 const DISPATCH_TOKEN_HINT =
   "Add a GitHub PAT to `web/.env.local` (next to `web/package.json`—not the monorepo root unless you symlink). Use any of: `GITHUB_ACTION_DISPATCH_TOKEN`, `GITHUB_DISPATCH_TOKEN`, or `GH_DISPATCH_TOKEN`. Fine-grained: Actions Write + Contents Read on this repo. Also set `NEXT_PUBLIC_GITHUB_REPO=owner/repo`. Restart `npm run dev` after saving.";
+
+/** Non-secret shape check so you know you pasted a PAT, not something else */
+function tokenShapeHint(token: string): string {
+  if (token.startsWith("github_pat_")) return "fine_grained_pat";
+  if (token.startsWith("ghp_")) return "classic_pat";
+  if (token.startsWith("gho_") || token.startsWith("ghu_")) return "oauth_app_token_not_recommended";
+  return "unexpected_prefix";
+}
 
 /**
  * GET — safe diagnostics (no secrets) to verify `.env.local` was picked up after restart.
@@ -44,6 +68,7 @@ export async function GET() {
   const repo = resolveRepoFull();
   return NextResponse.json({
     dispatchTokenConfigured: Boolean(token),
+    tokenShape: token ? tokenShapeHint(token) : null,
     repoConfigured: Boolean(repo),
     resolvedRepoSlug: repo ?? null,
     manualWorkflowUrl: manualWorkflowUrl(),
@@ -108,6 +133,17 @@ export async function POST() {
       message: `Workflow dispatched (ref ${ref}). It may take a minute to appear in Actions.`,
       logsUrl,
     });
+  }
+
+  if (gh.status === 401) {
+    return NextResponse.json(
+      {
+        error: "GitHub rejected the token (401 Bad credentials).",
+        hint: BAD_CREDENTIALS_HINT,
+        ...(manual && { manualUrl: manual }),
+      },
+      { status: 401 },
+    );
   }
 
   const body = await gh.text();
