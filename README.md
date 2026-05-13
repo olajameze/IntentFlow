@@ -96,7 +96,7 @@ Workflows:
 - `traffic-revenue-sync.yml` — Umami + Stripe snapshots every four hours
 - `revenue-sync.yml` — Stripe-focused snapshots every six hours
 
-The dashboard **Home** “Run engine now” button calls **`POST /api/trigger-engine`** to **dispatch** `marketing-engine.yml` when you configure `GITHUB_ACTION_DISPATCH_TOKEN` and `GITHUB_REPOSITORY` in `web/.env.local`. Set `NEXT_PUBLIC_GITHUB_REPO=owner/repo` for a one-click **Open workflow** link when the token is missing.
+The dashboard **Home** “Run engine now” button calls **`POST /api/trigger-engine`** to **dispatch** `marketing-engine.yml` when you configure **`GITHUB_ACTION_DISPATCH_TOKEN`** in `web/.env.local`. Set **`GITHUB_REPOSITORY=owner/repo`** or **`NEXT_PUBLIC_GITHUB_REPO=owner/repo`** (either works for the API; restart dev after changes).
 
 ## Compliance & ethics
 
