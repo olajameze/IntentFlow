@@ -44,7 +44,7 @@ Privacy-first portfolio operations: **Umami** analytics (no Google Analytics), *
 | Symptom | Likely fix |
 | --- | --- |
 | Gemini **429** / `RESOURCE_EXHAUSTED` / `limit: 0` | Set **`GROQ_API_KEY`** + **`ENGINE_USE_GROQ_ONLY=1`** (or **`ENGINE_FORCE_GROQ=1`**) so Crew and pending-post drafts skip Gemini. |
-| Umami **401** in engine logs | **`UMAMI_API_TOKEN`** missing/incorrect for `UMAMI_URL` / Umami Cloud. Rotate token in Umami Settings. |
+| Umami **401** in engine logs | **Umami Cloud** is not the same as self-hosted: use a **Cloud API key** (`UMAMI_API_KEY` or `UMAMI_API_TOKEN`) and header `x-umami-api-key` against `https://api.umami.is/v1` — the engine maps this automatically when `UMAMI_URL` is `https://cloud.umami.is`. Do not use a Bearer JWT from `cloud.umami.is/api/auth/login` for Cloud. Self-hosted: `Bearer` + `UMAMI_URL` pointing at your instance. See [Umami Cloud API key](https://docs.umami.is/docs/cloud/api-key). |
 | Dashboard API **503** with service-role hint | Add **`NEXT_PUBLIC_SUPABASE_URL`** + **`SUPABASE_SERVICE_ROLE_KEY`** to `web/.env.local`; restart **`npm run dev`**. Probe **`GET http://localhost:3000/api/health`**. |
 | Groq **retry still calls Gemini** | Engine must reset **`agent.agent_executor`** and pass **`chat_llm`** on the Groq **`Crew`** (see latest `engine/agents/orchestrator.py`). |
 | **`/api/publish-approved`** rejects Facebook publish | Provide **`FACEBOOK_PAGE_ID`** + **`FACEBOOK_PAGE_ACCESS_TOKEN`**, or numbered **`FACEBOOK_PAGE_ID_N`** credentials per business. |
@@ -74,6 +74,8 @@ python main.py revenue     # Stripe snapshots only
 ```
 
 `playwright` powers the optional Similarweb scraper — run `playwright install chromium` if you call that tool locally.
+
+If your shell is already in **`web/`**, do not run `cd engine` (that folder is a sibling). Either `cd ../engine` or use **`npm run engine:traffic`** / **`engine:full`** / **`engine:revenue`** from **`web/`** or the **repo root** (see `web/package.json` and root `package.json`).
 
 ## 5. Web dashboard
 
@@ -147,6 +149,8 @@ Workflows:
 - `e2e-web.yml` — Playwright smoke + API contracts on `web/` changes (optional **`vars.ENFORCE_HEALTH_OK`** + matching Supabase secrets required for strict health)
 
 The dashboard **Home** “Run engine now” button calls **`POST /api/trigger-engine`** to **dispatch** `marketing-engine.yml` when you configure **`GITHUB_ACTION_DISPATCH_TOKEN`** in `web/.env.local`. Set **`GITHUB_REPOSITORY=owner/repo`** or **`NEXT_PUBLIC_GITHUB_REPO=owner/repo`** (either works for the API; restart dev after changes).
+
+The **Traffic** screen can call **`POST /api/trigger-traffic-sync`** to dispatch **`traffic-revenue-sync.yml`** (same PAT and repo vars). Optional **`TRAFFIC_WORKFLOW_REF`** overrides the Git branch (defaults to **`ENGINE_WORKFLOW_REF`** or **`main`**).
 
 ## Compliance & ethics
 

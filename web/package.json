@@ -16,7 +16,10 @@
     "test:e2e": "playwright test",
     "test:e2e:integration": "cross-env PLAYWRIGHT_INTEGRATION=true playwright test",
     "test:e2e:headed": "playwright test --headed",
-    "test:e2e:ui": "playwright test --ui"
+    "test:e2e:ui": "playwright test --ui",
+    "engine:traffic": "cd ../engine && python main.py traffic",
+    "engine:full": "cd ../engine && python main.py full",
+    "engine:revenue": "cd ../engine && python main.py revenue"
   },
   "dependencies": {
     "@base-ui/react": "^1.4.1",

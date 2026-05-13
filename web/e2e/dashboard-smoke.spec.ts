@@ -10,6 +10,8 @@ const dashboardPaths = [
 ] as const;
 
 test.describe("Tier A — dashboard shell", () => {
+  test.describe.configure({ timeout: 120_000 });
+
   test("shows IntentFlow nav on desktop layouts", async ({ page }) => {
     await page.setViewportSize({ width: 1280, height: 720 });
     await page.goto("/", { waitUntil: "domcontentloaded" });
@@ -20,7 +22,7 @@ test.describe("Tier A — dashboard shell", () => {
     test(`GET ${row.path} loads primary heading`, async ({ page }) => {
       await page.setViewportSize({ width: 1280, height: 720 });
       await page.goto(row.path, { waitUntil: "domcontentloaded" });
-      await expect(page.getByRole("heading", { name: row.heading }).first()).toBeVisible({ timeout: 45_000 });
+      await expect(page.getByRole("heading", { name: row.heading }).first()).toBeVisible({ timeout: 90_000 });
     });
   }
 

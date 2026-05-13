@@ -1,7 +1,8 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import { Globe, LineChart as LineIcon } from "lucide-react";
+import { CloudSync, Globe, LineChart as LineIcon, Loader2 } from "lucide-react";
+import { toast } from "sonner";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
@@ -20,10 +21,17 @@ import {
 } from "recharts";
 import { umamiPageviewsFromPayload, umamiVisitorsFromPayload } from "@/lib/umami-payload";
 
+function githubTrafficWorkflowUrl(): string | null {
+  const slug = process.env.NEXT_PUBLIC_GITHUB_REPO?.trim();
+  if (!slug?.includes("/")) return null;
+  return `https://github.com/${slug}/actions/workflows/traffic-revenue-sync.yml`;
+}
+
 export function TrafficScreen() {
   const [businesses, setBusinesses] = useState<Record<string, unknown>[]>([]);
   const [snapshots, setSnapshots] = useState<Record<string, unknown>[]>([]);
   const [selected, setSelected] = useState<string>("all");
+  const [trafficSyncDispatching, setTrafficSyncDispatching] = useState(false);
 
   useEffect(() => {
     async function load() {
@@ -33,6 +41,51 @@ export function TrafficScreen() {
     }
     load();
   }, []);
+
+  const runTrafficGithubSync = async () => {
+    setTrafficSyncDispatching(true);
+    try {
+      const res = await fetch("/api/trigger-traffic-sync", { method: "POST" });
+      const data = (await res.json().catch(() => ({}))) as Record<string, unknown>;
+
+      const manualUrl =
+        typeof data.manualUrl === "string" ? data.manualUrl : githubTrafficWorkflowUrl();
+      const logsUrl = typeof data.logsUrl === "string" ? data.logsUrl : manualUrl;
+
+      if (res.ok && data.ok) {
+        toast.success(String(data.message ?? "Traffic sync workflow dispatched."), {
+          duration: 10_000,
+          action:
+            logsUrl ?
+              {
+                label: "Open Actions",
+                onClick: () => window.open(logsUrl, "_blank", "noopener,noreferrer"),
+              }
+            : undefined,
+        });
+        return;
+      }
+
+      const msg = typeof data.error === "string" ? data.error : `HTTP ${res.status}`;
+      const hint = typeof data.hint === "string" ? data.hint : "";
+      const openWorkflowUrl = typeof data.manualUrl === "string" ? data.manualUrl : githubTrafficWorkflowUrl();
+      toast.error(hint ? `${msg}\n\n${hint.slice(0, 280)}` : msg, {
+        duration: 20_000,
+        ...(openWorkflowUrl ?
+          {
+            action: {
+              label: "Open workflow",
+              onClick: () => window.open(openWorkflowUrl, "_blank", "noopener,noreferrer"),
+            },
+          }
+        : {}),
+      });
+    } catch {
+      toast.error("Could not reach /api/trigger-traffic-sync");
+    } finally {
+      setTrafficSyncDispatching(false);
+    }
+  };
 
   const filteredSnaps = useMemo(() => {
     if (selected === "all") return snapshots;
@@ -92,11 +145,23 @@ export function TrafficScreen() {
               </SelectContent>
             </Select>
           </div>
-          <div className="flex gap-3 text-sm text-muted-foreground">
-            <span className="flex items-center gap-1">
+          <div className="flex flex-col items-stretch gap-2 sm:flex-row sm:items-center sm:gap-3">
+            <span className="flex items-center gap-1 text-sm text-muted-foreground">
               <Globe className="h-4 w-4" />
               GDPR-friendly · no cookies
             </span>
+            <Button
+              type="button"
+              variant="secondary"
+              className="h-10 shrink-0"
+              onClick={runTrafficGithubSync}
+              disabled={trafficSyncDispatching}
+            >
+              {trafficSyncDispatching ?
+                <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+              : <CloudSync className="mr-2 h-4 w-4" />}
+              {trafficSyncDispatching ? "Dispatching…" : "GitHub: sync traffic"}
+            </Button>
           </div>
         </div>
 
@@ -171,7 +236,13 @@ export function TrafficScreen() {
               worker or GitHub Action to avoid heavy browsers on Vercel edge functions.
             </p>
             <div className="grid gap-2 md:grid-cols-[2fr_1fr]">
-              <Textarea placeholder="example.com" className="min-h-[96px]" disabled readOnly value="Run the engine locally: python -m engine.main traffic" />
+              <Textarea
+                placeholder="example.com"
+                className="min-h-[96px]"
+                disabled
+                readOnly
+                value="Local: npm run engine:traffic (from web/) or cd ../engine && python main.py traffic"
+              />
               <Button type="button" variant="secondary" className="h-12" disabled>
                 Run scraper on serverless (disabled)
               </Button>

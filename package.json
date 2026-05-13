@@ -9,6 +9,9 @@
     "lint": "npm run lint --prefix web",
     "install:web": "npm install --prefix web",
     "test:e2e": "npm run test:e2e --prefix web",
-    "test:e2e:integration": "npm run test:e2e:integration --prefix web"
+    "test:e2e:integration": "npm run test:e2e:integration --prefix web",
+    "engine:traffic": "npm run engine:traffic --prefix web",
+    "engine:full": "npm run engine:full --prefix web",
+    "engine:revenue": "npm run engine:revenue --prefix web"
   }
 }

@@ -82,8 +82,22 @@ def umami_url() -> str | None:
 
 
 @lru_cache
+def umami_api_client_endpoint() -> str | None:
+    """Optional API root, e.g. self-hosted `https://host/api` or Cloud `https://api.umami.is/v1`."""
+    v = os.getenv("UMAMI_API_CLIENT_ENDPOINT", "").strip().strip('"').strip("'")
+    return v or None
+
+
+@lru_cache
 def umami_api_token() -> str | None:
     v = os.getenv("UMAMI_API_TOKEN", "").strip()
+    return v or None
+
+
+@lru_cache
+def umami_api_key() -> str | None:
+    """Umami Cloud API key (falls back to UMAMI_API_TOKEN if you store the key there)."""
+    v = _env_first("UMAMI_API_KEY", "UMAMI_API_TOKEN")
     return v or None
 
 

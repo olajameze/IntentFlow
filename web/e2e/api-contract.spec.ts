@@ -54,4 +54,16 @@ test.describe("Tier D — Route Handlers", () => {
       expect(json.tokenShape).toEqual(expect.any(String));
     } else expect(json.tokenShape).toBeNull();
   });
+
+  test("GET /api/trigger-traffic-sync exposes workflow + PAT + repo booleans safely", async ({ request }) => {
+    const res = await request.get("/api/trigger-traffic-sync");
+    expect(res.ok()).toBeTruthy();
+    const json = (await res.json()) as Record<string, unknown>;
+    expect(json.workflowFile).toBe("traffic-revenue-sync.yml");
+    expect(json.dispatchTokenConfigured).toEqual(expect.any(Boolean));
+    expect(json.repoConfigured).toEqual(expect.any(Boolean));
+    if (json.dispatchTokenConfigured) {
+      expect(json.tokenShape).toEqual(expect.any(String));
+    } else expect(json.tokenShape).toBeNull();
+  });
 });
