@@ -24,6 +24,13 @@ type Business = {
   active: boolean;
 };
 
+/** Client-side Actions URL when `NEXT_PUBLIC_GITHUB_REPO` is set (token may still be missing). */
+function githubMarketingWorkflowUrl(): string | null {
+  const slug = process.env.NEXT_PUBLIC_GITHUB_REPO?.trim();
+  if (!slug?.includes("/")) return null;
+  return `https://github.com/${slug}/actions/workflows/marketing-engine.yml`;
+}
+
 async function formatApiFailure(res: Response): Promise<string> {
   const data = await res.json().catch(() => ({} as Record<string, unknown>));
   const err = typeof data.error === "string" ? data.error : "";
@@ -109,7 +116,10 @@ export function HomeOverview() {
       const res = await fetch("/api/trigger-engine", { method: "POST" });
       const data = (await res.json().catch(() => ({}))) as Record<string, unknown>;
 
-      const manualUrl = typeof data.manualUrl === "string" ? data.manualUrl : null;
+      const manualUrl =
+        typeof data.manualUrl === "string" ?
+          data.manualUrl
+        : githubMarketingWorkflowUrl();
       const logsUrl = typeof data.logsUrl === "string" ? data.logsUrl : manualUrl;
 
       if (res.ok && data.ok) {
@@ -128,13 +138,14 @@ export function HomeOverview() {
 
       const msg = typeof data.error === "string" ? data.error : `HTTP ${res.status}`;
       const hint = typeof data.hint === "string" ? data.hint : "";
+      const openWorkflowUrl = typeof data.manualUrl === "string" ? data.manualUrl : githubMarketingWorkflowUrl();
       toast.error(hint ? `${msg}\n\n${hint.slice(0, 280)}` : msg, {
         duration: 20_000,
-        ...(manualUrl ?
+        ...(openWorkflowUrl ?
           {
             action: {
               label: "Open workflow",
-              onClick: () => window.open(manualUrl, "_blank", "noopener,noreferrer"),
+              onClick: () => window.open(openWorkflowUrl, "_blank", "noopener,noreferrer"),
             },
           }
         : {}),

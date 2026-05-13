@@ -27,7 +27,8 @@ export const viewport: Viewport = {
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
     <html lang="en" suppressHydrationWarning>
-      <body className={cn("min-h-screen bg-background font-sans antialiased", inter.variable)}>
+      {/* Extensions (e.g. Grammarly: data-gr-ext-installed) mutate <body>; suppress avoids hydration warnings */}
+      <body suppressHydrationWarning className={cn("min-h-screen bg-background font-sans antialiased", inter.variable)}>
         <Providers>{children}</Providers>
       </body>
     </html>
