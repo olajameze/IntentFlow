@@ -1,0 +1,33 @@
+diff --git a/node_modules/@base-ui/react/select/item/SelectItem.js b/node_modules/@base-ui/react/select/item/SelectItem.js
+index 412607b..ce78376 100644
+--- a/node_modules/@base-ui/react/select/item/SelectItem.js
++++ b/node_modules/@base-ui/react/select/item/SelectItem.js
+@@ -103,6 +103,8 @@ const SelectItem = exports.SelectItem = /*#__PURE__*/React.memo(/*#__PURE__*/Rea
+   const lastKeyRef = React.useRef(null);
+   const pointerTypeRef = React.useRef('mouse');
+   const didPointerDownRef = React.useRef(false);
++  /** True after pointerdown on this item — 1.4.1 otherwise blocks click unless the item is "highlighted". */
++  const allowDirectMouseClickRef = React.useRef(false);
+   const {
+     getButtonProps,
+     buttonRef
+@@ -147,7 +149,10 @@ const SelectItem = exports.SelectItem = /*#__PURE__*/React.memo(/*#__PURE__*/Rea
+       if (event.type === 'keydown' && lastKeyRef.current === null) {
+         return;
+       }
+-      if (disabled || event.type === 'keydown' && lastKeyRef.current === ' ' && typingRef.current || pointerTypeRef.current !== 'touch' && !highlighted) {
++      const allowMouse =
++        pointerTypeRef.current === 'touch' || highlighted || allowDirectMouseClickRef.current;
++      allowDirectMouseClickRef.current = false;
++      if (disabled || event.type === 'keydown' && lastKeyRef.current === ' ' && typingRef.current || !allowMouse) {
+         return;
+       }
+       lastKeyRef.current = null;
+@@ -159,6 +164,7 @@ const SelectItem = exports.SelectItem = /*#__PURE__*/React.memo(/*#__PURE__*/Rea
+     onPointerDown(event) {
+       pointerTypeRef.current = event.pointerType;
+       didPointerDownRef.current = true;
++      allowDirectMouseClickRef.current = true;
+     },
+     onMouseUp() {
+       if (disabled) {
