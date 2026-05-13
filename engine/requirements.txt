@@ -1,6 +1,7 @@
 # Omni-Channel Marketing Engine — Python 3.11+
 crewai>=0.86.0
 crewai-tools>=0.25.0
+litellm>=1.0.0
 python-dotenv>=1.0.1
 supabase>=2.10.0
 stripe>=11.1.0
