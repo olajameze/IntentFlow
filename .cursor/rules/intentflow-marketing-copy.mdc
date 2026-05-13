@@ -1,0 +1,12 @@
+---
+description: Marketing copy, PestTrace focus, Hootsuite PDF guidance, approvals editing
+globs: engine/tools/llm.py,engine/tools/copy_doctrine.py,engine/agents/orchestrator.py,web/src/components/screens/approvals-screen.tsx,web/src/app/api/pending-posts/route.ts,requirements.md
+alwaysApply: false
+---
+
+# Marketing copy & approvals
+
+- **Human reference:** `requirements.md` and **locally** `docs/references/HootsuiteSocialTrends2026_Report_en.pdf` (copy from your machine; `*.pdf` under `docs/references/` is gitignored — see `docs/references/README.md`).
+- **Code source of voice:** `engine/tools/copy_doctrine.py` + `generate_personalised_copy(..., extra_doctrine=...)` in `engine/tools/llm.py`. PestTrace-specific block is injected from `engine/agents/orchestrator.py` when `b2b_saas` + name/URL contains `pesttrace`.
+- **Approvals:** editable `pending_posts.content` while `pending` — see `PATCH` in `web/src/app/api/pending-posts/route.ts` and `ApprovalsScreen` UI.
+- **Tone guardrails:** UK English, no begging/desperation, unique per business JSON context, compliance-led angle for PestTrace B2B SaaS.

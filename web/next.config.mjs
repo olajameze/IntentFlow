@@ -26,7 +26,8 @@ const nextConfig = {
 
 const withPWA = withPWAInit({
   dest: "public",
-  disable: process.env.NODE_ENV === "development",
+  // Production: always on. Dev: off unless NEXT_PUBLIC_ENABLE_PWA_DEV=1 (test install on phone against local IP).
+  disable: process.env.NODE_ENV === "development" && process.env.NEXT_PUBLIC_ENABLE_PWA_DEV !== "1",
   register: true,
   skipWaiting: true,
 });

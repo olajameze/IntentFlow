@@ -6,11 +6,15 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Textarea } from "@/components/ui/textarea";
+import { Label } from "@/components/ui/label";
 
 export function ApprovalsScreen() {
   const [posts, setPosts] = useState<Record<string, unknown>[]>([]);
   const [businesses, setBusinesses] = useState<Record<string, unknown>[]>([]);
   const [biz, setBiz] = useState<string>("all");
+  const [drafts, setDrafts] = useState<Record<string, string>>({});
+  const [savingId, setSavingId] = useState<string | null>(null);
 
   const load = async () => {
     const [p, b] = await Promise.all([fetch("/api/pending-posts?status=pending"), fetch("/api/businesses")]);
@@ -19,21 +23,64 @@ export function ApprovalsScreen() {
   };
 
   useEffect(() => {
-    load();
+    void load();
   }, []);
 
-  const approve = async (id: string, status: "approved" | "rejected") => {
+  const textFor = (post: Record<string, unknown>) => {
+    const id = String(post.id);
+    return drafts[id] ?? String(post.content ?? "");
+  };
+
+  const saveDraft = async (post: Record<string, unknown>) => {
+    const id = String(post.id);
+    const text = textFor(post).trim();
+    if (!text) {
+      toast.error("Post cannot be empty");
+      return;
+    }
+    setSavingId(id);
+    try {
+      const res = await fetch("/api/pending-posts", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ id, content: text }),
+      });
+      if (!res.ok) {
+        const data = await res.json().catch(() => ({}));
+        toast.error(typeof data?.error === "string" ? data.error : "Could not save edits");
+        return;
+      }
+      toast.success("Draft saved");
+      await load();
+    } finally {
+      setSavingId(null);
+    }
+  };
+
+  const setStatus = async (post: Record<string, unknown>, status: "approved" | "rejected") => {
+    const id = String(post.id);
+    const text = textFor(post).trim();
+    if (!text) {
+      toast.error("Add copy before changing status");
+      return;
+    }
     const res = await fetch("/api/pending-posts", {
       method: "PATCH",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ id, status }),
+      body: JSON.stringify({ id, status, content: text }),
     });
     if (!res.ok) {
-      toast.error("Could not update status");
+      const data = await res.json().catch(() => ({}));
+      toast.error(typeof data?.error === "string" ? data.error : "Could not update status");
       return;
     }
     toast.success(status === "approved" ? "Approved" : "Rejected");
-    load();
+    setDrafts((d) => {
+      const next = { ...d };
+      delete next[id];
+      return next;
+    });
+    await load();
   };
 
   const publish = async (id: string) => {
@@ -49,7 +96,7 @@ export function ApprovalsScreen() {
     const data = await res.json().catch(() => ({}));
     const note = typeof data.note === "string" ? data.note : null;
     toast.success(note ?? (typeof data.facebook_post_id === "string" ? "Published to Facebook" : "Marked published"));
-    load();
+    await load();
   };
 
   const filtered = biz === "all" ? posts : posts.filter((p) => String(p.business_id) === biz);
@@ -76,8 +123,14 @@ export function ApprovalsScreen() {
       <div className="grid gap-4">
         {filtered.map((post) => {
           const brand = String(businesses.find((b) => String(b.id) === String(post.business_id))?.name ?? "Unknown");
+          const id = String(post.id);
           return (
-            <Card key={String(post.id)} className="border border-border/80 shadow-sm">
+            <Card
+              key={id}
+              className="border border-border/80 shadow-sm"
+              data-testid="pending-post-card"
+              data-post-id={id}
+            >
               <CardHeader className="space-y-2">
                 <div className="flex items-center justify-between gap-2">
                   <CardTitle className="text-base">{brand}</CardTitle>
@@ -90,18 +143,38 @@ export function ApprovalsScreen() {
                 </p>
               </CardHeader>
               <CardContent className="space-y-4">
-                <p className="whitespace-pre-wrap text-sm leading-relaxed">{String(post.content)}</p>
+                <div className="space-y-2">
+                  <Label htmlFor={`post-edit-${id}`}>Edit before approve</Label>
+                  <Textarea
+                    id={`post-edit-${id}`}
+                    aria-label={`Edit post for ${brand}`}
+                    rows={10}
+                    className="min-h-[180px] resize-y text-sm leading-relaxed"
+                    value={textFor(post)}
+                    onChange={(e) => setDrafts((d) => ({ ...d, [id]: e.target.value }))}
+                  />
+                </div>
                 <div className="flex flex-wrap gap-3">
                   <Button
+                    type="button"
+                    variant="secondary"
+                    className="h-12 flex-1"
+                    disabled={savingId === id}
+                    onClick={() => void saveDraft(post)}
+                  >
+                    {savingId === id ? "Saving…" : "Save edits"}
+                  </Button>
+                  <Button
+                    type="button"
                     className="h-12 flex-1 bg-emerald-600 text-white hover:bg-emerald-500"
-                    onClick={() => approve(String(post.id), "approved")}
+                    onClick={() => void setStatus(post, "approved")}
                   >
                     Approve
                   </Button>
-                  <Button variant="destructive" className="h-12 flex-1" onClick={() => approve(String(post.id), "rejected")}>
+                  <Button type="button" variant="destructive" className="h-12 flex-1" onClick={() => void setStatus(post, "rejected")}>
                     Reject
                   </Button>
-                  <Button variant="outline" className="h-12 flex-1" onClick={() => publish(String(post.id))}>
+                  <Button type="button" variant="outline" className="h-12 flex-1" onClick={() => void publish(id)}>
                     Publish approved
                   </Button>
                 </div>

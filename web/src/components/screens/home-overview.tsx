@@ -15,6 +15,7 @@ import {
   XAxis,
   YAxis,
 } from "recharts";
+import { umamiPageviewsFromPayload, umamiVisitorsFromPayload } from "@/lib/umami-payload";
 
 type Business = {
   id: string;
@@ -96,17 +97,10 @@ export function HomeOverview() {
     });
     return days.map((label, idx) => {
       const subset = snapshots.slice(idx * 3, idx * 3 + 10);
-      const views = subset.reduce((acc, snap) => {
-        const payload = snap.payload as Record<string, unknown> | undefined;
-        const pv =
-          payload?.pageviews ??
-          payload?.pageViews ??
-          1;
-        return acc + Number(pv);
-      }, 0);
+      const views = subset.reduce((acc, snap) => acc + umamiPageviewsFromPayload(snap.payload), 0);
       const revSlice = revenue.filter((_, i) => i % 7 === idx);
       const rev = revSlice.reduce((acc, row) => acc + Number(row.amount ?? 0), 0);
-      return { label, traffic: views || idx + 1, revenue: rev };
+      return { label, traffic: views, revenue: rev };
     });
   }, [snapshots, revenue]);
 
@@ -189,12 +183,11 @@ export function HomeOverview() {
       <div className="grid gap-4 md:grid-cols-2">
         {businesses.map((biz) => {
           const bizSnaps = snapshots.filter((s) => String(s.business_id) === biz.id);
-          const payload = (bizSnaps[0]?.payload ?? {}) as Record<string, unknown>;
-          const totals = payload.totals as Record<string, unknown> | undefined;
-          const rawViews = totals?.pageviews ?? payload.pageviews ?? "—";
-          const rawUniq = totals?.visitors ?? payload.visitors ?? "—";
-          const views = typeof rawViews === "string" || typeof rawViews === "number" ? rawViews : "—";
-          const uniq = typeof rawUniq === "string" || typeof rawUniq === "number" ? rawUniq : "—";
+          const latestPayload = bizSnaps[0]?.payload;
+          const pv = umamiPageviewsFromPayload(latestPayload);
+          const uv = umamiVisitorsFromPayload(latestPayload);
+          const views = bizSnaps.length ? pv : "—";
+          const uniq = bizSnaps.length ? uv : "—";
           const revToday = revenue
             .filter((r) => r.business_id === biz.id)
             .reduce((acc, row) => acc + Number(row.amount ?? 0), 0);

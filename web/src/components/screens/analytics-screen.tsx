@@ -13,6 +13,7 @@ import {
   XAxis,
   YAxis,
 } from "recharts";
+import { umamiPageviewsFromPayload } from "@/lib/umami-payload";
 
 export function AnalyticsScreen() {
   const [businesses, setBusinesses] = useState<Record<string, unknown>[]>([]);
@@ -41,16 +42,7 @@ export function AnalyticsScreen() {
       const id = String(biz.id);
       const traffic = snapshots
         .filter((s) => String(s.business_id) === id)
-        .reduce((acc, s) => {
-          const p = s.payload as Record<string, unknown> | undefined;
-          const t = p?.totals as Record<string, unknown> | undefined;
-          return (
-            acc +
-            Number(
-              t?.pageviews ?? p?.pageviews ?? 1,
-            )
-          );
-        }, 0);
+        .reduce((acc, s) => acc + umamiPageviewsFromPayload(s.payload), 0);
       const rev = revenue
         .filter((row) => String(row.business_id) === id)
         .reduce((acc, row) => acc + Number(row.amount ?? 0), 0);
@@ -61,11 +53,9 @@ export function AnalyticsScreen() {
 
   const trend = useMemo(() => {
     return snapshots.slice(0, 12).map((snap, idx) => {
-      const p = snap.payload as Record<string, unknown> | undefined;
-      const t = p?.totals as Record<string, unknown> | undefined;
       return {
         label: `#${idx + 1}`,
-        traffic: Number(t?.pageviews ?? p?.pageviews ?? 0),
+        traffic: umamiPageviewsFromPayload(snap.payload),
         revenue: revenue[idx] ? Number((revenue[idx] as Record<string, unknown>).amount) : 0,
       };
     });
@@ -73,6 +63,20 @@ export function AnalyticsScreen() {
 
   return (
     <div className="space-y-6">
+      {snapshots.length === 0 ? (
+        <Card className="border-amber-500/40 bg-amber-500/5">
+          <CardHeader>
+            <CardTitle className="text-base">No analytics snapshots</CardTitle>
+          </CardHeader>
+          <CardContent className="text-sm text-muted-foreground">
+            Run the engine traffic job so Umami stats are saved to Supabase, or confirm{" "}
+            <code className="rounded bg-muted px-1">/api/analytics-snapshots</code> returns rows. Traffic charts use the
+            same Umami payload shape as the engine (pageviews with <code className="rounded bg-muted px-1">.value</code>{" "}
+            on Umami Cloud).
+          </CardContent>
+        </Card>
+      ) : null}
+
       <Card>
         <CardHeader>
           <CardTitle className="text-base">Tri-line overlay</CardTitle>

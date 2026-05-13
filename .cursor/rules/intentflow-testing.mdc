@@ -1,0 +1,22 @@
+---
+description: Playwright E2E and API smoke tests for IntentFlow web app
+globs: web/e2e/**,web/playwright.config.ts
+alwaysApply: false
+---
+
+# Testing (`web/e2e/`)
+
+- Run from **`web/`**: `npm run test:e2e` (needs `npm install` + `npx playwright install chromium` once). Playwright **`playwright.config.ts`** loads **`web/.env.local`** via `dotenv` (supports integration seed helpers; default smoke tiers do **not** need real Supabase rows).
+- **Tier A (`dashboard-smoke.spec.ts`):** Hits dashboard routes + theme toggle — should pass **without** real DB data on the APIs.
+- **Tier C (`settings-shell.spec.ts`):** Settings headings and **Save business** button.
+- **Tier D (`api-contract.spec.ts`):** `GET /api/health`, `GET /api/businesses`, `POST /api/publish-approved`, `GET /api/trigger-engine`.
+- **Tier B (`e2e/integrations/*`):** Tagged **`@integration`**. **`npm run test:e2e:integration`** (or **`PLAYWRIGHT_INTEGRATION=1 playwright test`**). Requires active **`businesses`** row + service role seeding (`supabase-seed.ts`). Facebook graph branch requires **`PLAYWRIGHT_REAL_FACEBOOK_PUBLISH=1`** plus **`FACEBOOK_PAGE_ID`**/**`TOKEN`** env.
+- **Default `npm run test:e2e`:** Applies **`grepInvert: /@integration\\b/`** so Tier B suites are omitted unless explicitly enabled.
+- **CI:** Optional **`vars.ENFORCE_HEALTH_OK=1`** (see Workflow) when Supabase secrets are always present.
+
+Official references:
+
+- Playwright Test — https://playwright.dev/docs/intro
+- Next.js Playwright guide — https://nextjs.org/docs/app/building-your-application/testing/playwright
+
+See [`docs/runbook-local.md`](docs/runbook-local.md) for a cold-start troubleshooting matrix.

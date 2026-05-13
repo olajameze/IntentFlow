@@ -17,23 +17,35 @@ export async function GET(req: Request) {
   });
 }
 
-const updateSchema = z.object({
-  id: z.string().uuid(),
-  status: z.enum(["approved", "rejected"]),
-});
+const updateSchema = z
+  .object({
+    id: z.string().uuid(),
+    status: z.enum(["approved", "rejected"]).optional(),
+    content: z.string().min(1).max(12_000).optional(),
+  })
+  .refine((d) => d.status !== undefined || d.content !== undefined, {
+    message: "Provide status and/or content",
+  });
 
 export async function PATCH(req: Request) {
   const json = await req.json();
   const parsed = updateSchema.safeParse(json);
   if (!parsed.success) return NextResponse.json({ error: parsed.error.flatten() }, { status: 400 });
   return withSupabaseRoute(async (sb) => {
-    const { data, error } = await sb
-      .from("pending_posts")
-      .update({ status: parsed.data.status, updated_at: new Date().toISOString() })
-      .eq("id", parsed.data.id)
-      .select("*")
-      .single();
+    const { id, status, content } = parsed.data;
+    const updates: Record<string, unknown> = { updated_at: new Date().toISOString() };
+    if (content !== undefined) updates.content = content;
+    if (status !== undefined) updates.status = status;
+
+    let q = sb.from("pending_posts").update(updates).eq("id", id).eq("status", "pending");
+    const { data, error } = await q.select("*").maybeSingle();
     if (error) return supabaseErrorResponse(error);
+    if (!data) {
+      return NextResponse.json(
+        { error: "Post not found or already processed — refresh the list." },
+        { status: 409 },
+      );
+    }
     return NextResponse.json(data);
   });
 }

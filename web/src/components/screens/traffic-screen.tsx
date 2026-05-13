@@ -18,6 +18,7 @@ import {
   XAxis,
   YAxis,
 } from "recharts";
+import { umamiPageviewsFromPayload, umamiVisitorsFromPayload } from "@/lib/umami-payload";
 
 export function TrafficScreen() {
   const [businesses, setBusinesses] = useState<Record<string, unknown>[]>([]);
@@ -42,21 +43,17 @@ export function TrafficScreen() {
     let pageviews = 0;
     let visitors = 0;
     filteredSnaps.forEach((snap) => {
-      const p = (snap.payload ?? {}) as Record<string, unknown>;
-      const t = p.totals as Record<string, unknown> | undefined;
-      pageviews += Number(t?.pageviews ?? p.pageviews ?? 0);
-      visitors += Number(t?.visitors ?? p.visitors ?? 0);
+      pageviews += umamiPageviewsFromPayload(snap.payload);
+      visitors += umamiVisitorsFromPayload(snap.payload);
     });
     return { pageviews, visitors };
   }, [filteredSnaps]);
 
   const chartData = useMemo(() => {
     return filteredSnaps.slice(0, 14).map((snap, idx) => {
-      const p = (snap.payload ?? {}) as Record<string, unknown>;
-      const t = p.totals as Record<string, unknown> | undefined;
       return {
         label: `#${idx + 1}`,
-        value: Number(t?.pageviews ?? p.pageviews ?? 0),
+        value: umamiPageviewsFromPayload(snap.payload),
       };
     });
   }, [filteredSnaps]);
@@ -125,6 +122,23 @@ export function TrafficScreen() {
             </CardContent>
           </Card>
         </div>
+
+        {filteredSnaps.length === 0 ? (
+          <Card className="border-amber-500/40 bg-amber-500/5">
+            <CardHeader>
+              <CardTitle className="text-base">No traffic snapshots yet</CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-2 text-sm text-muted-foreground">
+              <p>
+                Charts read from Supabase <code className="rounded bg-muted px-1">analytics_snapshots</code> (filled by
+                the Python engine or GitHub Actions). Ensure <code className="rounded bg-muted px-1">UMAMI_API_TOKEN</code>,{" "}
+                <code className="rounded bg-muted px-1">UMAMI_URL</code>, and each business&apos;s{" "}
+                <code className="rounded bg-muted px-1">umami_website_id</code> are correct, then run{" "}
+                <code className="rounded bg-muted px-1">cd engine &amp;&amp; python main.py traffic</code>.
+              </p>
+            </CardContent>
+          </Card>
+        ) : null}
 
         <Card>
           <CardHeader className="flex flex-row items-center justify-between">

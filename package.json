@@ -7,6 +7,8 @@
     "build": "npm run build --prefix web",
     "start": "npm run start --prefix web",
     "lint": "npm run lint --prefix web",
-    "install:web": "npm install --prefix web"
+    "install:web": "npm install --prefix web",
+    "test:e2e": "npm run test:e2e --prefix web",
+    "test:e2e:integration": "npm run test:e2e:integration --prefix web"
   }
 }

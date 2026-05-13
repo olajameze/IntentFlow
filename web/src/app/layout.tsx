@@ -10,6 +10,11 @@ export const metadata: Metadata = {
   title: "IntentFlow · Omni-Channel Marketing Engine",
   description: "Privacy-first analytics, revenue intelligence, and CrewAI automations for every brand you run.",
   manifest: "/manifest.webmanifest",
+  applicationName: "IntentFlow",
+  icons: {
+    icon: [{ url: "/icons/icon-192.svg", type: "image/svg+xml" }],
+    apple: [{ url: "/icons/icon-192.svg", sizes: "180x180" }],
+  },
   appleWebApp: {
     capable: true,
     statusBarStyle: "default",
@@ -21,7 +26,6 @@ export const viewport: Viewport = {
   themeColor: "#0a0a0a",
   width: "device-width",
   initialScale: 1,
-  maximumScale: 1,
 };
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {

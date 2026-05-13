@@ -11,6 +11,7 @@ if str(_ROOT) not in sys.path:
     sys.path.insert(0, str(_ROOT))
 
 from config import google_api_key, groq_api_key, llm_skip_google
+from .copy_doctrine import GLOBAL_COPY_DOCTRINE
 
 
 def _gemini_model_name() -> str:
@@ -54,8 +55,26 @@ def _google_error_try_groq(exc: BaseException) -> bool:
     return "not found" in err and ("model" in err or "models/" in err)
 
 
-def generate_personalised_copy(business_context: str, lead: str, template: str) -> str:
-    prompt = f"""You are a 2026 marketing strategist. Business context:\n{business_context}\n\nLead:{lead}\nTemplate:{template}\nReturn concise, compliant copy (no video/TikTok). UK English."""
+def generate_personalised_copy(
+    business_context: str,
+    lead: str,
+    template: str,
+    extra_doctrine: str | None = None,
+) -> str:
+    doctrine = GLOBAL_COPY_DOCTRINE if not extra_doctrine else f"{GLOBAL_COPY_DOCTRINE}\n\n{extra_doctrine.strip()}"
+    prompt = f"""You are a 2026 marketing strategist.
+
+{doctrine}
+
+Business context (JSON — treat as source of truth, do not contradict):
+{business_context}
+
+Lead: {lead}
+
+Template / task:
+{template}
+
+Return concise, compliant copy only (no meta-commentary). UK English."""
     if llm_skip_google():
         return _groq_generate(prompt) or "Configure GROQ_API_KEY (ENGINE_USE_GROQ_ONLY=1 skips Gemini for all copy)."
     gkey = google_api_key()

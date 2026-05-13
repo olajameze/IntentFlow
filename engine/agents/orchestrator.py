@@ -24,11 +24,21 @@ from config import google_api_key, groq_api_key, llm_skip_google
 from crypto_util import decrypt_stripe_secret
 from supabase_client import get_supabase
 from tools.csv_merge import merge_csv_uploads
+from tools.copy_doctrine import PESTTRACE_B2B_FOCUS
 from tools.llm import generate_personalised_copy
 from tools.persistence import save_revenue_snapshot, save_traffic_snapshot
 from tools.similarweb import scrape_similarweb_traffic
 from tools.stripe_revenue import fetch_stripe_revenue
 from tools.umami import fetch_umami_stats
+
+
+def _extra_copy_doctrine_for_row(row: dict[str, Any]) -> str | None:
+    """PestTrace B2B SaaS: compliance-led operator positioning (see requirements.md)."""
+    name = (row.get("name") or "").lower()
+    web = (row.get("website_url") or "").lower()
+    if (row.get("type") or "").strip() == "b2b_saas" and ("pesttrace" in name or "pesttrace" in web):
+        return PESTTRACE_B2B_FOCUS
+    return None
 
 
 def _ctx(row: dict[str, Any]) -> str:
@@ -226,15 +236,17 @@ def enqueue_three_pending_posts_direct(row: dict[str, Any]) -> None:
         ),
     ]
     sb = get_supabase()
+    extra = _extra_copy_doctrine_for_row(row)
     for platform, template in specs:
         body = ""
         try:
-            body = generate_personalised_copy(ctx, lead=f"Brand: {brand}", template=template)
+            body = generate_personalised_copy(ctx, lead=f"Brand: {brand}", template=template, extra_doctrine=extra)
         except Exception as exc:  # noqa: BLE001
             print(f"enqueue_three_pending_posts_direct ({platform}) LLM error: {exc}")
             body = (
                 f"[Draft — LLM error] Placeholder {platform} post for {brand}. "
-                f"Fix Gemini quota / GEMINI_TEXT_MODEL or set GROQ_API_KEY or ENGINE_FORCE_GROQ=1. ({type(exc).__name__})"
+                f"Fix Gemini quota / GEMINI_TEXT_MODEL or set GROQ_API_KEY "
+                f"with ENGINE_USE_GROQ_ONLY=1 / ENGINE_FORCE_GROQ=1. ({type(exc).__name__})"
             )
         if not body.strip() or "Configure GOOGLE_API_KEY" in body:
             body = f"[Draft — add LLM keys] Short {platform} update for {brand}."

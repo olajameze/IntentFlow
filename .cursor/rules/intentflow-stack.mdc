@@ -1,0 +1,20 @@
+---
+description: IntentFlow web stack — Next.js 14 App Router, Supabase, API routes
+globs: web/**/*.tsx,web/**/*.ts
+alwaysApply: false
+---
+
+# IntentFlow dashboard (`web/`)
+
+- **Framework:** Next.js **14 App Router** + React 18 + TypeScript. Prefer Server Components unless client interactivity (`"use client"`) is required.
+- **Supabase:**
+  - Public env: `NEXT_PUBLIC_SUPABASE_URL`, `NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY`.
+  - **Never** expose `SUPABASE_SERVICE_ROLE_KEY` — use server-only **`getSupabaseAdmin()`** in `web/src/lib/supabase-admin.ts` and wrap handlers with **`withSupabaseRoute`** (`web/src/lib/with-supabase-route.ts`).
+  - Middleware (`web/src/middleware.ts` → `utils/supabase/middleware.ts`) refreshes auth cookies **only when** cookie present; MVP often has no login UI yet.
+- **API design:** Route Handlers return JSON; use **503 + `hint`** for missing critical env (`withSupabaseRoute` pattern).
+- **Readiness:** `GET /api/health` aggregates config + trivial `businesses` query — use after env changes.
+
+Official references:
+
+- Next.js App Router — https://nextjs.org/docs
+- Supabase + Next SSR — https://supabase.com/docs/guides/auth/server-side/nextjs
