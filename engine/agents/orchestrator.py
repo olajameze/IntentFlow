@@ -45,6 +45,7 @@ def _ctx(row: dict[str, Any]) -> str:
 
 @tool("Fetch Umami stats for a website id")
 def fetch_umami_stats_tool(website_id: str, start_iso: str, end_iso: str) -> str:
+    """Return Umami stats JSON for a website id and date range (ISO strings)."""
     start = datetime.fromisoformat(start_iso.replace("Z", "+00:00"))
     end = datetime.fromisoformat(end_iso.replace("Z", "+00:00"))
     data = fetch_umami_stats(website_id, start, end)
@@ -53,6 +54,7 @@ def fetch_umami_stats_tool(website_id: str, start_iso: str, end_iso: str) -> str
 
 @tool("Fetch Umami pageviews time series")
 def fetch_umami_pageviews_tool(website_id: str, start_iso: str, end_iso: str) -> str:
+    """Return Umami pageviews time series as JSON for the given website id and range."""
     start = datetime.fromisoformat(start_iso.replace("Z", "+00:00"))
     end = datetime.fromisoformat(end_iso.replace("Z", "+00:00"))
     data = fetch_umami_pageviews(website_id, start, end)
@@ -61,6 +63,7 @@ def fetch_umami_pageviews_tool(website_id: str, start_iso: str, end_iso: str) ->
 
 @tool("Fetch Umami metrics breakdown")
 def fetch_umami_metrics_tool(website_id: str, start_iso: str, end_iso: str) -> str:
+    """Return Umami metrics breakdown JSON for the website id and date range."""
     start = datetime.fromisoformat(start_iso.replace("Z", "+00:00"))
     end = datetime.fromisoformat(end_iso.replace("Z", "+00:00"))
     data = fetch_umami_metrics(website_id, start, end)
@@ -69,18 +72,21 @@ def fetch_umami_metrics_tool(website_id: str, start_iso: str, end_iso: str) -> s
 
 @tool("Persist an Umami payload via business id")
 def save_traffic_snapshot_tool(business_id: str, website_id: str, json_payload: str, source: str = "umami") -> str:
+    """Save parsed Umami JSON to Supabase for the business and website id."""
     save_traffic_snapshot(business_id, json.loads(json_payload), source=source, website_id=website_id)
     return "saved"
 
 
 @tool("Scrape Similarweb public summary (advisory)")
 def scrape_similarweb_traffic_tool(domain: str) -> str:
+    """Scrape Similarweb public traffic summary for a domain; returns JSON."""
     data = scrape_similarweb_traffic(domain)
     return json.dumps(data, ensure_ascii=False)
 
 
 @tool("Fetch Stripe revenue using stored business secret (no key in prompt)")
 def fetch_stripe_revenue_for_business_tool(business_id: str, start_iso: str, end_iso: str) -> str:
+    """Load Stripe key from Supabase and fetch revenue JSON for the date range."""
     sb = get_supabase()
     rows = sb.table("businesses").select("*").eq("id", business_id).limit(1).execute()
     data = (rows.data or [None])[0]
@@ -101,12 +107,14 @@ def fetch_stripe_revenue_for_business_tool(business_id: str, start_iso: str, end
 
 @tool("Persist Stripe-derived snapshot for business id")
 def save_revenue_snapshot_tool(business_id: str, json_payload: str) -> str:
+    """Persist a Stripe revenue payload JSON for the given business id."""
     save_revenue_snapshot(business_id, json.loads(json_payload), snapshot_source="stripe_api")
     return "saved"
 
 
 @tool("Merge CSV processor exports (paths_json maps processor->path)")
 def merge_csv_uploads_tool(paths_json: str) -> str:
+    """Merge CSV uploads from a JSON map of processor name to file path; returns JSON rows."""
     paths = json.loads(paths_json)
     rows = merge_csv_uploads(paths)
     return json.dumps(rows[:200], ensure_ascii=False)
@@ -114,6 +122,7 @@ def merge_csv_uploads_tool(paths_json: str) -> str:
 
 @tool("Generate personalised copy")
 def generate_personalised_copy_tool(business_context: str, lead: str, template: str) -> str:
+    """Generate personalised marketing copy from business context, lead, and template."""
     return generate_personalised_copy(business_context, lead, template)
 
 

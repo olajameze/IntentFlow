@@ -6,7 +6,7 @@ from functools import lru_cache
 
 from supabase import Client, create_client
 
-from .config import supabase_service_role_key, supabase_url
+from config import supabase_service_role_key, supabase_url
 
 
 @lru_cache

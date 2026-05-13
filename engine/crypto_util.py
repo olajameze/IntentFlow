@@ -12,7 +12,7 @@ from typing import Tuple
 
 from cryptography.hazmat.primitives.ciphers.aead import AESGCM
 
-from .config import stripe_encryption_key
+from config import stripe_encryption_key
 
 
 def _key_bytes() -> bytes:
