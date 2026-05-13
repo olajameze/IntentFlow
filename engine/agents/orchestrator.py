@@ -20,7 +20,7 @@ from crewai import LLM
 from crewai.tools import tool
 
 from agents.factory import agents_for_type
-from config import google_api_key, groq_api_key
+from config import google_api_key, groq_api_key, llm_skip_google
 from crypto_util import decrypt_stripe_secret
 from supabase_client import get_supabase
 from tools.csv_merge import merge_csv_uploads
@@ -69,15 +69,20 @@ def generate_personalised_copy_tool(business_context: str, lead: str, template: 
 
 def _llm() -> LLM:
     """Prefer Gemini via CrewAI; use a model ID that exists on the current Gemini API."""
-    force_groq = os.getenv("ENGINE_FORCE_GROQ", "").strip().lower() in {"1", "true", "yes"}
-    if not force_groq and google_api_key():
+    if llm_skip_google():
+        if groq_api_key():
+            return _groq_llm()
+        raise RuntimeError(
+            "ENGINE_USE_GROQ_ONLY or ENGINE_FORCE_GROQ is set but GROQ_API_KEY is missing — add it to .env."
+        )
+    if google_api_key():
         model = os.getenv("CREWAI_GEMINI_MODEL", "gemini/gemini-2.0-flash").strip() or "gemini/gemini-2.0-flash"
         return LLM(model=model, temperature=0.35)
     if groq_api_key():
         return LLM(model="groq/llama-3.1-8b-instant", temperature=0.35)
     raise RuntimeError(
         "Configure GOOGLE_API_KEY or GROQ_API_KEY for CrewAI "
-        "(set ENGINE_FORCE_GROQ=1 to skip Gemini when quota is exhausted)."
+        "(set ENGINE_USE_GROQ_ONLY=1 + GROQ_API_KEY when Gemini quota is 0)."
     )
 
 
@@ -89,18 +94,20 @@ def _is_gemini_quota_or_rate_error(exc: BaseException) -> bool:
     name = type(exc).__name__.lower()
     if "resourceexhausted" in name or "ratelimit" in name:
         return True
-    err = str(exc).lower()
+    err = f"{exc!s} {exc!r}".lower()
     return any(
         s in err
         for s in (
             "429",
             "resource exhausted",
             "resource_exhausted",
+            "resourceexhausted",
             "quota",
             "rate limit",
             "rate_limit",
             "exceeded your current quota",
             "limit: 0",
+            "gemini api error: 429",
         )
     )
 
@@ -358,15 +365,25 @@ def run_crew_for_business(row: dict[str, Any]) -> str:
         try:
             result = str(crew.kickoff())
         except Exception as first_exc:  # noqa: BLE001
-            if google_api_key() and groq_api_key() and _is_gemini_quota_or_rate_error(first_exc):
+            if groq_api_key() and _is_gemini_quota_or_rate_error(first_exc):
                 print(
                     "Crew: Gemini quota/rate limited — retrying once with Groq. "
-                    "Tip: set ENGINE_FORCE_GROQ=1 to skip Gemini entirely."
+                    "Tip: set ENGINE_USE_GROQ_ONLY=1 (and GROQ_API_KEY) to skip Gemini entirely."
                 )
                 groq_llm = _groq_llm()
+                # CrewAI keeps agent.agent_executor after a failed kickoff; it never refreshes
+                # executor.llm when we mutate agent.llm — clear so Groq is used on retry.
                 for ag in agents:
                     ag.llm = groq_llm
-                crew = Crew(agents=agents, tasks=tasks, process=Process.sequential, verbose=True)
+                    ag.function_calling_llm = groq_llm
+                    ag.agent_executor = None
+                crew = Crew(
+                    agents=agents,
+                    tasks=tasks,
+                    process=Process.sequential,
+                    verbose=True,
+                    chat_llm=groq_llm,
+                )
                 result = str(crew.kickoff())
             else:
                 raise

@@ -67,6 +67,14 @@ def groq_api_key() -> str | None:
     return v or None
 
 
+def llm_skip_google() -> bool:
+    """When true, Crew + marketing copy use Groq only (use if Gemini free tier quota is 0 / 429)."""
+    for key in ("ENGINE_USE_GROQ_ONLY", "ENGINE_FORCE_GROQ"):
+        if os.getenv(key, "").strip().lower() in {"1", "true", "yes"}:
+            return True
+    return False
+
+
 @lru_cache
 def umami_url() -> str | None:
     v = _env_first("UMAMI_URL", "NEXT_PUBLIC_UMAMI_URL")

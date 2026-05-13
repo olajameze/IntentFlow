@@ -10,7 +10,7 @@ _ROOT = Path(__file__).resolve().parents[1]
 if str(_ROOT) not in sys.path:
     sys.path.insert(0, str(_ROOT))
 
-from config import google_api_key, groq_api_key
+from config import google_api_key, groq_api_key, llm_skip_google
 
 
 def _gemini_model_name() -> str:
@@ -56,6 +56,8 @@ def _google_error_try_groq(exc: BaseException) -> bool:
 
 def generate_personalised_copy(business_context: str, lead: str, template: str) -> str:
     prompt = f"""You are a 2026 marketing strategist. Business context:\n{business_context}\n\nLead:{lead}\nTemplate:{template}\nReturn concise, compliant copy (no video/TikTok). UK English."""
+    if llm_skip_google():
+        return _groq_generate(prompt) or "Configure GROQ_API_KEY (ENGINE_USE_GROQ_ONLY=1 skips Gemini for all copy)."
     gkey = google_api_key()
     if gkey:
         import google.generativeai as genai
@@ -72,8 +74,8 @@ def generate_personalised_copy(business_context: str, lead: str, template: str) 
                 if fb:
                     return fb
                 return (
-                    "[Draft — Gemini quota exhausted] Add GROQ_API_KEY (with GOOGLE_API_KEY) for automatic fallback, "
-                    "or set ENGINE_FORCE_GROQ=1 for Crew. "
+                    "[Draft — Gemini quota exhausted] Add GROQ_API_KEY for automatic fallback, "
+                    "or set ENGINE_FORCE_GROQ=1 / ENGINE_USE_GROQ_ONLY=1 to skip Gemini. "
                     f"({type(exc).__name__})"
                 )
             raise
