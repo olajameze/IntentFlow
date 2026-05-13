@@ -1,9 +1,17 @@
 name: Marketing Engine (Daily)
 
+# Repo → Settings → Secrets and variables → Actions (use UMAMI_URL, not NEXT_PUBLIC_UMAMI_URL)
 on:
   workflow_dispatch: {}
   schedule:
     - cron: "0 8 * * *" # 08:00 UTC
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: false
 
 jobs:
   crew-run:
@@ -21,6 +29,24 @@ jobs:
           cache-dependency-path: engine/requirements.txt
       - name: Install dependencies
         run: pip install -r requirements.txt
+      - name: Check required secrets
+        env:
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
+          GOOGLE_API_KEY: ${{ secrets.GOOGLE_API_KEY }}
+          GROQ_API_KEY: ${{ secrets.GROQ_API_KEY }}
+          UMAMI_URL: ${{ secrets.UMAMI_URL }}
+          UMAMI_API_TOKEN: ${{ secrets.UMAMI_API_TOKEN }}
+        run: |
+          set -e
+          test -n "$SUPABASE_URL" || { echo "::error::Secret SUPABASE_URL is empty"; exit 1; }
+          test -n "$SUPABASE_SERVICE_ROLE_KEY" || { echo "::error::Secret SUPABASE_SERVICE_ROLE_KEY is empty"; exit 1; }
+          if [ -z "$GOOGLE_API_KEY" ] && [ -z "$GROQ_API_KEY" ]; then
+            echo "::error::Set at least one of GOOGLE_API_KEY or GROQ_API_KEY for CrewAI"
+            exit 1
+          fi
+          test -n "$UMAMI_URL" || { echo "::error::Secret UMAMI_URL is empty — add https://your-umami-host (same as UMAMI_URL in engine/.env)"; exit 1; }
+          test -n "$UMAMI_API_TOKEN" || { echo "::error::Secret UMAMI_API_TOKEN is empty"; exit 1; }
       # Fails fast if engine is run as scripts (no package parent) with relative imports left in place.
       - name: Verify engine imports (CLI layout)
         run: python -c "import crypto_util, supabase_client, main; print('CLI import graph OK')"

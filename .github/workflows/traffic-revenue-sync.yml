@@ -1,9 +1,17 @@
 name: Traffic & Revenue Sync
 
+# Requires UMAMI_URL + UMAMI_API_TOKEN (same names as engine/.env — not NEXT_PUBLIC_*)
 on:
   workflow_dispatch: {}
   schedule:
     - cron: "30 */4 * * *" # every 4 hours
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: false
 
 jobs:
   snapshots:
@@ -19,6 +27,20 @@ jobs:
           cache: "pip"
           cache-dependency-path: engine/requirements.txt
       - run: pip install -r requirements.txt
+      - name: Verify engine imports (CLI layout)
+        run: python -c "import crypto_util, supabase_client, main; print('CLI import graph OK')"
+      - name: Check required secrets for traffic
+        env:
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
+          UMAMI_URL: ${{ secrets.UMAMI_URL }}
+          UMAMI_API_TOKEN: ${{ secrets.UMAMI_API_TOKEN }}
+        run: |
+          set -e
+          test -n "$SUPABASE_URL" || { echo "::error::Secret SUPABASE_URL is empty"; exit 1; }
+          test -n "$SUPABASE_SERVICE_ROLE_KEY" || { echo "::error::Secret SUPABASE_SERVICE_ROLE_KEY is empty"; exit 1; }
+          test -n "$UMAMI_URL" || { echo "::error::Secret UMAMI_URL is empty — use your Umami origin (e.g. https://cloud.umami.is), not NEXT_PUBLIC_UMAMI_URL"; exit 1; }
+          test -n "$UMAMI_API_TOKEN" || { echo "::error::Secret UMAMI_API_TOKEN is empty"; exit 1; }
       - name: Traffic snapshots (Umami)
         env:
           SUPABASE_URL: ${{ secrets.SUPABASE_URL }}

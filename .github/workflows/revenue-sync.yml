@@ -5,6 +5,13 @@ on:
   schedule:
     - cron: "15 */6 * * *"
 
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: false
+
 jobs:
   revenue:
     runs-on: ubuntu-latest
@@ -19,6 +26,16 @@ jobs:
           cache: "pip"
           cache-dependency-path: engine/requirements.txt
       - run: pip install -r requirements.txt
+      - name: Verify engine imports (CLI layout)
+        run: python -c "import crypto_util, supabase_client, main; print('CLI import graph OK')"
+      - name: Check required secrets for Supabase
+        env:
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
+        run: |
+          set -e
+          test -n "$SUPABASE_URL" || { echo "::error::Secret SUPABASE_URL is empty"; exit 1; }
+          test -n "$SUPABASE_SERVICE_ROLE_KEY" || { echo "::error::Secret SUPABASE_SERVICE_ROLE_KEY is empty"; exit 1; }
       - name: Stripe revenue snapshots
         env:
           SUPABASE_URL: ${{ secrets.SUPABASE_URL }}

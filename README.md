@@ -88,7 +88,7 @@ Visit `http://localhost:3000` — the installable PWA manifest is `public/manife
 
 ## 6. GitHub Actions (free)
 
-Add repository secrets: `SUPABASE_URL`, `SUPABASE_SERVICE_ROLE_KEY`, `UMAMI_URL`, `UMAMI_API_TOKEN`, `STRIPE_SECRET_ENCRYPTION_KEY`, plus `GOOGLE_API_KEY` / `GROQ_API_KEY` for the daily marketing job.
+Add repository secrets: `SUPABASE_URL`, `SUPABASE_SERVICE_ROLE_KEY`, **`UMAMI_URL`** (same Umami origin as in `engine/.env` — **not** `NEXT_PUBLIC_UMAMI_URL`), `UMAMI_API_TOKEN`, `STRIPE_SECRET_ENCRYPTION_KEY`, plus `GOOGLE_API_KEY` / `GROQ_API_KEY` for the daily marketing job.
 
 Workflows:
 
