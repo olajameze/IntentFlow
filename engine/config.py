@@ -4,11 +4,20 @@ from __future__ import annotations
 
 import os
 from functools import lru_cache
+from pathlib import Path
 
 from dotenv import load_dotenv
 
-# Never drop CI/workflow env vars; .env fills gaps for local runs only.
-load_dotenv(override=False)
+_ENGINE_ROOT = Path(__file__).resolve().parent
+_REPO_ROOT = _ENGINE_ROOT.parent
+
+# Fill gaps from typical local layouts (override=False keeps real OS / CI env wins).
+for _p in (
+    _ENGINE_ROOT / ".env",
+    _REPO_ROOT / ".env",
+    _REPO_ROOT / "web" / ".env.local",
+):
+    load_dotenv(_p, override=False)
 
 
 def _env_first(*names: str) -> str:
@@ -25,9 +34,9 @@ def supabase_url() -> str:
     v = _env_first("SUPABASE_URL", "NEXT_PUBLIC_SUPABASE_URL")
     if not v:
         raise RuntimeError(
-            "SUPABASE_URL is required. GitHub Actions: add repository secret SUPABASE_URL "
-            "(same HTTPS project URL as in web NEXT_PUBLIC_SUPABASE_URL). "
-            "Engine does not read Vercel env names automatically."
+            "SUPABASE_URL or NEXT_PUBLIC_SUPABASE_URL is required. "
+            "Add SUPABASE_URL to engine/.env, or reuse web/.env.local (NEXT_PUBLIC_SUPABASE_URL). "
+            "GitHub Actions: set repository secret SUPABASE_URL."
         )
     return v
 
@@ -57,7 +66,7 @@ def groq_api_key() -> str | None:
 
 @lru_cache
 def umami_url() -> str | None:
-    v = os.getenv("UMAMI_URL", "").strip()
+    v = _env_first("UMAMI_URL", "NEXT_PUBLIC_UMAMI_URL")
     return v or None
 
 

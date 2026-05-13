@@ -1,0 +1,2 @@
+# Convenience: install engine deps from repo root — `pip install -r requirements.txt`
+-r engine/requirements.txt

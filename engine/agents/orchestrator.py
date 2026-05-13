@@ -3,7 +3,9 @@
 from __future__ import annotations
 
 import json
+import os
 import sys
+import time
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import Any
@@ -65,27 +67,8 @@ def generate_personalised_copy_tool(business_context: str, lead: str, template: 
     return generate_personalised_copy(business_context, lead, template)
 
 
-@tool("Queue a marketing post for human approval in the dashboard")
-def enqueue_pending_post_tool(business_id: str, platform: str, content: str) -> str:
-    """Insert pending_posts row. platform: linkedin | facebook | instagram | twitter"""
-    p = (platform or "").strip().lower()
-    if p not in {"linkedin", "facebook", "instagram", "twitter", "x"}:
-        return json.dumps({"error": f"unsupported platform: {platform}"})
-    if p == "x":
-        p = "twitter"
-    sb = get_supabase()
-    sb.table("pending_posts").insert(
-        {
-            "business_id": business_id,
-            "platform": p,
-            "content": content,
-            "status": "pending",
-        }
-    ).execute()
-    return json.dumps({"queued": True, "platform": p})
-
-
 def _llm() -> LLM:
+    """Prefer Gemini when GOOGLE_API_KEY is set (fewer rate-limit surprises than Groq free tier)."""
     if google_api_key():
         return LLM(model="gemini/gemini-1.5-flash", temperature=0.35)
     if groq_api_key():
@@ -178,19 +161,57 @@ def _persist_snapshots_for_window(row: dict[str, Any], start: datetime, end: dat
     return {"umami": umami_summary, "revenue": rev_summary}
 
 
+def enqueue_three_pending_posts_direct(row: dict[str, Any]) -> None:
+    """Insert three drafts into pending_posts without Crew tools (Groq tool calls are unreliable)."""
+    bid = row.get("id")
+    if not bid:
+        return
+    ctx = _ctx(row)
+    brand = row.get("name") or "Brand"
+    specs: list[tuple[str, str]] = [
+        (
+            "linkedin",
+            "LinkedIn authority post: strong hook, one sharp insight for the audience, soft CTA. Under 2200 characters.",
+        ),
+        (
+            "facebook",
+            "Facebook Page post: warm, trustworthy, community tone; actionable tip or reassurance; UK English.",
+        ),
+        (
+            "linkedin",
+            "LinkedIn post: proof-led angle (metrics or outcome framing), credible and professional; no hashtags spam.",
+        ),
+    ]
+    sb = get_supabase()
+    for platform, template in specs:
+        try:
+            body = generate_personalised_copy(ctx, lead=f"Brand: {brand}", template=template)
+            if not body.strip() or "Configure GOOGLE_API_KEY" in body:
+                body = f"[Draft — add LLM keys] Short {platform} update for {brand}."
+            sb.table("pending_posts").insert(
+                {
+                    "business_id": bid,
+                    "platform": platform,
+                    "content": body[:12000],
+                    "status": "pending",
+                }
+            ).execute()
+        except Exception as exc:  # noqa: BLE001
+            print(f"enqueue_three_pending_posts_direct ({platform}): {exc}")
+
+
 def run_crew_for_business(row: dict[str, Any]) -> str:
     profiles = agents_for_type(row.get("type") or "generic")
 
     end = datetime.now(timezone.utc)
     start = end - timedelta(days=7)
     window_start, window_end = start.isoformat(), end.isoformat()
-    business_id = row.get("id")
     ctx = _ctx(row)
     snap = _persist_snapshots_for_window(row, start, end)
     domain = _domain_from_url(row.get("website_url"))
 
     llm = _llm()
-    copy_tools = [generate_personalised_copy_tool, enqueue_pending_post_tool]
+    copy_tools = [generate_personalised_copy_tool]
 
     tools_map = {
         "TrafficMonitor": [scrape_similarweb_traffic_tool],
@@ -261,15 +282,12 @@ def run_crew_for_business(row: dict[str, Any]) -> str:
             Task(
                 description=(
                     f"Business context: {ctx}\n"
-                    f"business_id for tools (exact UUID): {business_id}\n"
-                    "Produce three compliant, publish-ready posts (text only; no TikTok/video).\n"
-                    "You MUST call enqueue_pending_post_tool exactly three times — one per post. "
-                    "Arguments: business_id (above), platform (linkedin, facebook, or instagram), "
-                    "content (full post body). Vary angles. You may use generate_personalised_copy_tool "
-                    "to refine lines before enqueueing."
+                    "Draft three compliant marketing ideas (text-first, no TikTok/video): bullets with "
+                    "channel suggestion + KPI to watch per idea. You may use generate_personalised_copy_tool "
+                    "for polish; approvals queue is filled separately by the engine."
                 ),
                 agent=specialist,
-                expected_output="Confirm three successful enqueue_pending_post_tool calls.",
+                expected_output="Three Ideas bullets + channel + KPI to watch.",
             )
         )
     if dash:
@@ -291,11 +309,29 @@ def run_crew_for_business(row: dict[str, Any]) -> str:
         return "No agents configured."
 
     crew = Crew(agents=agents, tasks=tasks, process=Process.sequential, verbose=True)
-    return str(crew.kickoff())
+    result = ""
+    try:
+        result = str(crew.kickoff())
+    finally:
+        try:
+            enqueue_three_pending_posts_direct(row)
+        except Exception as exc:  # noqa: BLE001
+            print(f"pending_posts direct enqueue failed: {exc}")
+    return result
 
 
 def run_all() -> None:
-    for row in load_active_businesses():
+    raw = os.getenv("ENGINE_SLEEP_BETWEEN_BUSINESSES_SEC", "0").strip()
+    try:
+        inter_sleep = max(0.0, float(raw))
+    except ValueError:
+        inter_sleep = 0.0
+
+    businesses = load_active_businesses()
+    for idx, row in enumerate(businesses):
+        if idx > 0 and inter_sleep > 0:
+            print(f"Sleeping {inter_sleep}s before next business (ENGINE_SLEEP_BETWEEN_BUSINESSES_SEC)...")
+            time.sleep(inter_sleep)
         print(f"=== Running engine for {row.get('name')} ===")
         try:
             print(run_crew_for_business(row))
