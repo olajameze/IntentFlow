@@ -128,7 +128,12 @@ export function SettingsScreen() {
               <Label>Type</Label>
               <Select
                 value={form.type}
-                onValueChange={(v) => setForm((f) => ({ ...f, type: (v ?? f.type) as Biz["type"] }))}
+                onValueChange={(v) =>
+                  setForm((f) => ({
+                    ...f,
+                    type: (typeof v === "string" ? v : f.type) as Biz["type"],
+                  }))
+                }
               >
                 <SelectTrigger>
                   <SelectValue />

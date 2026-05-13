@@ -117,7 +117,7 @@ export function RevenueScreen() {
 
       <TabsContent value="overview" className="space-y-4">
         <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
-          <Select value={selected} onValueChange={(v) => setSelected(v ?? "all")}>
+          <Select value={selected} onValueChange={(v) => setSelected(typeof v === "string" ? v : "all")}>
             <SelectTrigger className="w-full md:w-72">
               <SelectValue placeholder="Filter business" />
             </SelectTrigger>
@@ -206,7 +206,9 @@ export function RevenueScreen() {
                 <Label>Business</Label>
                 <Select
                   value={form.business_id}
-                  onValueChange={(v) => setForm((f) => ({ ...f, business_id: v ?? f.business_id }))}
+                  onValueChange={(v) =>
+                    setForm((f) => ({ ...f, business_id: typeof v === "string" ? v : f.business_id }))
+                  }
                 >
                   <SelectTrigger>
                     <SelectValue placeholder="Select business" />
@@ -237,7 +239,9 @@ export function RevenueScreen() {
                 <Label>Source</Label>
                 <Select
                   value={form.source}
-                  onValueChange={(v) => setForm((f) => ({ ...f, source: v ?? f.source }))}
+                  onValueChange={(v) =>
+                    setForm((f) => ({ ...f, source: typeof v === "string" ? v : f.source }))
+                  }
                 >
                   <SelectTrigger>
                     <SelectValue />

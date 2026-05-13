@@ -81,7 +81,7 @@ export function TrafficScreen() {
         <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
           <div>
             <p className="text-sm text-muted-foreground">Filter portfolio</p>
-            <Select value={selected} onValueChange={(v) => setSelected(v ?? "all")}>
+            <Select value={selected} onValueChange={(v) => setSelected(typeof v === "string" ? v : "all")}>
               <SelectTrigger className="mt-1 w-full md:w-72">
                 <SelectValue placeholder="Choose business" />
               </SelectTrigger>
