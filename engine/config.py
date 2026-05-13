@@ -19,6 +19,9 @@ for _p in (
 ):
     load_dotenv(_p, override=False)
 
+# CLI/CI: avoid interactive "view execution traces?" unless user sets CREWAI_TRACING_ENABLED=true
+os.environ.setdefault("CREWAI_TRACING_ENABLED", "false")
+
 
 def _env_first(*names: str) -> str:
     for name in names:

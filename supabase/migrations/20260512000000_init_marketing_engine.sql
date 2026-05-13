@@ -143,7 +143,7 @@ create policy "service_role_all_app_settings" on public.app_settings
   for all using (auth.role() = 'service_role') with check (auth.role() = 'service_role');
 
 -- Seed initial businesses (IDs fixed for documentation; replace in production if needed)
-insert into public.businesses (id, name, type, target_audience, industry, social_accounts, website_url, goals, active)
+insert into public.businesses (id, name, type, target_audience, industry, social_accounts, website_url, umami_website_id, goals, active)
 values
   (
     '11111111-1111-1111-1111-111111111111',
@@ -152,7 +152,8 @@ values
     'Homeowners and landlords in South East UK needing rapid pest control',
     'Pest control / local services',
     '{"facebook":"weathers-pest","gbp":"Weathers Pest Solutions"}'::jsonb,
-    'https://weathers-pests.example.com',
+    'https://weatherspestsolutions.co.uk',
+    'a0bfefa1-d6ea-4ba0-b869-34f3901687fa',
     'Emergency lead capture, local SEO dominance, GBP optimization',
     true
   ),
@@ -163,7 +164,8 @@ values
     'Pest control operators and compliance managers',
     'B2B SaaS / compliance',
     '{"linkedin":"company/pesttrace"}'::jsonb,
-    'https://pesttrace.example.com',
+    'https://pesttrace.com',
+    'fa32c121-cb14-4b86-a3bd-0ab1bfd6bfca',
     'B2B pipeline, audit readiness messaging, digital compliance positioning',
     true
   ),
@@ -174,7 +176,8 @@ values
     'Founders and product teams needing high-trust engineering partners',
     'Software development agency',
     '{"linkedin":"company/jgdevs"}'::jsonb,
-    'https://jgdevs.example.com',
+    'https://jgdev.co.uk',
+    '630348c2-f497-439c-b667-ff6befb9daa0',
     'Authority content, case studies, LinkedIn thought leadership',
     true
   )

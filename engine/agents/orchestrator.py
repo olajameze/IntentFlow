@@ -68,12 +68,41 @@ def generate_personalised_copy_tool(business_context: str, lead: str, template: 
 
 
 def _llm() -> LLM:
-    """Prefer Gemini when GOOGLE_API_KEY is set (fewer rate-limit surprises than Groq free tier)."""
-    if google_api_key():
-        return LLM(model="gemini/gemini-1.5-flash", temperature=0.35)
+    """Prefer Gemini via CrewAI; use a model ID that exists on the current Gemini API."""
+    force_groq = os.getenv("ENGINE_FORCE_GROQ", "").strip().lower() in {"1", "true", "yes"}
+    if not force_groq and google_api_key():
+        model = os.getenv("CREWAI_GEMINI_MODEL", "gemini/gemini-2.0-flash").strip() or "gemini/gemini-2.0-flash"
+        return LLM(model=model, temperature=0.35)
     if groq_api_key():
         return LLM(model="groq/llama-3.1-8b-instant", temperature=0.35)
-    raise RuntimeError("Configure GOOGLE_API_KEY or GROQ_API_KEY for CrewAI")
+    raise RuntimeError(
+        "Configure GOOGLE_API_KEY or GROQ_API_KEY for CrewAI "
+        "(set ENGINE_FORCE_GROQ=1 to skip Gemini when quota is exhausted)."
+    )
+
+
+def _groq_llm() -> LLM:
+    return LLM(model="groq/llama-3.1-8b-instant", temperature=0.35)
+
+
+def _is_gemini_quota_or_rate_error(exc: BaseException) -> bool:
+    name = type(exc).__name__.lower()
+    if "resourceexhausted" in name or "ratelimit" in name:
+        return True
+    err = str(exc).lower()
+    return any(
+        s in err
+        for s in (
+            "429",
+            "resource exhausted",
+            "resource_exhausted",
+            "quota",
+            "rate limit",
+            "rate_limit",
+            "exceeded your current quota",
+            "limit: 0",
+        )
+    )
 
 
 def load_active_businesses() -> list[dict[str, Any]]:
@@ -131,7 +160,14 @@ def _persist_snapshots_for_window(row: dict[str, Any], start: datetime, end: dat
     bid = row.get("id")
     wid = row.get("umami_website_id")
     umami_summary = "Umami: skipped (no umami_website_id)."
-    if wid:
+    _wid_lower = (wid or "").lower()
+    _junk = ("paste", "placeholder", "another-id", "your-umami")
+    if wid and any(j in _wid_lower for j in _junk):
+        umami_summary = (
+            "Umami: skipped (junk/placeholder umami_website_id — run Supabase migrations "
+            "or update businesses.umami_website_id)."
+        )
+    elif wid:
         try:
             stats = fetch_umami_stats(wid, start, end)
             save_traffic_snapshot(bid, stats, source="umami", website_id=wid)
@@ -184,10 +220,18 @@ def enqueue_three_pending_posts_direct(row: dict[str, Any]) -> None:
     ]
     sb = get_supabase()
     for platform, template in specs:
+        body = ""
         try:
             body = generate_personalised_copy(ctx, lead=f"Brand: {brand}", template=template)
-            if not body.strip() or "Configure GOOGLE_API_KEY" in body:
-                body = f"[Draft — add LLM keys] Short {platform} update for {brand}."
+        except Exception as exc:  # noqa: BLE001
+            print(f"enqueue_three_pending_posts_direct ({platform}) LLM error: {exc}")
+            body = (
+                f"[Draft — LLM error] Placeholder {platform} post for {brand}. "
+                f"Fix Gemini quota / GEMINI_TEXT_MODEL or set GROQ_API_KEY or ENGINE_FORCE_GROQ=1. ({type(exc).__name__})"
+            )
+        if not body.strip() or "Configure GOOGLE_API_KEY" in body:
+            body = f"[Draft — add LLM keys] Short {platform} update for {brand}."
+        try:
             sb.table("pending_posts").insert(
                 {
                     "business_id": bid,
@@ -197,7 +241,7 @@ def enqueue_three_pending_posts_direct(row: dict[str, Any]) -> None:
                 }
             ).execute()
         except Exception as exc:  # noqa: BLE001
-            print(f"enqueue_three_pending_posts_direct ({platform}): {exc}")
+            print(f"enqueue_three_pending_posts_direct ({platform}) insert failed: {exc}")
 
 
 def run_crew_for_business(row: dict[str, Any]) -> str:
@@ -311,7 +355,21 @@ def run_crew_for_business(row: dict[str, Any]) -> str:
     crew = Crew(agents=agents, tasks=tasks, process=Process.sequential, verbose=True)
     result = ""
     try:
-        result = str(crew.kickoff())
+        try:
+            result = str(crew.kickoff())
+        except Exception as first_exc:  # noqa: BLE001
+            if google_api_key() and groq_api_key() and _is_gemini_quota_or_rate_error(first_exc):
+                print(
+                    "Crew: Gemini quota/rate limited — retrying once with Groq. "
+                    "Tip: set ENGINE_FORCE_GROQ=1 to skip Gemini entirely."
+                )
+                groq_llm = _groq_llm()
+                for ag in agents:
+                    ag.llm = groq_llm
+                crew = Crew(agents=agents, tasks=tasks, process=Process.sequential, verbose=True)
+                result = str(crew.kickoff())
+            else:
+                raise
     finally:
         try:
             enqueue_three_pending_posts_direct(row)
