@@ -60,7 +60,7 @@ const businessSchema = z.object({
   social_accounts: z.record(z.string(), z.string()).optional(),
   website_url: z.string().optional(),
   goals: z.string().optional(),
-  umami_website_id: z.string().optional(),
+  umami_website_id: z.string().nullable().optional(),
   active: z.boolean().optional(),
   stripe_secret_key: z.string().optional(),
 });

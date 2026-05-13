@@ -26,6 +26,8 @@ type Biz = {
 
 export function SettingsScreen() {
   const [businesses, setBusinesses] = useState<Biz[]>([]);
+  /** Per-business draft for Umami id (portfolio table edits). */
+  const [umamiDraft, setUmamiDraft] = useState<Record<string, string>>({});
   const [form, setForm] = useState({
     name: "",
     type: "local_service",
@@ -112,6 +114,37 @@ export function SettingsScreen() {
     load();
   };
 
+  const saveUmamiWebsiteId = async (biz: Biz) => {
+    const raw =
+      biz.id in umamiDraft ?
+        umamiDraft[biz.id]
+      : (biz.umami_website_id ?? "");
+    const trimmed = raw.trim();
+    const payload: { id: string; umami_website_id?: string | null } = { id: biz.id };
+    payload.umami_website_id =
+      trimmed ? trimmed : null;
+
+    const res = await fetch("/api/businesses", {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(payload),
+    });
+    if (!res.ok) {
+      const data = await res.json().catch(() => ({}));
+      const msg =
+        typeof data?.error === "string" ? data.error : data?.hint ?? "Could not save Umami ID";
+      toast.error(String(msg));
+      return;
+    }
+    toast.success("Umami website id saved");
+    setUmamiDraft((d) => {
+      const next = { ...d };
+      delete next[biz.id];
+      return next;
+    });
+    load();
+  };
+
   return (
     <div className="space-y-6">
       <Card>
@@ -193,7 +226,7 @@ export function SettingsScreen() {
               <TableRow>
                 <TableHead>Name</TableHead>
                 <TableHead>Type</TableHead>
-                <TableHead>Umami</TableHead>
+                <TableHead>Umami website id</TableHead>
                 <TableHead>Stripe</TableHead>
                 <TableHead className="text-right">Active</TableHead>
               </TableRow>
@@ -203,7 +236,31 @@ export function SettingsScreen() {
                 <TableRow key={biz.id}>
                   <TableCell className="font-medium">{biz.name}</TableCell>
                   <TableCell>{biz.type}</TableCell>
-                  <TableCell>{biz.umami_website_id ?? "—"}</TableCell>
+                  <TableCell>
+                    <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
+                      <Input
+                        aria-label={`Umami id for ${biz.name}`}
+                        className="h-9 min-w-[12rem] font-mono text-xs"
+                        placeholder="Umami dashboard → Websites → Website ID"
+                        value={biz.id in umamiDraft ? umamiDraft[biz.id] : (biz.umami_website_id ?? "")}
+                        onChange={(e) =>
+                          setUmamiDraft((d) => ({
+                            ...d,
+                            [biz.id]: e.target.value,
+                          }))
+                        }
+                      />
+                      <Button
+                        type="button"
+                        variant="secondary"
+                        size="sm"
+                        className="h-9 shrink-0"
+                        onClick={() => void saveUmamiWebsiteId(biz)}
+                      >
+                        Save
+                      </Button>
+                    </div>
+                  </TableCell>
                   <TableCell>{biz.has_stripe ? "Vaulted" : "—"}</TableCell>
                   <TableCell className="text-right">
                     <Switch checked={biz.active} onCheckedChange={(v) => toggleActive(biz, v)} aria-label={`Toggle ${biz.name}`} />
