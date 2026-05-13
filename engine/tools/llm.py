@@ -39,6 +39,8 @@ def _google_error_try_groq(exc: BaseException) -> bool:
     name = type(exc).__name__.lower()
     if "resourceexhausted" in name:
         return True
+    if "authentication" in name or "permission" in name or "invalidargument" in name:
+        return True
     err = str(exc).lower()
     if any(
         s in err
@@ -49,6 +51,12 @@ def _google_error_try_groq(exc: BaseException) -> bool:
             "resource exhausted",
             "resourceexhausted",
             "too many requests",
+            "api key not valid",
+            "invalid api key",
+            "permission denied",
+            "unauthenticated",
+            "401",
+            "403",
         )
     ):
         return True
