@@ -20,20 +20,36 @@ function manualWorkflowUrl(): string | null {
   return r ? workflowActionsUrl(r) : null;
 }
 
+/** PAT for workflow_dispatch: first non-empty wins (avoids “I used another name” confusion). */
+function dispatchToken(): string | undefined {
+  for (const key of [
+    "GITHUB_ACTION_DISPATCH_TOKEN",
+    "GITHUB_DISPATCH_TOKEN",
+    "GH_DISPATCH_TOKEN",
+  ] as const) {
+    const t = process.env[key]?.trim();
+    if (t) return t;
+  }
+  return undefined;
+}
+
+const DISPATCH_TOKEN_HINT =
+  "Add a GitHub PAT to `web/.env.local` (next to `web/package.json`—not the monorepo root unless you symlink). Use any of: `GITHUB_ACTION_DISPATCH_TOKEN`, `GITHUB_DISPATCH_TOKEN`, or `GH_DISPATCH_TOKEN`. Fine-grained: Actions Write + Contents Read on this repo. Also set `NEXT_PUBLIC_GITHUB_REPO=owner/repo`. Restart `npm run dev` after saving.";
+
 /**
  * POST — dispatches `.github/workflows/marketing-engine.yml` via GitHub API when token is configured.
  * Otherwise returns 503 + URL to open the workflow manually.
  */
 export async function POST() {
   const manual = manualWorkflowUrl();
-  const token = process.env.GITHUB_ACTION_DISPATCH_TOKEN?.trim();
+  const token = dispatchToken();
   const repoFull = resolveRepoFull();
 
   if (!token) {
     return NextResponse.json(
       {
         error: "Engine dispatch token missing.",
-        hint: "Add `GITHUB_ACTION_DISPATCH_TOKEN` to web/.env.local (fine-grained PAT: Actions Write + Contents Read). Set `NEXT_PUBLIC_GITHUB_REPO=owner/repo` for a one-click “Open workflow” link in the toast. Restart dev after editing env.",
+        hint: DISPATCH_TOKEN_HINT,
         ...(manual && { manualUrl: manual }),
       },
       { status: 503 },
