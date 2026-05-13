@@ -7,6 +7,7 @@ import sys
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import Any
+from urllib.parse import urlparse
 
 _ROOT = Path(__file__).resolve().parents[1]
 if str(_ROOT) not in sys.path:
@@ -25,7 +26,7 @@ from tools.llm import generate_personalised_copy
 from tools.persistence import save_revenue_snapshot, save_traffic_snapshot
 from tools.similarweb import scrape_similarweb_traffic
 from tools.stripe_revenue import fetch_stripe_revenue
-from tools.umami import fetch_umami_metrics, fetch_umami_pageviews, fetch_umami_stats
+from tools.umami import fetch_umami_stats
 
 
 def _ctx(row: dict[str, Any]) -> str:
@@ -43,73 +44,11 @@ def _ctx(row: dict[str, Any]) -> str:
     )
 
 
-@tool("Fetch Umami stats for a website id")
-def fetch_umami_stats_tool(website_id: str, start_iso: str, end_iso: str) -> str:
-    """Return Umami stats JSON for a website id and date range (ISO strings)."""
-    start = datetime.fromisoformat(start_iso.replace("Z", "+00:00"))
-    end = datetime.fromisoformat(end_iso.replace("Z", "+00:00"))
-    data = fetch_umami_stats(website_id, start, end)
-    return json.dumps(data, ensure_ascii=False)
-
-
-@tool("Fetch Umami pageviews time series")
-def fetch_umami_pageviews_tool(website_id: str, start_iso: str, end_iso: str) -> str:
-    """Return Umami pageviews time series as JSON for the given website id and range."""
-    start = datetime.fromisoformat(start_iso.replace("Z", "+00:00"))
-    end = datetime.fromisoformat(end_iso.replace("Z", "+00:00"))
-    data = fetch_umami_pageviews(website_id, start, end)
-    return json.dumps(data, ensure_ascii=False)
-
-
-@tool("Fetch Umami metrics breakdown")
-def fetch_umami_metrics_tool(website_id: str, start_iso: str, end_iso: str) -> str:
-    """Return Umami metrics breakdown JSON for the website id and date range."""
-    start = datetime.fromisoformat(start_iso.replace("Z", "+00:00"))
-    end = datetime.fromisoformat(end_iso.replace("Z", "+00:00"))
-    data = fetch_umami_metrics(website_id, start, end)
-    return json.dumps(data, ensure_ascii=False)
-
-
-@tool("Persist an Umami payload via business id")
-def save_traffic_snapshot_tool(business_id: str, website_id: str, json_payload: str, source: str = "umami") -> str:
-    """Save parsed Umami JSON to Supabase for the business and website id."""
-    save_traffic_snapshot(business_id, json.loads(json_payload), source=source, website_id=website_id)
-    return "saved"
-
-
 @tool("Scrape Similarweb public summary (advisory)")
 def scrape_similarweb_traffic_tool(domain: str) -> str:
     """Scrape Similarweb public traffic summary for a domain; returns JSON."""
     data = scrape_similarweb_traffic(domain)
     return json.dumps(data, ensure_ascii=False)
-
-
-@tool("Fetch Stripe revenue using stored business secret (no key in prompt)")
-def fetch_stripe_revenue_for_business_tool(business_id: str, start_iso: str, end_iso: str) -> str:
-    """Load Stripe key from Supabase and fetch revenue JSON for the date range."""
-    sb = get_supabase()
-    rows = sb.table("businesses").select("*").eq("id", business_id).limit(1).execute()
-    data = (rows.data or [None])[0]
-    if not data:
-        return json.dumps({"error": "business not found"})
-    key = decrypt_stripe_secret(
-        data.get("stripe_secret_ciphertext"),
-        data.get("stripe_secret_iv"),
-        data.get("stripe_secret_tag"),
-    )
-    if not key:
-        return json.dumps({"error": "stripe key not configured"})
-    start = datetime.fromisoformat(start_iso.replace("Z", "+00:00"))
-    end = datetime.fromisoformat(end_iso.replace("Z", "+00:00"))
-    payload = fetch_stripe_revenue(key, (start, end))
-    return json.dumps(payload, ensure_ascii=False)
-
-
-@tool("Persist Stripe-derived snapshot for business id")
-def save_revenue_snapshot_tool(business_id: str, json_payload: str) -> str:
-    """Persist a Stripe revenue payload JSON for the given business id."""
-    save_revenue_snapshot(business_id, json.loads(json_payload), snapshot_source="stripe_api")
-    return "saved"
 
 
 @tool("Merge CSV processor exports (paths_json maps processor->path)")
@@ -124,6 +63,26 @@ def merge_csv_uploads_tool(paths_json: str) -> str:
 def generate_personalised_copy_tool(business_context: str, lead: str, template: str) -> str:
     """Generate personalised marketing copy from business context, lead, and template."""
     return generate_personalised_copy(business_context, lead, template)
+
+
+@tool("Queue a marketing post for human approval in the dashboard")
+def enqueue_pending_post_tool(business_id: str, platform: str, content: str) -> str:
+    """Insert pending_posts row. platform: linkedin | facebook | instagram | twitter"""
+    p = (platform or "").strip().lower()
+    if p not in {"linkedin", "facebook", "instagram", "twitter", "x"}:
+        return json.dumps({"error": f"unsupported platform: {platform}"})
+    if p == "x":
+        p = "twitter"
+    sb = get_supabase()
+    sb.table("pending_posts").insert(
+        {
+            "business_id": business_id,
+            "platform": p,
+            "content": content,
+            "status": "pending",
+        }
+    ).execute()
+    return json.dumps({"queued": True, "platform": p})
 
 
 def _llm() -> LLM:
@@ -174,36 +133,78 @@ def _pick_specialist_agent(agents: list[Agent]) -> Agent | None:
     return None
 
 
+def _domain_from_url(url: str | None) -> str:
+    if not url:
+        return ""
+    u = url.strip()
+    if not u.startswith(("http://", "https://")):
+        u = "https://" + u
+    host = urlparse(u).netloc
+    return host.replace("www.", "", 1) if host else ""
+
+
+def _persist_snapshots_for_window(row: dict[str, Any], start: datetime, end: datetime) -> dict[str, str]:
+    """Write Umami + Stripe snapshots in-process (avoids LLMs chaining fetch+save tools; fixes Groq tool_use failures)."""
+    bid = row.get("id")
+    wid = row.get("umami_website_id")
+    umami_summary = "Umami: skipped (no umami_website_id)."
+    if wid:
+        try:
+            stats = fetch_umami_stats(wid, start, end)
+            save_traffic_snapshot(bid, stats, source="umami", website_id=wid)
+            umami_summary = f"Umami: snapshot saved for website_id={wid}."
+        except Exception as exc:  # noqa: BLE001
+            umami_summary = f"Umami: error ({exc})"
+
+    rev_summary = "Stripe: skipped (no encrypted secret on file)."
+    key = decrypt_stripe_secret(
+        row.get("stripe_secret_ciphertext"),
+        row.get("stripe_secret_iv"),
+        row.get("stripe_secret_tag"),
+    )
+    if key:
+        try:
+            rev = fetch_stripe_revenue(key, (start, end))
+            save_revenue_snapshot(bid, rev, snapshot_source="stripe_api")
+            rev_summary = (
+                "Stripe: snapshot saved — "
+                f"net={rev.get('total_net') or rev.get('net_revenue')}, "
+                f"gross={rev.get('total_gross') or rev.get('total_revenue')}, "
+                f"transactions={rev.get('transactions') or rev.get('transaction_count')}"
+            )
+        except Exception as exc:  # noqa: BLE001
+            rev_summary = f"Stripe: error ({exc})"
+
+    return {"umami": umami_summary, "revenue": rev_summary}
+
+
 def run_crew_for_business(row: dict[str, Any]) -> str:
-    llm = _llm()
     profiles = agents_for_type(row.get("type") or "generic")
 
+    end = datetime.now(timezone.utc)
+    start = end - timedelta(days=7)
+    window_start, window_end = start.isoformat(), end.isoformat()
+    business_id = row.get("id")
+    ctx = _ctx(row)
+    snap = _persist_snapshots_for_window(row, start, end)
+    domain = _domain_from_url(row.get("website_url"))
+
+    llm = _llm()
+    copy_tools = [generate_personalised_copy_tool, enqueue_pending_post_tool]
+
     tools_map = {
-        "TrafficMonitor": [
-            fetch_umami_stats_tool,
-            fetch_umami_pageviews_tool,
-            fetch_umami_metrics_tool,
-            save_traffic_snapshot_tool,
-            scrape_similarweb_traffic_tool,
-        ],
-        "RevenueTracker": [
-            fetch_stripe_revenue_for_business_tool,
-            save_revenue_snapshot_tool,
-            merge_csv_uploads_tool,
-        ],
-        "LocalResearcher": [generate_personalised_copy_tool],
-        "SaaSOutreach": [generate_personalised_copy_tool],
-        "AuthorityBuilder": [generate_personalised_copy_tool],
-        "SocialPostingAgent": [generate_personalised_copy_tool],
-        "CaseStudyGenerator": [generate_personalised_copy_tool],
-        "Networker": [generate_personalised_copy_tool],
-        "SocialListener": [generate_personalised_copy_tool],
-        "ContentGenerator": [generate_personalised_copy_tool],
-        "SEOMonitor": [generate_personalised_copy_tool],
-        "DashboardAggregator": [
-            fetch_umami_stats_tool,
-            fetch_stripe_revenue_for_business_tool,
-        ],
+        "TrafficMonitor": [scrape_similarweb_traffic_tool],
+        "RevenueTracker": [merge_csv_uploads_tool],
+        "LocalResearcher": copy_tools,
+        "SaaSOutreach": copy_tools,
+        "AuthorityBuilder": copy_tools,
+        "SocialPostingAgent": copy_tools,
+        "CaseStudyGenerator": copy_tools,
+        "Networker": copy_tools,
+        "SocialListener": copy_tools,
+        "ContentGenerator": copy_tools,
+        "SEOMonitor": copy_tools,
+        "DashboardAggregator": [],
     }
 
     agents: list[Agent] = []
@@ -221,12 +222,6 @@ def run_crew_for_business(row: dict[str, Any]) -> str:
         agents.append(agent)
         agent_by_role[profile.name] = agent
 
-    end = datetime.now(timezone.utc)
-    start = end - timedelta(days=7)
-    window_start, window_end = start.isoformat(), end.isoformat()
-    business_id = row.get("id")
-    ctx = _ctx(row)
-
     traffic = agent_by_role.get("TrafficMonitor")
     revenue = agent_by_role.get("RevenueTracker")
     specialist = _pick_specialist_agent(agents) or traffic
@@ -238,11 +233,14 @@ def run_crew_for_business(row: dict[str, Any]) -> str:
             Task(
                 description=(
                     f"Business context: {ctx}\n"
-                    f"Pull Umami analytics for website id {row.get('umami_website_id')} "
-                    f"between {window_start} and {window_end}. Persist snapshot for business_id {business_id}."
+                    f"Time window: {window_start} to {window_end}.\n"
+                    f"**Umami (already persisted server-side):** {snap['umami']}\n"
+                    f"Website domain for Similarweb (if you use it): {domain or 'unknown'}.\n"
+                    "Optionally call scrape_similarweb_traffic_tool(domain) once for a public benchmark. "
+                    "Give a concise traffic narrative. Do not attempt Umami or database persistence tools."
                 ),
                 agent=traffic,
-                expected_output="Metric summary with saves confirmed.",
+                expected_output="Brief traffic summary; note if Similarweb was used.",
             )
         )
     if revenue:
@@ -250,11 +248,12 @@ def run_crew_for_business(row: dict[str, Any]) -> str:
             Task(
                 description=(
                     f"Business context: {ctx}\n"
-                    f"Attempt Stripe snapshot via tools for business_id {business_id} same window. "
-                    "If tool reports missing key, outline manual revenue hygiene instead."
+                    f"**Revenue (already persisted server-side):** {snap['revenue']}\n"
+                    "Interpret results and recommend hygiene. Use merge_csv_uploads_tool only if "
+                    "merging uploaded CSV revenue is explicitly relevant; otherwise skip."
                 ),
                 agent=revenue,
-                expected_output="Revenue snapshot status with figures or blockers.",
+                expected_output="Revenue interpretation and next actions.",
             )
         )
     if specialist and specialist is not traffic:
@@ -262,10 +261,15 @@ def run_crew_for_business(row: dict[str, Any]) -> str:
             Task(
                 description=(
                     f"Business context: {ctx}\n"
-                    "Draft three compliant marketing ideas (text-first, no video/TikTok)."
+                    f"business_id for tools (exact UUID): {business_id}\n"
+                    "Produce three compliant, publish-ready posts (text only; no TikTok/video).\n"
+                    "You MUST call enqueue_pending_post_tool exactly three times — one per post. "
+                    "Arguments: business_id (above), platform (linkedin, facebook, or instagram), "
+                    "content (full post body). Vary angles. You may use generate_personalised_copy_tool "
+                    "to refine lines before enqueueing."
                 ),
                 agent=specialist,
-                expected_output="Three Ideas bullets + channel + KPI to watch.",
+                expected_output="Confirm three successful enqueue_pending_post_tool calls.",
             )
         )
     if dash:
@@ -273,7 +277,10 @@ def run_crew_for_business(row: dict[str, Any]) -> str:
             Task(
                 description=(
                     f"Business context: {ctx}\n"
-                    "Synthesize weekly executive summary + next steps using tools only if needed."
+                    f"Pre-computed window {window_start}..{window_end}:\n"
+                    f"- {snap['umami']}\n"
+                    f"- {snap['revenue']}\n"
+                    "Deliver an executive summary and numbered next steps (no tool calls required)."
                 ),
                 agent=dash,
                 expected_output="Executive summary with numbered actions.",

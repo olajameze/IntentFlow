@@ -46,7 +46,9 @@ export function ApprovalsScreen() {
       toast.error("Publish failed");
       return;
     }
-    toast.success("Published (stub — connect platform APIs)");
+    const data = await res.json().catch(() => ({}));
+    const note = typeof data.note === "string" ? data.note : null;
+    toast.success(note ?? (typeof data.facebook_post_id === "string" ? "Published to Facebook" : "Marked published"));
     load();
   };
 
