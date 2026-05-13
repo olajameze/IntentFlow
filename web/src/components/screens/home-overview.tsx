@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useState } from "react";
 import { format } from "date-fns";
-import { Activity, ArrowUpRight, Gauge, Sparkles } from "lucide-react";
+import { Activity, ArrowUpRight, Gauge, Loader2, Sparkles } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -41,6 +41,7 @@ export function HomeOverview() {
   const [pending, setPending] = useState<Record<string, unknown>[]>([]);
   const [leads, setLeads] = useState<Record<string, unknown>[]>([]);
   const [loading, setLoading] = useState(true);
+  const [dispatching, setDispatching] = useState(false);
 
   useEffect(() => {
     async function load() {
@@ -103,7 +104,46 @@ export function HomeOverview() {
   }, [snapshots, revenue]);
 
   const runEngine = async () => {
-    toast.message("Trigger the GitHub Action `marketing-engine.yml` or run `python engine/main.py` locally.");
+    setDispatching(true);
+    try {
+      const res = await fetch("/api/trigger-engine", { method: "POST" });
+      const data = (await res.json().catch(() => ({}))) as Record<string, unknown>;
+
+      const manualUrl = typeof data.manualUrl === "string" ? data.manualUrl : null;
+      const logsUrl = typeof data.logsUrl === "string" ? data.logsUrl : manualUrl;
+
+      if (res.ok && data.ok) {
+        toast.success(String(data.message ?? "Marketing Engine workflow dispatched."), {
+          duration: 10_000,
+          action:
+            logsUrl ?
+              {
+                label: "Open Actions",
+                onClick: () => window.open(logsUrl, "_blank", "noopener,noreferrer"),
+              }
+            : undefined,
+        });
+        return;
+      }
+
+      const msg = typeof data.error === "string" ? data.error : `HTTP ${res.status}`;
+      const hint = typeof data.hint === "string" ? data.hint : "";
+      toast.error(hint ? `${msg}\n\n${hint.slice(0, 280)}` : msg, {
+        duration: 20_000,
+        ...(manualUrl ?
+          {
+            action: {
+              label: "Open workflow",
+              onClick: () => window.open(manualUrl, "_blank", "noopener,noreferrer"),
+            },
+          }
+        : {}),
+      });
+    } catch {
+      toast.error("Could not reach /api/trigger-engine");
+    } finally {
+      setDispatching(false);
+    }
   };
 
   if (loading) {
@@ -121,9 +161,17 @@ export function HomeOverview() {
             {pending.length} approvals waiting
           </Badge>
         </div>
-        <Button size="lg" className="h-12 px-6 text-base" onClick={runEngine} type="button">
-          <Sparkles className="mr-2 h-4 w-4" />
-          Run engine now
+        <Button
+          size="lg"
+          className="h-12 px-6 text-base"
+          onClick={runEngine}
+          type="button"
+          disabled={dispatching}
+        >
+          {dispatching ?
+            <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+          : <Sparkles className="mr-2 h-4 w-4" />}
+          {dispatching ? "Dispatching…" : "Run engine now"}
         </Button>
       </div>
 
