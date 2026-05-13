@@ -21,6 +21,9 @@ jobs:
           cache-dependency-path: engine/requirements.txt
       - name: Install dependencies
         run: pip install -r requirements.txt
+      # Fails fast if engine is run as scripts (no package parent) with relative imports left in place.
+      - name: Verify engine imports (CLI layout)
+        run: python -c "import crypto_util, supabase_client, main; print('CLI import graph OK')"
       - name: Run CrewAI engine
         env:
           SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
