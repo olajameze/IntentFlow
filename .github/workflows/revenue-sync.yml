@@ -15,6 +15,11 @@ concurrency:
 jobs:
   revenue:
     runs-on: ubuntu-latest
+    env:
+      SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+      NEXT_PUBLIC_SUPABASE_URL: ${{ secrets.NEXT_PUBLIC_SUPABASE_URL }}
+      SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
+      STRIPE_SECRET_ENCRYPTION_KEY: ${{ secrets.STRIPE_SECRET_ENCRYPTION_KEY }}
     defaults:
       run:
         working-directory: engine
@@ -29,16 +34,12 @@ jobs:
       - name: Verify engine imports (CLI layout)
         run: python -c "import crypto_util, supabase_client, main; print('CLI import graph OK')"
       - name: Check required secrets for Supabase
-        env:
-          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
-          SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
         run: |
           set -e
-          test -n "$SUPABASE_URL" || { echo "::error::Secret SUPABASE_URL is empty"; exit 1; }
+          if [ -z "${SUPABASE_URL:-}${NEXT_PUBLIC_SUPABASE_URL:-}" ]; then
+            echo "::error::Set SUPABASE_URL or NEXT_PUBLIC_SUPABASE_URL repository secret"
+            exit 1
+          fi
           test -n "$SUPABASE_SERVICE_ROLE_KEY" || { echo "::error::Secret SUPABASE_SERVICE_ROLE_KEY is empty"; exit 1; }
       - name: Stripe revenue snapshots
-        env:
-          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
-          SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
-          STRIPE_SECRET_ENCRYPTION_KEY: ${{ secrets.STRIPE_SECRET_ENCRYPTION_KEY }}
         run: python main.py revenue

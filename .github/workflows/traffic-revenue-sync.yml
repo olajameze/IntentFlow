@@ -16,6 +16,13 @@ concurrency:
 jobs:
   snapshots:
     runs-on: ubuntu-latest
+    env:
+      SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+      NEXT_PUBLIC_SUPABASE_URL: ${{ secrets.NEXT_PUBLIC_SUPABASE_URL }}
+      SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
+      UMAMI_URL: ${{ secrets.UMAMI_URL }}
+      UMAMI_API_TOKEN: ${{ secrets.UMAMI_API_TOKEN }}
+      STRIPE_SECRET_ENCRYPTION_KEY: ${{ secrets.STRIPE_SECRET_ENCRYPTION_KEY }}
     defaults:
       run:
         working-directory: engine
@@ -30,28 +37,16 @@ jobs:
       - name: Verify engine imports (CLI layout)
         run: python -c "import crypto_util, supabase_client, main; print('CLI import graph OK')"
       - name: Check required secrets for traffic
-        env:
-          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
-          SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
-          UMAMI_URL: ${{ secrets.UMAMI_URL }}
-          UMAMI_API_TOKEN: ${{ secrets.UMAMI_API_TOKEN }}
         run: |
           set -e
-          test -n "$SUPABASE_URL" || { echo "::error::Secret SUPABASE_URL is empty"; exit 1; }
+          if [ -z "${SUPABASE_URL:-}${NEXT_PUBLIC_SUPABASE_URL:-}" ]; then
+            echo "::error::Set SUPABASE_URL or NEXT_PUBLIC_SUPABASE_URL repository secret"
+            exit 1
+          fi
           test -n "$SUPABASE_SERVICE_ROLE_KEY" || { echo "::error::Secret SUPABASE_SERVICE_ROLE_KEY is empty"; exit 1; }
-          test -n "$UMAMI_URL" || { echo "::error::Secret UMAMI_URL is empty — use your Umami origin (e.g. https://cloud.umami.is), not NEXT_PUBLIC_UMAMI_URL"; exit 1; }
+          test -n "$UMAMI_URL" || { echo "::error::Secret UMAMI_URL is empty"; exit 1; }
           test -n "$UMAMI_API_TOKEN" || { echo "::error::Secret UMAMI_API_TOKEN is empty"; exit 1; }
       - name: Traffic snapshots (Umami)
-        env:
-          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
-          SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
-          UMAMI_URL: ${{ secrets.UMAMI_URL }}
-          UMAMI_API_TOKEN: ${{ secrets.UMAMI_API_TOKEN }}
-          STRIPE_SECRET_ENCRYPTION_KEY: ${{ secrets.STRIPE_SECRET_ENCRYPTION_KEY }}
         run: python main.py traffic
       - name: Revenue snapshots (Stripe)
-        env:
-          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
-          SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
-          STRIPE_SECRET_ENCRYPTION_KEY: ${{ secrets.STRIPE_SECRET_ENCRYPTION_KEY }}
         run: python main.py revenue

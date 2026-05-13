@@ -7,22 +7,39 @@ from functools import lru_cache
 
 from dotenv import load_dotenv
 
-load_dotenv()
+# Never drop CI/workflow env vars; .env fills gaps for local runs only.
+load_dotenv(override=False)
+
+
+def _env_first(*names: str) -> str:
+    for name in names:
+        raw = os.getenv(name, "")
+        v = raw.strip().strip('"').strip("'")
+        if v:
+            return v
+    return ""
 
 
 @lru_cache
 def supabase_url() -> str:
-    v = os.getenv("SUPABASE_URL", "").strip()
+    v = _env_first("SUPABASE_URL", "NEXT_PUBLIC_SUPABASE_URL")
     if not v:
-        raise RuntimeError("SUPABASE_URL is required")
+        raise RuntimeError(
+            "SUPABASE_URL is required. GitHub Actions: add repository secret SUPABASE_URL "
+            "(same HTTPS project URL as in web NEXT_PUBLIC_SUPABASE_URL). "
+            "Engine does not read Vercel env names automatically."
+        )
     return v
 
 
 @lru_cache
 def supabase_service_role_key() -> str:
-    v = os.getenv("SUPABASE_SERVICE_ROLE_KEY", "").strip()
+    v = _env_first("SUPABASE_SERVICE_ROLE_KEY")
     if not v:
-        raise RuntimeError("SUPABASE_SERVICE_ROLE_KEY is required")
+        raise RuntimeError(
+            "SUPABASE_SERVICE_ROLE_KEY is required. GitHub Actions: add repository secret "
+            "SUPABASE_SERVICE_ROLE_KEY (service_role JWT, server-only)."
+        )
     return v
 
 
