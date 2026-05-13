@@ -59,9 +59,28 @@ python main.py revenue     # Stripe snapshots only
 
 ## 5. Web dashboard
 
+**One-time:** install dependencies in `web/` (pick one):
+
+```bash
+cd web && npm install
+```
+
+…or from the repo root:
+
+```bash
+npm run install:web
+```
+
+**Dev server** — from the repo root:
+
+```bash
+npm run dev
+```
+
+…or from `web/`:
+
 ```bash
 cd web
-npm install
 npm run dev
 ```
 
