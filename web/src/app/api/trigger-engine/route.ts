@@ -49,6 +49,9 @@ function dispatchToken(): string | undefined {
 const BAD_CREDENTIALS_HINT =
   "GitHub returned 401 — the token is invalid, expired, or lacks scopes. Create a new PAT: Fine-grained → select repo `olajameze/IntentFlow` → Permissions: Contents Read + Actions Read and write. (Classic: enable `repo` + `workflow`.) In `web/.env.local` put the token alone — no quotes, no `Bearer ` prefix. Restart `npm run dev`.";
 
+const FORBIDDEN_WORKFLOW_HINT =
+  "Fine-grained PAT must include this repo and set **Actions → Read and write** (Read only blocks workflow_dispatch). Set **Contents → Read** minimum. Orgs: click **Configure SSO** / **Authorize** next to the org for this token. Classic PAT: **`workflow`** + **`repo`** scopes.";
+
 const DISPATCH_TOKEN_HINT =
   "Add a GitHub PAT to `web/.env.local` (next to `web/package.json`—not the monorepo root unless you symlink). Use any of: `GITHUB_ACTION_DISPATCH_TOKEN`, `GITHUB_DISPATCH_TOKEN`, or `GH_DISPATCH_TOKEN`. Fine-grained: Actions Write + Contents Read on this repo. Also set `NEXT_PUBLIC_GITHUB_REPO=owner/repo`. Restart `npm run dev` after saving.";
 
@@ -143,6 +146,17 @@ export async function POST() {
         ...(manual && { manualUrl: manual }),
       },
       { status: 401 },
+    );
+  }
+
+  if (gh.status === 403) {
+    return NextResponse.json(
+      {
+        error: "GitHub forbids workflow_dispatch for this token (403).",
+        hint: FORBIDDEN_WORKFLOW_HINT,
+        ...(manual && { manualUrl: manual }),
+      },
+      { status: 403 },
     );
   }
 
