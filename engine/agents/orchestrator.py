@@ -80,14 +80,14 @@ def generate_personalised_copy_tool(business_context: str, lead: str, template: 
 
 
 def _llm() -> LLM:
-    """Prefer Gemini via CrewAI; use a model ID that exists on the current Gemini API."""
+    """Prefer Gemini via CrewAI when configured; otherwise Groq."""
     if llm_skip_google() or groq_only_after_gemini_auth_failure():
         if groq_api_key():
             return _groq_llm()
-    raise RuntimeError(
-        "GROQ_API_KEY is missing while Groq-only mode is required "
-        "(no GOOGLE_API_KEY and no Groq key, or ENGINE_USE_GROQ_ONLY / ENGINE_FORCE_GROQ without GROQ_API_KEY)."
-    )
+        raise RuntimeError(
+            "GROQ_API_KEY is missing while Groq-only mode is required "
+            "(no GOOGLE_API_KEY and no Groq key, or ENGINE_USE_GROQ_ONLY / ENGINE_FORCE_GROQ without GROQ_API_KEY)."
+        )
     if google_api_key():
         model = os.getenv("CREWAI_GEMINI_MODEL", "gemini/gemini-2.0-flash").strip() or "gemini/gemini-2.0-flash"
         return LLM(model=model, temperature=0.35)
@@ -239,6 +239,15 @@ def enqueue_three_pending_posts_direct(row: dict[str, Any]) -> None:
     ]
     sb = get_supabase()
     extra = _extra_copy_doctrine_for_row(row)
+    # Collapse instructional LLM-missing bodies from `generate_personalised_copy` into a short queue placeholder.
+    _llm_key_hint_markers = (
+        "Configure GOOGLE_API_KEY",
+        "Set GROQ_API_KEY",
+        "Configure GROQ_API_KEY",
+        "[Draft — configure LLM fallback]",
+        "[Draft — LLM fallback failed]",
+        "[Draft — LLM error] Gemini failed",
+    )
     for platform, template in specs:
         body = ""
         try:
@@ -250,7 +259,7 @@ def enqueue_three_pending_posts_direct(row: dict[str, Any]) -> None:
                 f"Fix Gemini quota / GEMINI_TEXT_MODEL or set GROQ_API_KEY "
                 f"with ENGINE_USE_GROQ_ONLY=1 / ENGINE_FORCE_GROQ=1. ({type(exc).__name__})"
             )
-        if not body.strip() or "Configure GOOGLE_API_KEY" in body:
+        if not body.strip() or any(marker in body for marker in _llm_key_hint_markers):
             body = f"[Draft — add LLM keys] Short {platform} update for {brand}."
         try:
             sb.table("pending_posts").insert(
