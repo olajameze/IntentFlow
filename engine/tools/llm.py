@@ -2,13 +2,37 @@
 
 from __future__ import annotations
 
+import json
 import os
 import sys
+import time
 from pathlib import Path
 
 _ROOT = Path(__file__).resolve().parents[1]
+_REPO_ROOT = _ROOT.parent
+_DEBUG_LOG = _REPO_ROOT / "debug-7f70f7.log"
+
 if str(_ROOT) not in sys.path:
     sys.path.insert(0, str(_ROOT))
+
+
+def _dbg_llm(hypothesis_id: str, location: str, message: str, data: dict) -> None:
+    # #region agent log
+    try:
+        payload = {
+            "sessionId": "7f70f7",
+            "hypothesisId": hypothesis_id,
+            "location": location,
+            "message": message,
+            "data": data,
+            "timestamp": int(time.time() * 1000),
+        }
+        with _DEBUG_LOG.open("a", encoding="utf-8") as f:
+            f.write(json.dumps(payload, ensure_ascii=False) + "\n")
+    except OSError:
+        pass
+    # #endregion
+
 
 from config import google_api_key, groq_api_key, llm_skip_google
 from .copy_doctrine import GLOBAL_COPY_DOCTRINE
@@ -124,6 +148,22 @@ Template / task:
 Return concise, compliant copy only (no meta-commentary). UK English."""
     global _groq_only_after_gemini_auth_failure
 
+    # #region agent log
+    _groq_raw = bool(os.getenv("GROQ_API_KEY", "").strip())
+    _dbg_llm(
+        "H1-H4",
+        "llm.py:generate_personalised_copy:entry",
+        "copy_generation_entry",
+        {
+            "llm_skip_google": llm_skip_google(),
+            "groq_after_gemini_fail": _groq_only_after_gemini_auth_failure,
+            "has_google_api_key": bool(google_api_key()),
+            "has_groq_env": _groq_raw,
+            "gemini_model": _gemini_model_name(),
+        },
+    )
+    # #endregion
+
     if llm_skip_google() or _groq_only_after_gemini_auth_failure:
         return _groq_generate(prompt) or "Configure GROQ_API_KEY (ENGINE_USE_GROQ_ONLY=1 skips Gemini for all copy)."
     gkey = google_api_key()
@@ -137,6 +177,30 @@ Return concise, compliant copy only (no meta-commentary). UK English."""
             resp = model.generate_content(prompt)
             return (resp.text or "").strip()
         except Exception as exc:  # noqa: BLE001
+            # #region agent log
+            _try_groq = _google_error_try_groq(exc)
+            _auth_like = _gemini_auth_like_failure(exc) or "authentication" in type(exc).__name__.lower()
+            _dbg_llm(
+                "H1-H3",
+                "llm.py:generate_personalised_copy:gemini_except",
+                "gemini_exception",
+                {
+                    "exc_type": type(exc).__name__,
+                    "try_groq_branch": _try_groq,
+                    "auth_like": _auth_like,
+                    "has_groq_env": _groq_raw,
+                },
+            )
+            # #endregion
+            # Auth/quota class errors do not reach Groq fallback when GROQ_API_KEY is unset (_google_error_try_groq is False).
+            # Return actionable copy instead of raising so pending_posts are not replaced by generic placeholders.
+            if _auth_like and not _groq_raw:
+                return (
+                    "[Draft — configure LLM fallback] Gemini authentication failed (check GOOGLE_API_KEY in Google AI / Cloud). "
+                    "Add GROQ_API_KEY to engine/.env (or remove an empty GROQ_API_KEY line there so web/.env.local can supply it). "
+                    "Alternatively set ENGINE_USE_GROQ_ONLY=1 with a valid GROQ_API_KEY to skip Gemini. "
+                    f"({type(exc).__name__})"
+                )
             if _google_error_try_groq(exc):
                 fb = _groq_generate(prompt)
                 if fb:

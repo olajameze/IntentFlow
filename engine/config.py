@@ -6,7 +6,10 @@ import os
 from functools import lru_cache
 from pathlib import Path
 
-from dotenv import load_dotenv
+import json
+import time
+
+from dotenv import dotenv_values, load_dotenv
 
 _ENGINE_ROOT = Path(__file__).resolve().parent
 _REPO_ROOT = _ENGINE_ROOT.parent
@@ -18,6 +21,47 @@ for _p in (
     _REPO_ROOT / "web" / ".env.local",
 ):
     load_dotenv(_p, override=False)
+
+
+def _merge_llm_keys_from_web_env_local() -> None:
+    """Let `web/.env.local` win for LLM keys so a new Gemini key in the dashboard env file is not shadowed by `engine/.env`."""
+    path = _REPO_ROOT / "web" / ".env.local"
+    if not path.is_file():
+        return
+    vals = dotenv_values(path)
+    for key in ("GOOGLE_API_KEY", "GEMINI_TEXT_MODEL", "GROQ_API_KEY"):
+        raw = vals.get(key)
+        if raw is None:
+            continue
+        v = str(raw).strip().strip('"').strip("'")
+        if v:
+            os.environ[key] = v
+
+
+_before = len(os.getenv("GOOGLE_API_KEY", "").strip())
+_merge_llm_keys_from_web_env_local()
+_after = len(os.getenv("GOOGLE_API_KEY", "").strip())
+
+# #region agent log
+try:
+    _dbg = _REPO_ROOT / "debug-7f70f7.log"
+    _payload = {
+        "sessionId": "7f70f7",
+        "hypothesisId": "H5",
+        "location": "config.py:after_web_llm_merge",
+        "message": "google_key_len_web_merge",
+        "data": {
+            "google_key_len_before": _before,
+            "google_key_len_after": _after,
+            "groq_set": bool(os.getenv("GROQ_API_KEY", "").strip()),
+        },
+        "timestamp": int(time.time() * 1000),
+    }
+    with _dbg.open("a", encoding="utf-8") as f:
+        f.write(json.dumps(_payload, ensure_ascii=False) + "\n")
+except OSError:
+    pass
+# #endregion
 
 # CLI/CI: avoid interactive "view execution traces?" unless user sets CREWAI_TRACING_ENABLED=true
 os.environ.setdefault("CREWAI_TRACING_ENABLED", "false")
@@ -105,3 +149,7 @@ def umami_api_key() -> str | None:
 def stripe_encryption_key() -> str | None:
     v = os.getenv("STRIPE_SECRET_ENCRYPTION_KEY", "").strip()
     return v or None
+
+
+google_api_key.cache_clear()
+groq_api_key.cache_clear()
