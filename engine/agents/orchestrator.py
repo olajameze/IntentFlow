@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 import os
+import re
 import sys
 import time
 from datetime import datetime, timedelta, timezone
@@ -103,6 +104,55 @@ def _crew_tool_calls_enabled() -> bool:
     if not google_api_key():
         return False
     return True
+
+
+def _is_groq_token_rate_limit(exc: BaseException) -> bool:
+    err = str(exc).lower()
+    return (
+        "rate_limit_exceeded" in err
+        or "rate limit reached" in err
+        or "tokens per minute" in err
+        or ("tpm" in err and "limit" in err)
+    )
+
+
+def _groq_rate_limit_wait_seconds(exc: BaseException) -> float:
+    """Groq error bodies often include 'Please try again in 12.56s'."""
+    m = re.search(r"try again in ([0-9.]+)\s*s", str(exc), re.I)
+    if m:
+        return min(90.0, float(m.group(1)) + 1.5)
+    raw = os.getenv("ENGINE_GROQ_RATE_LIMIT_PAUSE_SEC", "15").strip()
+    try:
+        return max(5.0, float(raw))
+    except ValueError:
+        return 15.0
+
+
+def _crew_kickoff_with_groq_rate_limit_retries(crew: Crew, *, label: str) -> str:
+    """Groq free/on-demand tiers hit TPM caps across sequential Crew tasks; backoff and retry."""
+    raw = os.getenv("ENGINE_CREW_KICKOFF_RETRIES", "8").strip()
+    try:
+        max_attempts = max(1, int(raw))
+    except ValueError:
+        max_attempts = 8
+    last_exc: BaseException | None = None
+    for attempt in range(max_attempts):
+        try:
+            return str(crew.kickoff())
+        except Exception as exc:  # noqa: BLE001
+            last_exc = exc
+            if _is_groq_token_rate_limit(exc):
+                wait = _groq_rate_limit_wait_seconds(exc)
+                print(
+                    f"Crew ({label}): Groq token rate limit — sleeping {wait:.1f}s "
+                    f"(attempt {attempt + 1}/{max_attempts})."
+                )
+                time.sleep(wait)
+                continue
+            raise
+    if last_exc:
+        raise last_exc
+    raise RuntimeError(f"Crew ({label}): exhausted kickoff retries")
 
 
 def load_active_businesses() -> list[dict[str, Any]]:
@@ -407,7 +457,7 @@ def run_crew_for_business(row: dict[str, Any]) -> str:
                     f"Pre-computed window {window_start}..{window_end}:\n"
                     f"- {snap['umami']}\n"
                     f"- {snap['revenue']}\n"
-                    "Deliver an executive summary and numbered next steps (no tool calls required)."
+                    "Deliver a brief executive summary (max ~200 words) and 5 numbered next steps (no tool calls required)."
                 ),
                 agent=dash,
                 expected_output="Executive summary with numbered actions.",
@@ -421,7 +471,7 @@ def run_crew_for_business(row: dict[str, Any]) -> str:
     result = ""
     try:
         try:
-            result = str(crew.kickoff())
+            result = _crew_kickoff_with_groq_rate_limit_retries(crew, label="primary")
         except Exception as first_exc:  # noqa: BLE001
             if gemini_error_should_use_groq(first_exc):
                 print(
@@ -443,7 +493,7 @@ def run_crew_for_business(row: dict[str, Any]) -> str:
                     verbose=True,
                     chat_llm=groq_llm,
                 )
-                result = str(crew.kickoff())
+                result = _crew_kickoff_with_groq_rate_limit_retries(crew, label="groq-retry")
             else:
                 raise
     finally:
