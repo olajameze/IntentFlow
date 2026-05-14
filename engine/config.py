@@ -6,9 +6,6 @@ import os
 from functools import lru_cache
 from pathlib import Path
 
-import json
-import time
-
 from dotenv import dotenv_values, load_dotenv
 
 _ENGINE_ROOT = Path(__file__).resolve().parent
@@ -23,13 +20,22 @@ for _p in (
     load_dotenv(_p, override=False)
 
 
-def _merge_llm_keys_from_web_env_local() -> None:
-    """Let `web/.env.local` win for LLM keys so a new Gemini key in the dashboard env file is not shadowed by `engine/.env`."""
+def _apply_web_env_local_overrides() -> None:
+    """Re-apply selected keys from `web/.env.local` so they override the first-wins `load_dotenv(..., override=False)` order.
+
+    Without this, values set only in `web/.env.local` (e.g. new `GOOGLE_API_KEY` or `STRIPE_SECRET_ENCRYPTION_KEY`) are
+    ignored when the same variable already exists in `engine/.env`. GitHub Actions has no `web/.env.local` — use repo secrets.
+    """
     path = _REPO_ROOT / "web" / ".env.local"
     if not path.is_file():
         return
     vals = dotenv_values(path)
-    for key in ("GOOGLE_API_KEY", "GEMINI_TEXT_MODEL", "GROQ_API_KEY"):
+    for key in (
+        "GOOGLE_API_KEY",
+        "GEMINI_TEXT_MODEL",
+        "GROQ_API_KEY",
+        "STRIPE_SECRET_ENCRYPTION_KEY",
+    ):
         raw = vals.get(key)
         if raw is None:
             continue
@@ -38,30 +44,7 @@ def _merge_llm_keys_from_web_env_local() -> None:
             os.environ[key] = v
 
 
-_before = len(os.getenv("GOOGLE_API_KEY", "").strip())
-_merge_llm_keys_from_web_env_local()
-_after = len(os.getenv("GOOGLE_API_KEY", "").strip())
-
-# #region agent log
-try:
-    _dbg = _REPO_ROOT / "debug-7f70f7.log"
-    _payload = {
-        "sessionId": "7f70f7",
-        "hypothesisId": "H5",
-        "location": "config.py:after_web_llm_merge",
-        "message": "google_key_len_web_merge",
-        "data": {
-            "google_key_len_before": _before,
-            "google_key_len_after": _after,
-            "groq_set": bool(os.getenv("GROQ_API_KEY", "").strip()),
-        },
-        "timestamp": int(time.time() * 1000),
-    }
-    with _dbg.open("a", encoding="utf-8") as f:
-        f.write(json.dumps(_payload, ensure_ascii=False) + "\n")
-except OSError:
-    pass
-# #endregion
+_apply_web_env_local_overrides()
 
 # CLI/CI: avoid interactive "view execution traces?" unless user sets CREWAI_TRACING_ENABLED=true
 os.environ.setdefault("CREWAI_TRACING_ENABLED", "false")
@@ -153,3 +136,4 @@ def stripe_encryption_key() -> str | None:
 
 google_api_key.cache_clear()
 groq_api_key.cache_clear()
+stripe_encryption_key.cache_clear()

@@ -27,7 +27,7 @@ Privacy-first portfolio operations: **Umami** analytics (no Google Analytics), *
 - `NEXT_PUBLIC_SUPABASE_URL`
 - `NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY` (SSR / middleware session refresh when auth cookies exist)
 - `SUPABASE_SERVICE_ROLE_KEY` (server-only — required for `/api/*` admin routes)
-- `STRIPE_SECRET_ENCRYPTION_KEY` — long random string; must match Python engine + GitHub Actions
+- `STRIPE_SECRET_ENCRYPTION_KEY` — long random string (e.g. `openssl rand -hex 32`); must match Python engine + GitHub Actions; never `NEXT_PUBLIC_*`.
 - `NEXT_PUBLIC_UMAMI_URL` — origin of your Umami deployment (e.g. `https://your-umami.vercel.app`)
 
 ### `engine/.env` (see `engine/.env.example`)
