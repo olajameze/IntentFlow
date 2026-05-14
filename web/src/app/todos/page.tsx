@@ -1,6 +1,21 @@
 import { createClient } from "@/utils/supabase/server";
 
 export default async function TodosPage() {
+  const url = process.env.NEXT_PUBLIC_SUPABASE_URL?.trim();
+  const key = process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY?.trim();
+  if (!url || !key) {
+    return (
+      <div className="p-6">
+        <h1 className="mb-4 text-lg font-semibold">Todos (Supabase SSR demo)</h1>
+        <p className="text-sm text-muted-foreground">
+          Add <code className="rounded bg-muted px-1">NEXT_PUBLIC_SUPABASE_URL</code> and{" "}
+          <code className="rounded bg-muted px-1">NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY</code> (e.g. in{" "}
+          <code className="rounded bg-muted px-1">web/.env.local</code> or CI secrets) to load live rows from Supabase.
+        </p>
+      </div>
+    );
+  }
+
   const supabase = createClient();
 
   const { data: todos } = await supabase.from("todos").select();

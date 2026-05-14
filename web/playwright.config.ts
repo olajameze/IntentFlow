@@ -14,6 +14,17 @@ const webServerCommand = githubActionsCi
   ? "npm run dev:webpack -- --hostname 127.0.0.1 --port 3000"
   : "npm run dev -- --hostname 127.0.0.1 --port 3000";
 
+function pickWebServerEnv(): Record<string, string> {
+  const e: Record<string, string> = {};
+  for (const [k, v] of Object.entries(process.env)) {
+    if (typeof v === "string") e[k] = v;
+  }
+  e.NEXT_PUBLIC_SUPABASE_URL = process.env.NEXT_PUBLIC_SUPABASE_URL ?? "";
+  e.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY = process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY ?? "";
+  e.SUPABASE_SERVICE_ROLE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY ?? "";
+  return e;
+}
+
 /**
  * Tier A+C+D — smoke + shells + APIs (excluding @integration suffix in describe titles).
  * Set PLAYWRIGHT_INTEGRATION=1 to run ONLY tests tagged `@integration` (Tier B seed + DB).
@@ -41,6 +52,7 @@ export default defineConfig({
   webServer: {
     command: webServerCommand,
     url: baseURL,
+    env: pickWebServerEnv(),
     // Local dev often already has `npm run dev` running — reuse it. GitHub Actions always starts fresh.
     reuseExistingServer: !githubActionsCi,
     timeout: githubActionsCi ? 240_000 : 180_000,
