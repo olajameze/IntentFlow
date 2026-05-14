@@ -35,15 +35,15 @@ Privacy-first portfolio operations: **Umami** analytics (no Google Analytics), *
 - `SUPABASE_URL` — same value as `NEXT_PUBLIC_SUPABASE_URL`
 - `SUPABASE_SERVICE_ROLE_KEY`
 - `UMAMI_URL`, `UMAMI_API_TOKEN` — from the Umami UI (`Settings → API`)
-- `GOOGLE_API_KEY` **or** `GROQ_API_KEY` for CrewAI / copy tools
-- **`ENGINE_USE_GROQ_ONLY=1`** (recommended when Gemini free-tier quota shows `limit: 0`; see Troubleshooting below)
+- `GROQ_API_KEY` for CrewAI / copy tools (set this for **Groq-only**: omit `GOOGLE_API_KEY` or leave it empty — the engine skips Gemini automatically)
+- **`ENGINE_USE_GROQ_ONLY=1`** (optional — force Groq even if a `GOOGLE_API_KEY` line exists in `engine/.env`)
 - `STRIPE_SECRET_ENCRYPTION_KEY` — identical to the web app
 
 ## Troubleshooting quick reference
 
 | Symptom | Likely fix |
 | --- | --- |
-| Gemini **429** / `RESOURCE_EXHAUSTED` / `limit: 0` | Set **`GROQ_API_KEY`** + **`ENGINE_USE_GROQ_ONLY=1`** (or **`ENGINE_FORCE_GROQ=1`**) so Crew and pending-post drafts skip Gemini. |
+| Gemini **429** / `RESOURCE_EXHAUSTED` / `limit: 0` / auth errors | Prefer **Groq-only**: set **`GROQ_API_KEY`** and **remove** `GOOGLE_API_KEY` (or use **`ENGINE_USE_GROQ_ONLY=1`** / **`ENGINE_FORCE_GROQ=1`** if a Google key remains in `engine/.env`). |
 | Umami **401** in engine logs | **Umami Cloud** is not the same as self-hosted: use a **Cloud API key** (`UMAMI_API_KEY` or `UMAMI_API_TOKEN`) and header `x-umami-api-key` against `https://api.umami.is/v1` — the engine maps this automatically when `UMAMI_URL` is `https://cloud.umami.is`. Do not use a Bearer JWT from `cloud.umami.is/api/auth/login` for Cloud. Self-hosted: `Bearer` + `UMAMI_URL` pointing at your instance. See [Umami Cloud API key](https://docs.umami.is/docs/cloud/api-key). |
 | Dashboard API **503** with service-role hint | Add **`NEXT_PUBLIC_SUPABASE_URL`** + **`SUPABASE_SERVICE_ROLE_KEY`** to `web/.env.local`; restart **`npm run dev`**. Probe **`GET http://localhost:3000/api/health`**. |
 | Groq **retry still calls Gemini** | Engine must reset **`agent.agent_executor`** and pass **`chat_llm`** on the Groq **`Crew`** (see latest `engine/agents/orchestrator.py`). |

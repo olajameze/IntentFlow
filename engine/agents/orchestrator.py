@@ -84,18 +84,18 @@ def _llm() -> LLM:
     if llm_skip_google() or groq_only_after_gemini_auth_failure():
         if groq_api_key():
             return _groq_llm()
-        raise RuntimeError(
-            "GROQ_API_KEY is missing while Groq-only mode is required "
-            "(ENGINE_USE_GROQ_ONLY / ENGINE_FORCE_GROQ in .env, or Gemini auth failed and Groq fallback is active)."
-        )
+    raise RuntimeError(
+        "GROQ_API_KEY is missing while Groq-only mode is required "
+        "(no GOOGLE_API_KEY and no Groq key, or ENGINE_USE_GROQ_ONLY / ENGINE_FORCE_GROQ without GROQ_API_KEY)."
+    )
     if google_api_key():
         model = os.getenv("CREWAI_GEMINI_MODEL", "gemini/gemini-2.0-flash").strip() or "gemini/gemini-2.0-flash"
         return LLM(model=model, temperature=0.35)
     if groq_api_key():
         return LLM(model="groq/llama-3.1-8b-instant", temperature=0.35)
     raise RuntimeError(
-        "Configure GOOGLE_API_KEY or GROQ_API_KEY for CrewAI "
-        "(set ENGINE_USE_GROQ_ONLY=1 + GROQ_API_KEY when Gemini quota is 0)."
+        "Set GROQ_API_KEY for CrewAI (GOOGLE_API_KEY is unset — Groq-only). "
+        "If you use Gemini instead, set GOOGLE_API_KEY."
     )
 
 

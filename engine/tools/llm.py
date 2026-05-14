@@ -165,7 +165,7 @@ Return concise, compliant copy only (no meta-commentary). UK English."""
     # #endregion
 
     if llm_skip_google() or _groq_only_after_gemini_auth_failure:
-        return _groq_generate(prompt) or "Configure GROQ_API_KEY (ENGINE_USE_GROQ_ONLY=1 skips Gemini for all copy)."
+        return _groq_generate(prompt) or "Set GROQ_API_KEY (Groq-only: no Gemini key or ENGINE_USE_GROQ_ONLY=1)."
     gkey = google_api_key()
     if gkey:
         import google.generativeai as genai
@@ -229,4 +229,4 @@ Return concise, compliant copy only (no meta-commentary). UK English."""
                 "Fix GOOGLE_API_KEY / model access, or add GROQ_API_KEY and set ENGINE_USE_GROQ_ONLY=1 to draft with Groq."
             )
 
-    return _groq_generate(prompt) or "Configure GOOGLE_API_KEY or GROQ_API_KEY for LLM outputs."
+    return _groq_generate(prompt) or "Set GROQ_API_KEY in engine/.env or web/.env.local (no GOOGLE_API_KEY — Groq-only)."

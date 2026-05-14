@@ -97,10 +97,16 @@ def groq_api_key() -> str | None:
 
 
 def llm_skip_google() -> bool:
-    """When true, Crew + marketing copy use Groq only (use if Gemini free tier quota is 0 / 429)."""
+    """When true, Crew + marketing copy skip Gemini and use Groq only.
+
+    True if ENGINE_USE_GROQ_ONLY / ENGINE_FORCE_GROQ is set, or if there is no GOOGLE_API_KEY
+    but GROQ_API_KEY is set (implicit Groq-only after removing Gemini).
+    """
     for key in ("ENGINE_USE_GROQ_ONLY", "ENGINE_FORCE_GROQ"):
         if os.getenv(key, "").strip().lower() in {"1", "true", "yes"}:
             return True
+    if groq_api_key() and not google_api_key():
+        return True
     return False
 
 

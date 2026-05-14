@@ -32,8 +32,8 @@ Minimum for Crew + copy generation without paid Gemini quota:
 
 - `SUPABASE_URL` (same as `NEXT_PUBLIC_SUPABASE_URL`)
 - `SUPABASE_SERVICE_ROLE_KEY`
-- `GROQ_API_KEY`
-- `ENGINE_USE_GROQ_ONLY=1` — avoids Gemini entirely when quota is zero
+- `GROQ_API_KEY` — with **no** `GOOGLE_API_KEY`, the engine uses Groq only (no flag required)
+- `ENGINE_USE_GROQ_ONLY=1` — optional; forces Groq if a stale `GOOGLE_API_KEY` still exists in `engine/.env`
 
 Traffic snapshots from Umami Cloud:
 
