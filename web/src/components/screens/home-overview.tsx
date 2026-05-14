@@ -23,6 +23,7 @@ import {
 } from "@/lib/chart-tooltip";
 import { useChartSvgColors } from "@/lib/use-chart-svg-colors";
 import { umamiPageviewsFromPayload, umamiVisitorsFromPayload } from "@/lib/umami-payload";
+import ConversionMetricsChart, { type ChartSnapshot } from "@/components/analytics/ConversionMetricsChart";
 
 type Business = {
   id: string;
@@ -111,6 +112,14 @@ export function HomeOverview() {
       return { label, traffic: views, revenue: rev };
     });
   }, [snapshots, revenue]);
+
+  const conversionChartData = useMemo((): ChartSnapshot[] => {
+    return sparkData.map((row) => ({
+      period: row.label,
+      revenue: row.revenue,
+      traffic: row.traffic,
+    }));
+  }, [sparkData]);
 
   const runEngine = async () => {
     setDispatching(true);
@@ -281,6 +290,8 @@ export function HomeOverview() {
           );
         })}
       </div>
+
+      <ConversionMetricsChart data={conversionChartData} />
 
       <Card>
         <CardHeader>

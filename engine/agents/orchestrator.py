@@ -20,6 +20,7 @@ from crewai import LLM
 from crewai.tools import tool
 
 from agents.factory import agents_for_type
+from agents.tasks import build_social_generation_task
 from config import google_api_key, groq_api_key, llm_skip_google
 from crypto_util import decrypt_stripe_secret
 from supabase_client import get_supabase
@@ -42,18 +43,19 @@ def _extra_copy_doctrine_for_row(row: dict[str, Any]) -> str | None:
 
 
 def _ctx(row: dict[str, Any]) -> str:
-    return json.dumps(
-        {
-            "name": row.get("name"),
-            "type": row.get("type"),
-            "audience": row.get("target_audience"),
-            "industry": row.get("industry"),
-            "goals": row.get("goals"),
-            "website": row.get("website_url"),
-            "umami_website_id": row.get("umami_website_id"),
-        },
-        ensure_ascii=False,
-    )
+    payload: dict[str, Any] = {
+        "name": row.get("name"),
+        "type": row.get("type"),
+        "audience": row.get("target_audience"),
+        "industry": row.get("industry"),
+        "goals": row.get("goals"),
+        "website": row.get("website_url"),
+        "umami_website_id": row.get("umami_website_id"),
+    }
+    extra = _extra_copy_doctrine_for_row(row)
+    if extra:
+        payload["positioning_addendum"] = extra
+    return json.dumps(payload, ensure_ascii=False)
 
 
 @tool("Scrape Similarweb public summary (advisory)")
@@ -141,6 +143,23 @@ def _pick_specialist_agent(agents: list[Agent]) -> Agent | None:
     return None
 
 
+def _social_copy_agent(agent_by_role: dict[str, Agent]) -> Agent | None:
+    """First rostered agent that can call `generate_personalised_copy_tool` for social-style output."""
+    for key in (
+        "SocialPostingAgent",
+        "AuthorityBuilder",
+        "SaaSOutreach",
+        "ContentGenerator",
+        "LocalResearcher",
+        "CaseStudyGenerator",
+        "Networker",
+    ):
+        hit = agent_by_role.get(key)
+        if hit:
+            return hit
+    return None
+
+
 def _domain_from_url(url: str | None) -> str:
     if not url:
         return ""
@@ -203,15 +222,19 @@ def enqueue_three_pending_posts_direct(row: dict[str, Any]) -> None:
     specs: list[tuple[str, str]] = [
         (
             "linkedin",
-            "LinkedIn authority post: strong hook, one sharp insight for the audience, soft CTA. Under 2200 characters.",
+            "LinkedIn: authoritative operator voice. Strictly follow the mandatory Target Audience → Strategy → "
+            "Content (Headline, The Problem, The Solution, then closing line with domain/URL from JSON). "
+            "Under 2200 characters. No hashtag spam.",
         ),
         (
             "facebook",
-            "Facebook Page post: warm, trustworthy, community tone; actionable tip or reassurance; UK English.",
+            "Facebook Page: warm, trustworthy, community-operator tone. Same mandatory section labels and order as "
+            "global doctrine (problem–solution, domain CTA). UK English.",
         ),
         (
             "linkedin",
-            "LinkedIn post: proof-led angle (metrics or outcome framing), credible and professional; no hashtags spam.",
+            "LinkedIn: second angle — proof- or compliance-led framing that still fits the JSON industry/type. "
+            "Same mandatory structure; credible and professional; under 2200 characters.",
         ),
     ]
     sb = get_supabase()
@@ -326,10 +349,22 @@ def run_crew_for_business(row: dict[str, Any]) -> str:
                     f"Business context: {ctx}\n"
                     "Draft three compliant marketing ideas (text-first, no TikTok/video): bullets with "
                     "channel suggestion + KPI to watch per idea. You may use generate_personalised_copy_tool "
-                    "for polish; approvals queue is filled separately by the engine."
+                    "for polish; each idea should still align with problem→solution positioning. "
+                    "The approvals queue is filled separately by the engine using the same doctrine."
                 ),
                 agent=specialist,
                 expected_output="Three Ideas bullets + channel + KPI to watch.",
+            )
+        )
+    social_agent = _social_copy_agent(agent_by_role)
+    if social_agent:
+        tasks.append(
+            build_social_generation_task(
+                social_agent,
+                business_name=str(row.get("name") or "Brand"),
+                target_audience=str(row.get("target_audience") or ""),
+                website_url=str(row.get("website_url") or ""),
+                business_context_json=ctx,
             )
         )
     if dash:

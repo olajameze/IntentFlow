@@ -20,6 +20,7 @@ import {
 } from "@/lib/chart-tooltip";
 import { useChartSvgColors } from "@/lib/use-chart-svg-colors";
 import { umamiPageviewsFromPayload } from "@/lib/umami-payload";
+import ConversionMetricsChart, { type ChartSnapshot } from "@/components/analytics/ConversionMetricsChart";
 
 export function AnalyticsScreen() {
   const svg = useChartSvgColors();
@@ -68,6 +69,15 @@ export function AnalyticsScreen() {
     });
   }, [snapshots, revenue]);
 
+  const conversionChartData = useMemo((): ChartSnapshot[] | undefined => {
+    if (trend.length < 2) return undefined;
+    return trend.slice(-6).map((row) => ({
+      period: String(row.label),
+      revenue: row.revenue,
+      traffic: row.traffic,
+    }));
+  }, [trend]);
+
   return (
     <div className="space-y-6">
       {snapshots.length === 0 ? (
@@ -83,6 +93,8 @@ export function AnalyticsScreen() {
           </CardContent>
         </Card>
       ) : null}
+
+      <ConversionMetricsChart data={conversionChartData} />
 
       <Card>
         <CardHeader>
