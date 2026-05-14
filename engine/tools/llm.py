@@ -170,10 +170,10 @@ Return concise, compliant copy only (no meta-commentary). UK English."""
     if gkey:
         import google.generativeai as genai
 
-        os.environ["GOOGLE_API_KEY"] = gkey
-        genai.configure(api_key=gkey)
-        model = genai.GenerativeModel(_gemini_model_name())
         try:
+            os.environ["GOOGLE_API_KEY"] = gkey
+            genai.configure(api_key=gkey)
+            model = genai.GenerativeModel(_gemini_model_name())
             resp = model.generate_content(prompt)
             return (resp.text or "").strip()
         except Exception as exc:  # noqa: BLE001
@@ -202,7 +202,14 @@ Return concise, compliant copy only (no meta-commentary). UK English."""
                     f"({type(exc).__name__})"
                 )
             if _google_error_try_groq(exc):
-                fb = _groq_generate(prompt)
+                try:
+                    fb = _groq_generate(prompt)
+                except Exception as groq_exc:  # noqa: BLE001
+                    return (
+                        "[Draft — LLM fallback failed] Groq raised an error after Gemini failed. "
+                        "Check GROQ_API_KEY and network, or set ENGINE_USE_GROQ_ONLY=1 with a valid Groq key. "
+                        f"(Gemini: {type(exc).__name__}; Groq: {type(groq_exc).__name__})"
+                    )
                 if fb:
                     if _gemini_auth_like_failure(exc):
                         _groq_only_after_gemini_auth_failure = True
@@ -217,6 +224,9 @@ Return concise, compliant copy only (no meta-commentary). UK English."""
                     "Set a valid GROQ_API_KEY, or ENGINE_USE_GROQ_ONLY=1 / ENGINE_FORCE_GROQ=1 to skip Gemini."
                 )
                 return f"[Draft — LLM fallback failed] {hint} ({type(exc).__name__})"
-            raise
+            return (
+                f"[Draft — LLM error] Gemini failed ({type(exc).__name__}). "
+                "Fix GOOGLE_API_KEY / model access, or add GROQ_API_KEY and set ENGINE_USE_GROQ_ONLY=1 to draft with Groq."
+            )
 
     return _groq_generate(prompt) or "Configure GOOGLE_API_KEY or GROQ_API_KEY for LLM outputs."
