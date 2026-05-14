@@ -1,7 +1,12 @@
 {
   "name": "intentflow",
   "private": true,
-  "description": "Root scripts forward to web/ — Next.js app lives in web/",
+  "description": "Root scripts forward to web/ — Next.js app lives in web/. Root devDependencies mirror web next/react for Vercel when Root Directory is the repo root.",
+  "devDependencies": {
+    "next": "14.2.35",
+    "react": "^18",
+    "react-dom": "^18"
+  },
   "scripts": {
     "dev": "npm run dev --prefix web",
     "build": "npm run build --prefix web",
