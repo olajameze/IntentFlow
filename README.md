@@ -93,7 +93,7 @@ Follow Vercel’s [Using Monorepos](https://vercel.com/docs/monorepos) guidance:
 4. **Build & Development:** leave **Install Command** and **Build Command** empty unless you have a documented reason to override them (defaults run **`npm install`** / **`next build`** inside **`web/`**).
 5. Add your **`web/.env`** equivalents under **Environment Variables** (production / preview), e.g. **`NEXT_PUBLIC_SUPABASE_URL`**, **`SUPABASE_SERVICE_ROLE_KEY`**, etc. (see **`web/.env.example`**).
 
-The repository root **`package.json`** uses **`workspaces`: `["web"]`** so local **`npm install`** at the monorepo root matches common npm monorepo layouts ([monorepo builds](https://vercel.com/docs/monorepos)).
+The repository root **`package.json`** only forwards scripts to **`web/`** (no npm workspaces — **`web/package-lock.json`** is the lockfile used by CI and by Vercel when Root Directory is **`web`**).
 
 **Safety net:** if the Vercel **Root Directory** is ever left at the **Git repository root**, root **`.vercelignore`** excludes **`engine/`** so **`engine/requirements.txt`** is not uploaded and Vercel is less likely to treat the deployment as a Python app. The correct fix is still **Root Directory = `web`**.
 
