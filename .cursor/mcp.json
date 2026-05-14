@@ -1,0 +1,9 @@
+{
+  "mcpServers": {
+    "BugExpert": {
+      "type": "stdio",
+      "command": "python",
+      "args": ["${workspaceFolder}/tools/mcp_bug_expert.py"]
+    }
+  }
+}

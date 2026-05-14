@@ -2,6 +2,11 @@
 
 Run: python tools/mcp_bug_expert.py
 Requires: pip install mcp
+
+Cursor: use project `.cursor/mcp.json` (resolves `${workspaceFolder}/tools/mcp_bug_expert.py`).
+If you configured BugExpert in `~/.cursor/mcp.json` with a bare path like `tools/mcp_bug_expert.py`,
+Python resolves it from your home directory and fails — remove that entry or fix args to the full
+repo path or `${workspaceFolder}/tools/mcp_bug_expert.py` while this folder is the open workspace.
 """
 
 from __future__ import annotations
