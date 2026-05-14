@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { resolveNextPublicSupabaseKey } from "@/lib/resolve-next-public-supabase-key";
 import { getSupabaseAdmin } from "@/lib/supabase-admin";
 
 /**
@@ -9,7 +10,7 @@ import { getSupabaseAdmin } from "@/lib/supabase-admin";
 export async function GET() {
   const url = Boolean(process.env.NEXT_PUBLIC_SUPABASE_URL?.trim());
   const srk = Boolean(process.env.SUPABASE_SERVICE_ROLE_KEY?.trim());
-  const publishable = Boolean(process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY?.trim());
+  const publishable = Boolean(resolveNextPublicSupabaseKey());
 
   const checks = {
     nextPublicSupabaseUrl: url,

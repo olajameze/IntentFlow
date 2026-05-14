@@ -1,5 +1,6 @@
 import { createServerClient } from "@supabase/ssr";
 import { type NextRequest, NextResponse } from "next/server";
+import { resolveNextPublicSupabaseKey } from "@/lib/resolve-next-public-supabase-key";
 
 /** Supabase SSR stores sessions in `sb-<ref>-auth-token` (optionally chunked as `.0`, `.1`, …). */
 function hasSupabaseAuthCookie(request: NextRequest): boolean {
@@ -15,7 +16,7 @@ function hasSupabaseAuthCookie(request: NextRequest): boolean {
  */
 export async function updateSession(request: NextRequest) {
   const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
-  const supabaseKey = process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY;
+  const supabaseKey = resolveNextPublicSupabaseKey();
 
   if (!supabaseUrl || !supabaseKey) {
     return NextResponse.next({

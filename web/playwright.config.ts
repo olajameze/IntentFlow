@@ -3,6 +3,8 @@ import path from "node:path";
 import { config as loadEnv } from "dotenv";
 import { defineConfig, devices } from "@playwright/test";
 
+import { resolveNextPublicSupabaseKey } from "./src/lib/resolve-next-public-supabase-key";
+
 // Load local secrets for @integration suites (NEXT_PUBLIC_* + SERVICE_ROLE_KEY for seed helpers).
 loadEnv({ path: path.resolve(__dirname, ".env.local") });
 
@@ -19,8 +21,10 @@ function pickWebServerEnv(): Record<string, string> {
   for (const [k, v] of Object.entries(process.env)) {
     if (typeof v === "string") e[k] = v;
   }
+  const resolvedKey = resolveNextPublicSupabaseKey() ?? "";
   e.NEXT_PUBLIC_SUPABASE_URL = process.env.NEXT_PUBLIC_SUPABASE_URL ?? "";
-  e.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY = process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY ?? "";
+  e.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY = resolvedKey;
+  e.NEXT_PUBLIC_SUPABASE_ANON_KEY = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY?.trim() || resolvedKey;
   e.SUPABASE_SERVICE_ROLE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY ?? "";
   return e;
 }
