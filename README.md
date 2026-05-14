@@ -85,7 +85,7 @@ From the **repo root** (without `cd engine`), install engine dependencies with: 
 ### Vercel (this repo)
 
 - **Recommended:** set **Root Directory** to **`web`** so Vercel detects Next.js and runs `npm install` / `next build` there (same as local `cd web`).
-- **Alternative:** leave the connected root at the monorepo root; root **`vercel.json`** then installs and builds **`web/`** explicitly. Do not add a root **`requirements.txt`** — Vercel would treat the repo as a **Python** project (`engine/` is for GitHub Actions / local only). The root **`package.json`** lists **`next` / `react` / `react-dom`** as **`devDependencies`** (same versions as `web/`) so Vercel can resolve the Next.js runtime version without changing the Root Directory.
+- **Alternative:** leave the connected root at the monorepo root; root **`vercel.json`** then installs and builds **`web/`** explicitly. Do not add a root **`requirements.txt`** — Vercel would treat the repo as a **Python** project (`engine/` is for GitHub Actions / local only). The root **`package.json`** lists **`next` / `react` / `react-dom`** in **`dependencies`** (same versions as `web/`) so Vercel’s Next.js preset can detect the runtime version; **`vercel.json`** runs **`npm install`** at the root, then **`npm install --prefix web`**.
 
 **One-time:** install dependencies in `web/` (pick one):
 
