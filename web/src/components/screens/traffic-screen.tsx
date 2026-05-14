@@ -1,11 +1,10 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import { CloudSync, Globe, LineChart as LineIcon, Loader2 } from "lucide-react";
+import { ChevronDown, CloudSync, Globe, LineChart as LineIcon, Loader2 } from "lucide-react";
 import { toast } from "sonner";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
 import { Button } from "@/components/ui/button";
 import {
@@ -26,6 +25,7 @@ import {
 } from "@/lib/chart-tooltip";
 import { useChartSvgColors } from "@/lib/use-chart-svg-colors";
 import { umamiPageviewsFromPayload, umamiVisitorsFromPayload } from "@/lib/umami-payload";
+import { cn } from "@/lib/utils";
 
 function githubTrafficWorkflowUrl(): string | null {
   const slug = process.env.NEXT_PUBLIC_GITHUB_REPO?.trim();
@@ -96,8 +96,18 @@ export function TrafficScreen() {
 
   const filteredSnaps = useMemo(() => {
     if (selected === "all") return snapshots;
-    return snapshots.filter((snap) => String(snap.business_id) === selected);
+    const sel = selected.toLowerCase();
+    return snapshots.filter((snap) => {
+      const bid = snap.business_id ?? (snap as { businessId?: unknown }).businessId;
+      return String(bid ?? "").toLowerCase() === sel;
+    });
   }, [snapshots, selected]);
+
+  const portfolioLabel = useMemo(() => {
+    if (selected === "all") return "All businesses";
+    const b = businesses.find((row) => String(row.id).toLowerCase() === selected.toLowerCase());
+    return b?.name ? String(b.name) : "Selected business";
+  }, [businesses, selected]);
 
   const totals = useMemo(() => {
     let pageviews = 0;
@@ -119,7 +129,9 @@ export function TrafficScreen() {
   }, [filteredSnaps]);
 
   const umamiBase = process.env.NEXT_PUBLIC_UMAMI_URL ?? "https://your-umami.vercel.app";
-  const activeBusiness = businesses.find((b) => String(b.id) === selected);
+  const activeBusiness = businesses.find(
+    (b) => String(b.id).toLowerCase() === selected.toLowerCase(),
+  );
   const websiteId =
     selected === "all"
       ? businesses[0]?.umami_website_id
@@ -137,20 +149,40 @@ export function TrafficScreen() {
       <TabsContent value="overview" className="space-y-4">
         <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
           <div>
-            <p className="text-sm text-muted-foreground">Filter portfolio</p>
-            <Select value={selected} onValueChange={(v) => setSelected(typeof v === "string" ? v : "all")}>
-              <SelectTrigger className="mt-1 w-full md:w-72">
-                <SelectValue placeholder="Choose business" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="all">All businesses</SelectItem>
-                {businesses.map((b) => (
-                  <SelectItem key={String(b.id)} value={String(b.id)}>
-                    {String(b.name)}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
+            <label htmlFor="traffic-portfolio-filter" className="text-sm text-muted-foreground">
+              Filter portfolio
+            </label>
+            <div className="relative mt-1 w-full md:w-72">
+              <select
+                id="traffic-portfolio-filter"
+                className={cn(
+                  "h-10 w-full appearance-none rounded-lg border border-input bg-background py-2 pr-10 pl-3 text-sm shadow-sm",
+                  "outline-none focus-visible:border-ring focus-visible:ring-2 focus-visible:ring-ring/40",
+                  "dark:bg-input/30",
+                )}
+                value={selected}
+                onChange={(e) => setSelected(e.target.value)}
+                aria-label="Filter portfolio by business"
+              >
+                <option value="all">All businesses</option>
+                {businesses.map((b) => {
+                  const id = String(b.id ?? "");
+                  if (!id) return null;
+                  return (
+                    <option key={id} value={id}>
+                      {String(b.name ?? "Business")}
+                    </option>
+                  );
+                })}
+              </select>
+              <ChevronDown
+                className="pointer-events-none absolute top-1/2 right-3 size-4 -translate-y-1/2 text-muted-foreground"
+                aria-hidden
+              />
+            </div>
+            <p className="mt-1 text-xs text-muted-foreground">
+              Charts and totals: <span className="font-medium text-foreground">{portfolioLabel}</span>
+            </p>
           </div>
           <div className="flex flex-col items-stretch gap-2 sm:flex-row sm:items-center sm:gap-3">
             <span className="flex items-center gap-1 text-sm text-muted-foreground">
@@ -176,18 +208,21 @@ export function TrafficScreen() {
           <Card>
             <CardHeader>
               <CardTitle className="text-base">Pageviews (snapshots)</CardTitle>
+              <p className="text-xs text-muted-foreground">{portfolioLabel}</p>
             </CardHeader>
             <CardContent className="text-3xl font-semibold">{totals.pageviews}</CardContent>
           </Card>
           <Card>
             <CardHeader>
               <CardTitle className="text-base">Visitors (aggregated)</CardTitle>
+              <p className="text-xs text-muted-foreground">{portfolioLabel}</p>
             </CardHeader>
             <CardContent className="text-3xl font-semibold">{totals.visitors || "—"}</CardContent>
           </Card>
           <Card>
             <CardHeader>
               <CardTitle className="text-base">Data source</CardTitle>
+              <p className="text-xs text-muted-foreground">{portfolioLabel}</p>
             </CardHeader>
             <CardContent className="text-sm text-muted-foreground">
               Pulled via `TrafficMonitor` → Umami API → `analytics_snapshots`.
@@ -214,10 +249,13 @@ export function TrafficScreen() {
 
         <Card>
           <CardHeader className="flex flex-row items-center justify-between">
-            <CardTitle className="flex items-center gap-2 text-base">
-              <LineIcon className="h-4 w-4" />
-              Snapshot pulse
-            </CardTitle>
+            <div>
+              <CardTitle className="flex items-center gap-2 text-base">
+                <LineIcon className="h-4 w-4" />
+                Snapshot pulse
+              </CardTitle>
+              <p className="mt-1 text-xs text-muted-foreground">{portfolioLabel}</p>
+            </div>
             <span className="text-xs text-muted-foreground">Last payloads</span>
           </CardHeader>
           <CardContent className="min-w-0">
@@ -302,6 +340,7 @@ export function TrafficScreen() {
         <Card>
           <CardHeader>
             <CardTitle className="text-base">Device mix</CardTitle>
+            <p className="text-xs text-muted-foreground">{portfolioLabel}</p>
           </CardHeader>
           <CardContent className="min-w-0">
             <ResponsiveContainer width="100%" height={224}>
