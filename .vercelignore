@@ -1,0 +1,6 @@
+# CrewAI engine: not deployed on Vercel (runs on GitHub Actions / locally).
+# This folder contains requirements.txt and main.py. If the Vercel "Root Directory"
+# is left at the Git repository root, Vercel may otherwise select the Python runtime
+# (see https://vercel.com/docs/functions/runtimes/python#python-entrypoints ).
+# Prefer Root Directory = "web" per https://vercel.com/docs/monorepos
+engine/
