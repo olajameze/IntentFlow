@@ -94,6 +94,17 @@ def _groq_llm() -> LLM:
     return LLM(model="groq/llama-3.1-8b-instant", temperature=0.35)
 
 
+def _crew_tool_calls_enabled() -> bool:
+    """Gemini tolerates Crew tool payloads; Groq/LiteLLM validates JSON strictly (tool_use_failed). Tools only on Gemini."""
+    if groq_only_after_gemini_auth_failure():
+        return False
+    if llm_skip_google():
+        return False
+    if not google_api_key():
+        return False
+    return True
+
+
 def load_active_businesses() -> list[dict[str, Any]]:
     sb = get_supabase()
     res = sb.table("businesses").select("*").eq("active", True).execute()
@@ -276,10 +287,12 @@ def run_crew_for_business(row: dict[str, Any]) -> str:
     domain = _domain_from_url(row.get("website_url"))
 
     llm = _llm()
-    copy_tools = [generate_personalised_copy_tool]
+    tools_ok = _crew_tool_calls_enabled()
+    copy_tools = [generate_personalised_copy_tool] if tools_ok else []
+    traffic_tools = [scrape_similarweb_traffic_tool] if tools_ok else []
 
     tools_map = {
-        "TrafficMonitor": [scrape_similarweb_traffic_tool],
+        "TrafficMonitor": traffic_tools,
         # No tools on RevenueTracker: Groq tool_use often fails on JSON-heavy args (see tool_use_failed). Revenue is
         # already snapshotted in-process before Crew runs; CSV merges belong in offline/batch jobs, not this LLM step.
         "RevenueTracker": [],
@@ -324,8 +337,13 @@ def run_crew_for_business(row: dict[str, Any]) -> str:
                     f"Time window: {window_start} to {window_end}.\n"
                     f"**Umami (already persisted server-side):** {snap['umami']}\n"
                     f"Website domain for Similarweb (if you use it): {domain or 'unknown'}.\n"
-                    "Optionally call scrape_similarweb_traffic_tool(domain) once for a public benchmark. "
-                    "Give a concise traffic narrative. Do not attempt Umami or database persistence tools."
+                    + (
+                        "Optionally call scrape_similarweb_traffic_tool(domain) once for a public benchmark. "
+                        if tools_ok
+                        else "Do **not** call any tools. You may reference public traffic patterns only from general "
+                        "knowledge — do not invent metrics. "
+                    )
+                    + "Give a concise traffic narrative. Do not attempt Umami or database persistence tools."
                 ),
                 agent=traffic,
                 expected_output="Brief traffic summary; note if Similarweb was used.",
@@ -345,15 +363,26 @@ def run_crew_for_business(row: dict[str, Any]) -> str:
             )
         )
     if specialist and specialist is not traffic:
+        spec_lines = [
+            f"Business context: {ctx}\n",
+            "Draft three compliant marketing ideas (text-first, no TikTok/video): bullets with "
+            "channel suggestion + KPI to watch per idea. ",
+        ]
+        if tools_ok:
+            spec_lines.append(
+                "You may use generate_personalised_copy_tool for polish; each idea should still align with "
+                "problem→solution positioning. "
+            )
+        else:
+            spec_lines.append(
+                "Write in your own words (no tools). Each idea should align with problem→solution positioning. "
+            )
+        spec_lines.append(
+            "The approvals queue is filled separately by the engine using the same doctrine."
+        )
         tasks.append(
             Task(
-                description=(
-                    f"Business context: {ctx}\n"
-                    "Draft three compliant marketing ideas (text-first, no TikTok/video): bullets with "
-                    "channel suggestion + KPI to watch per idea. You may use generate_personalised_copy_tool "
-                    "for polish; each idea should still align with problem→solution positioning. "
-                    "The approvals queue is filled separately by the engine using the same doctrine."
-                ),
+                description="".join(spec_lines),
                 agent=specialist,
                 expected_output="Three Ideas bullets + channel + KPI to watch.",
             )
@@ -367,6 +396,7 @@ def run_crew_for_business(row: dict[str, Any]) -> str:
                 target_audience=str(row.get("target_audience") or ""),
                 website_url=str(row.get("website_url") or ""),
                 business_context_json=ctx,
+                use_copy_tool=tools_ok,
             )
         )
     if dash:
@@ -405,6 +435,7 @@ def run_crew_for_business(row: dict[str, Any]) -> str:
                     ag.llm = groq_llm
                     ag.function_calling_llm = groq_llm
                     ag.agent_executor = None
+                    ag.tools = []
                 crew = Crew(
                     agents=agents,
                     tasks=tasks,

@@ -30,6 +30,7 @@ web/blob-report/
 # Large vendor PDFs (keep locally — see docs/references/README.md)
 docs/references/*.pdf
 
-# Tools / local
+# Tools / local (includes engine/tools/llm.py debug telemetry)
 .idea/
 .vscode/
+*.log
