@@ -50,6 +50,7 @@ Privacy-first portfolio operations: **Umami** analytics (no Google Analytics), *
 | **`/api/publish-approved`** rejects Facebook publish | Provide **`FACEBOOK_PAGE_ID`** + **`FACEBOOK_PAGE_ACCESS_TOKEN`**, or numbered **`FACEBOOK_PAGE_ID_N`** credentials per business. |
 | **Traffic / analytics show 0** | Rows come from **`analytics_snapshots`** (engine or GitHub Actions). Run **`python main.py traffic`** with valid **`UMAMI_*`** + **`umami_website_id`**. UI expects Umami **`pageviews.value`** shape (fixed in `web/src/lib/umami-payload.ts`). |
 | **PWA does not install in dev** | PWAs are **off in development** by default. Use **`npm run build && npm start`**, Vercel preview, or set **`NEXT_PUBLIC_ENABLE_PWA_DEV=1`** in `web/.env.local`. |
+| **Vercel: “No python entrypoint” / Python build** | The dashboard app is **Next.js in `web/`**, not Python. Prefer **Project → Settings → General → Root Directory = `web`** (then you can rely on default install/build). If the project root stays the repo root, root **`vercel.json`** runs **`npm install` / `npm run build` in `web/`** and there must be **no** root `requirements.txt` (Python lives under **`engine/`** only). |
 
 **Cold start checklist:** [`docs/runbook-local.md`](docs/runbook-local.md).
 
@@ -77,7 +78,14 @@ python main.py revenue     # Stripe snapshots only
 
 If your shell is already in **`web/`**, do not run `cd engine` (that folder is a sibling). Either `cd ../engine` or use **`npm run engine:traffic`** / **`engine:full`** / **`engine:revenue`** from **`web/`** or the **repo root** (see `web/package.json` and root `package.json`).
 
+From the **repo root** (without `cd engine`), install engine dependencies with: **`pip install -r engine/requirements.txt`**.
+
 ## 5. Web dashboard
+
+### Vercel (this repo)
+
+- **Recommended:** set **Root Directory** to **`web`** so Vercel detects Next.js and runs `npm install` / `next build` there (same as local `cd web`).
+- **Alternative:** leave the connected root at the monorepo root; root **`vercel.json`** then installs and builds **`web/`** explicitly. Do not add a root **`requirements.txt`** — Vercel would treat the repo as a **Python** project (`engine/` is for GitHub Actions / local only).
 
 **One-time:** install dependencies in `web/` (pick one):
 
