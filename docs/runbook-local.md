@@ -22,11 +22,11 @@ Optional but recommended when using encrypted Stripe secrets in Settings:
 
 - `STRIPE_SECRET_ENCRYPTION_KEY` — **must be identical** in `web/.env.local`, `engine/.env`, and GitHub Actions secret `STRIPE_SECRET_ENCRYPTION_KEY` when workflows decrypt Stripe. Generate once, e.g. `openssl rand -hex 32` (64 hex chars); never commit it; do not use `NEXT_PUBLIC_*`. If you rotate this key, re-save each business Stripe key in Settings so ciphertext is re-encrypted.
 
-The Python engine **re-reads** `GOOGLE_API_KEY`, `GEMINI_TEXT_MODEL`, `GROQ_API_KEY`, and `STRIPE_SECRET_ENCRYPTION_KEY` from `web/.env.local` after loading `engine/.env`, so those four can be maintained only in the web env file for local dev.
+The Python engine **re-reads** `GOOGLE_API_KEY`, `GEMINI_TEXT_MODEL`, `GROQ_API_KEY`, `ENGINE_USE_GROQ_ONLY`, `ENGINE_FORCE_GROQ`, and `STRIPE_SECRET_ENCRYPTION_KEY` from `web/.env.local` after loading `engine/.env`, so those can be maintained only in the web env file for local dev.
 
 ### `engine/.env`
 
-Copy from `engine/.env.example`. The engine loads `engine/.env`, then repo `.env`, then `web/.env.local` with `override=False` (first file wins per variable), then **re-applies** `GOOGLE_API_KEY`, `GEMINI_TEXT_MODEL`, `GROQ_API_KEY`, and `STRIPE_SECRET_ENCRYPTION_KEY` from `web/.env.local` when present so dashboard env stays authoritative for those keys.
+Copy from `engine/.env.example`. The engine loads `engine/.env`, then repo `.env`, then `web/.env.local` with `override=False` (first file wins per variable), then **re-applies** `GOOGLE_API_KEY`, `GEMINI_TEXT_MODEL`, `GROQ_API_KEY`, `ENGINE_USE_GROQ_ONLY`, `ENGINE_FORCE_GROQ`, and `STRIPE_SECRET_ENCRYPTION_KEY` from `web/.env.local` when present so dashboard env stays authoritative for those keys.
 
 Minimum for Crew + copy generation without paid Gemini quota:
 

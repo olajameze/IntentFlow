@@ -23,7 +23,7 @@ for _p in (
 def _apply_web_env_local_overrides() -> None:
     """Re-apply selected keys from `web/.env.local` so they override the first-wins `load_dotenv(..., override=False)` order.
 
-    Without this, values set only in `web/.env.local` (e.g. new `GOOGLE_API_KEY` or `STRIPE_SECRET_ENCRYPTION_KEY`) are
+    Without this, values set only in `web/.env.local` (e.g. new `GOOGLE_API_KEY`, `ENGINE_USE_GROQ_ONLY`, or `STRIPE_SECRET_ENCRYPTION_KEY`) are
     ignored when the same variable already exists in `engine/.env`. GitHub Actions has no `web/.env.local` — use repo secrets.
     """
     path = _REPO_ROOT / "web" / ".env.local"
@@ -34,6 +34,8 @@ def _apply_web_env_local_overrides() -> None:
         "GOOGLE_API_KEY",
         "GEMINI_TEXT_MODEL",
         "GROQ_API_KEY",
+        "ENGINE_USE_GROQ_ONLY",
+        "ENGINE_FORCE_GROQ",
         "STRIPE_SECRET_ENCRYPTION_KEY",
     ):
         raw = vals.get(key)
