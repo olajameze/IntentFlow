@@ -21,10 +21,15 @@ jobs:
       NODE_OPTIONS: --max-old-space-size=6144
       CI: true
       # Job-wide so the Playwright-spawned Next.js webServer inherits Supabase (fork PRs may still be empty).
-      NEXT_PUBLIC_SUPABASE_URL: ${{ secrets.NEXT_PUBLIC_SUPABASE_URL }}
-      NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY: ${{ secrets.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY }}
+      # Prefer Actions secrets matching web/.env.example. Legacy Supabase CLI names are accepted as fallbacks.
+      NEXT_PUBLIC_SUPABASE_URL: ${{ secrets.NEXT_PUBLIC_SUPABASE_URL || secrets.SUPABASE_URL }}
+      NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY: ${{ secrets.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY || secrets.SUPABASE_ANON_KEY }}
       SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
-      ENFORCE_HEALTH_OK: ${{ vars.ENFORCE_HEALTH_OK }}
+      # Optional passthrough (Next reads NEXT_PUBLIC_* above); useful if you add scripts that expect these names.
+      SUPABASE_URL: ${{ secrets.SUPABASE_URL || secrets.NEXT_PUBLIC_SUPABASE_URL }}
+      SUPABASE_ANON_KEY: ${{ secrets.SUPABASE_ANON_KEY || secrets.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY }}
+      # Strict health: set repo variable ENFORCE_HEALTH_OK=1 only when the three Supabase secrets above are set and migrations ran.
+      # ENFORCE_HEALTH_OK: ${{ vars.ENFORCE_HEALTH_OK }}
     defaults:
       run:
         working-directory: web

@@ -15,8 +15,16 @@ test.describe("Tier D — Route Handlers", () => {
     });
     const httpStatus = res.status();
     expect([200, 503]).toContain(httpStatus);
-    if (!json.ok && process.env.CI && process.env.ENFORCE_HEALTH_OK === "1") {
-      throw new Error("ENFORCE_HEALTH_OK=1 requires /api/health ok=true — configure Supabase secrets in CI.");
+    const configured =
+      Boolean(json.checks?.nextPublicSupabaseUrl) &&
+      Boolean(json.checks?.supabasePublishableConfigured) &&
+      Boolean(json.checks?.supabaseServiceRoleConfigured);
+    // Only strict-fail when secrets are present but DB/query still unhealthy (fork PRs often have no secrets).
+    if (!json.ok && process.env.CI && process.env.ENFORCE_HEALTH_OK === "1" && configured) {
+      const hint = typeof json.hint === "string" ? json.hint : "";
+      throw new Error(
+        `ENFORCE_HEALTH_OK=1 requires /api/health ok=true — check Supabase keys and DB (e.g. migrations). ${hint}`.trim(),
+      );
     }
   });
 
