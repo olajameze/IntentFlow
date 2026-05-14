@@ -27,8 +27,8 @@ def agents_for_type(btype: str) -> list[AgentProfile]:
         AgentProfile(
             "RevenueTracker",
             "RevenueTracker",
-            "Pull Stripe balances, ledger CSV merges, and persist structured revenue snapshots.",
-            "You specialise in Stripe ledgers, fee-aware net revenue, and operational revenue hygiene.",
+            "Interpret persisted revenue snapshots and recommend financial hygiene (Crew step is narrative-only).",
+            "You specialise in Stripe-led revenue signals, fee-aware net revenue, and operator-facing hygiene advice.",
         ),
         AgentProfile(
             "DashboardAggregator",

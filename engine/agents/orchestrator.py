@@ -24,7 +24,6 @@ from agents.tasks import build_social_generation_task
 from config import google_api_key, groq_api_key, llm_skip_google
 from crypto_util import decrypt_stripe_secret
 from supabase_client import get_supabase
-from tools.csv_merge import merge_csv_uploads
 from tools.copy_doctrine import PESTTRACE_B2B_FOCUS
 from tools.llm import generate_personalised_copy, gemini_error_should_use_groq, groq_only_after_gemini_auth_failure
 from tools.persistence import save_revenue_snapshot, save_traffic_snapshot
@@ -63,14 +62,6 @@ def scrape_similarweb_traffic_tool(domain: str) -> str:
     """Scrape Similarweb public traffic summary for a domain; returns JSON."""
     data = scrape_similarweb_traffic(domain)
     return json.dumps(data, ensure_ascii=False)
-
-
-@tool("Merge CSV processor exports (paths_json maps processor->path)")
-def merge_csv_uploads_tool(paths_json: str) -> str:
-    """Merge CSV uploads from a JSON map of processor name to file path; returns JSON rows."""
-    paths = json.loads(paths_json)
-    rows = merge_csv_uploads(paths)
-    return json.dumps(rows[:200], ensure_ascii=False)
 
 
 @tool("Generate personalised copy")
@@ -289,7 +280,9 @@ def run_crew_for_business(row: dict[str, Any]) -> str:
 
     tools_map = {
         "TrafficMonitor": [scrape_similarweb_traffic_tool],
-        "RevenueTracker": [merge_csv_uploads_tool],
+        # No tools on RevenueTracker: Groq tool_use often fails on JSON-heavy args (see tool_use_failed). Revenue is
+        # already snapshotted in-process before Crew runs; CSV merges belong in offline/batch jobs, not this LLM step.
+        "RevenueTracker": [],
         "LocalResearcher": copy_tools,
         "SaaSOutreach": copy_tools,
         "AuthorityBuilder": copy_tools,
@@ -344,8 +337,8 @@ def run_crew_for_business(row: dict[str, Any]) -> str:
                 description=(
                     f"Business context: {ctx}\n"
                     f"**Revenue (already persisted server-side):** {snap['revenue']}\n"
-                    "Interpret results and recommend hygiene. Use merge_csv_uploads_tool only if "
-                    "merging uploaded CSV revenue is explicitly relevant; otherwise skip."
+                    "Interpret these results in plain language and recommend hygiene (e.g. connect Stripe in Settings, "
+                    "watch fee drift). Do **not** call any tools — narrative only."
                 ),
                 agent=revenue,
                 expected_output="Revenue interpretation and next actions.",
