@@ -37,7 +37,7 @@ export async function PATCH(req: Request) {
     if (content !== undefined) updates.content = content;
     if (status !== undefined) updates.status = status;
 
-    let q = sb.from("pending_posts").update(updates).eq("id", id).eq("status", "pending");
+    const q = sb.from("pending_posts").update(updates).eq("id", id).eq("status", "pending");
     const { data, error } = await q.select("*").maybeSingle();
     if (error) return supabaseErrorResponse(error);
     if (!data) {

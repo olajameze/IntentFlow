@@ -20,6 +20,13 @@ import {
   XAxis,
   YAxis,
 } from "recharts";
+import {
+  chartAxisTick,
+  chartGridStroke,
+  chartTooltipContentStyle,
+  chartTooltipItemStyle,
+  chartTooltipLabelStyle,
+} from "@/lib/chart-tooltip";
 
 export function RevenueScreen() {
   const [businesses, setBusinesses] = useState<Record<string, unknown>[]>([]);
@@ -142,18 +149,35 @@ export function RevenueScreen() {
             </CardHeader>
             <CardContent className="min-w-0">
               <ResponsiveContainer width="100%" height={256}>
-                <AreaChart data={chartData}>
+                <AreaChart data={chartData} margin={{ top: 8, right: 8, left: -8, bottom: 0 }}>
                   <defs>
                     <linearGradient id="colorRev" x1="0" y1="0" x2="0" y2="1">
-                      <stop offset="5%" stopColor="hsl(var(--primary))" stopOpacity={0.8} />
-                      <stop offset="95%" stopColor="hsl(var(--primary))" stopOpacity={0} />
+                      <stop offset="5%" stopColor="var(--chart-1)" stopOpacity={0.45} />
+                      <stop offset="95%" stopColor="var(--chart-1)" stopOpacity={0.02} />
                     </linearGradient>
                   </defs>
-                  <CartesianGrid strokeDasharray="3 3" opacity={0.2} />
-                  <XAxis dataKey="label" />
-                  <YAxis />
-                  <Tooltip />
-                  <Area type="monotone" dataKey="value" stroke="hsl(var(--primary))" fillOpacity={1} fill="url(#colorRev)" />
+                  <CartesianGrid stroke={chartGridStroke} strokeDasharray="3 3" vertical={false} opacity={0.45} />
+                  <XAxis dataKey="label" tick={chartAxisTick} tickLine={false} axisLine={{ stroke: "var(--border)" }} />
+                  <YAxis tick={chartAxisTick} tickLine={false} axisLine={{ stroke: "var(--border)" }} width={40} />
+                  <Tooltip
+                    contentStyle={chartTooltipContentStyle}
+                    labelStyle={chartTooltipLabelStyle}
+                    itemStyle={chartTooltipItemStyle}
+                    formatter={(v) => {
+                      const n = Number(v ?? 0);
+                      return [`£${Number.isFinite(n) ? n.toFixed(2) : "—"}`, "Amount"];
+                    }}
+                    cursor={{ stroke: "var(--chart-1)", strokeWidth: 1, strokeDasharray: "4 4" }}
+                  />
+                  <Area
+                    type="monotone"
+                    dataKey="value"
+                    name="Revenue"
+                    stroke="var(--chart-1)"
+                    strokeWidth={2}
+                    fillOpacity={1}
+                    fill="url(#colorRev)"
+                  />
                 </AreaChart>
               </ResponsiveContainer>
             </CardContent>
@@ -299,11 +323,20 @@ export function RevenueScreen() {
                   data={chartData.slice(-7)}
                   margin={{ top: 10, right: 10, left: 0, bottom: 0 }}
                 >
-                  <CartesianGrid strokeDasharray="3 3" opacity={0.2} />
+                  <CartesianGrid stroke={chartGridStroke} strokeDasharray="3 3" vertical={false} opacity={0.45} />
                   <XAxis dataKey="label" hide />
                   <YAxis hide />
-                  <Tooltip />
-                  <Bar dataKey="value" fill="hsl(var(--chart-4))" radius={[8, 8, 0, 0]} />
+                  <Tooltip
+                    contentStyle={chartTooltipContentStyle}
+                    labelStyle={chartTooltipLabelStyle}
+                    itemStyle={chartTooltipItemStyle}
+                    formatter={(v) => {
+                      const n = Number(v ?? 0);
+                      return [`£${Number.isFinite(n) ? n.toFixed(2) : "—"}`, ""];
+                    }}
+                    cursor={{ fill: "var(--muted)" }}
+                  />
+                  <Bar dataKey="value" name="7d" fill="var(--chart-3)" radius={[6, 6, 0, 0]} maxBarSize={40} />
                 </BarChart>
               </ResponsiveContainer>
             </div>

@@ -13,6 +13,13 @@ import {
   XAxis,
   YAxis,
 } from "recharts";
+import {
+  chartAxisTick,
+  chartGridStroke,
+  chartTooltipContentStyle,
+  chartTooltipItemStyle,
+  chartTooltipLabelStyle,
+} from "@/lib/chart-tooltip";
 import { umamiPageviewsFromPayload } from "@/lib/umami-payload";
 
 export function AnalyticsScreen() {
@@ -83,15 +90,54 @@ export function AnalyticsScreen() {
         </CardHeader>
         <CardContent className="min-w-0">
           <ResponsiveContainer width="100%" height={288}>
-            <ComposedChart data={trend}>
-              <CartesianGrid strokeDasharray="3 3" opacity={0.2} />
-              <XAxis dataKey="label" />
-              <YAxis yAxisId="left" />
-              <YAxis yAxisId="right" orientation="right" />
-              <Tooltip />
-              <Legend />
-              <Line yAxisId="left" type="monotone" dataKey="traffic" stroke="hsl(var(--primary))" dot />
-              <Line yAxisId="right" type="monotone" dataKey="revenue" stroke="hsl(var(--chart-2))" dot />
+            <ComposedChart data={trend} margin={{ top: 12, right: 12, left: -4, bottom: 8 }}>
+              <CartesianGrid stroke={chartGridStroke} strokeDasharray="3 3" vertical={false} opacity={0.45} />
+              <XAxis dataKey="label" tick={chartAxisTick} tickLine={false} axisLine={{ stroke: "var(--border)" }} />
+              <YAxis yAxisId="left" tick={chartAxisTick} tickLine={false} axisLine={{ stroke: "var(--border)" }} width={44} />
+              <YAxis
+                yAxisId="right"
+                orientation="right"
+                tick={chartAxisTick}
+                tickLine={false}
+                axisLine={{ stroke: "var(--border)" }}
+                width={44}
+              />
+              <Tooltip
+                contentStyle={chartTooltipContentStyle}
+                labelStyle={chartTooltipLabelStyle}
+                itemStyle={chartTooltipItemStyle}
+                formatter={(value, name) => {
+                  const nm = String(name ?? "");
+                  const num = Number(value ?? 0);
+                  const formatted =
+                    nm === "revenue" ? `£${Number.isFinite(num) ? num.toFixed(0) : "—"}` : String(value ?? "—");
+                  return [formatted, nm === "traffic" ? "Traffic (views)" : "Revenue (£)"];
+                }}
+                cursor={{ stroke: "var(--border)", strokeWidth: 1 }}
+              />
+              <Legend
+                wrapperStyle={{ paddingTop: 12, fontSize: 12 }}
+                iconType="plainline"
+                formatter={(value) => (String(value) === "traffic" ? "Traffic" : "Revenue")}
+              />
+              <Line
+                yAxisId="left"
+                name="traffic"
+                type="monotone"
+                dataKey="traffic"
+                stroke="var(--chart-1)"
+                strokeWidth={2.5}
+                dot={{ r: 2.5, fill: "var(--chart-1)", stroke: "var(--card)", strokeWidth: 1.5 }}
+              />
+              <Line
+                yAxisId="right"
+                name="revenue"
+                type="monotone"
+                dataKey="revenue"
+                stroke="var(--chart-2)"
+                strokeWidth={2.5}
+                dot={{ r: 2.5, fill: "var(--chart-2)", stroke: "var(--card)", strokeWidth: 1.5 }}
+              />
             </ComposedChart>
           </ResponsiveContainer>
         </CardContent>

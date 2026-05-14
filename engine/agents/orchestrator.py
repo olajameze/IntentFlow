@@ -25,7 +25,7 @@ from crypto_util import decrypt_stripe_secret
 from supabase_client import get_supabase
 from tools.csv_merge import merge_csv_uploads
 from tools.copy_doctrine import PESTTRACE_B2B_FOCUS
-from tools.llm import generate_personalised_copy
+from tools.llm import generate_personalised_copy, gemini_error_should_use_groq, groq_only_after_gemini_auth_failure
 from tools.persistence import save_revenue_snapshot, save_traffic_snapshot
 from tools.similarweb import scrape_similarweb_traffic
 from tools.stripe_revenue import fetch_stripe_revenue
@@ -79,11 +79,12 @@ def generate_personalised_copy_tool(business_context: str, lead: str, template: 
 
 def _llm() -> LLM:
     """Prefer Gemini via CrewAI; use a model ID that exists on the current Gemini API."""
-    if llm_skip_google():
+    if llm_skip_google() or groq_only_after_gemini_auth_failure():
         if groq_api_key():
             return _groq_llm()
         raise RuntimeError(
-            "ENGINE_USE_GROQ_ONLY or ENGINE_FORCE_GROQ is set but GROQ_API_KEY is missing — add it to .env."
+            "GROQ_API_KEY is missing while Groq-only mode is required "
+            "(ENGINE_USE_GROQ_ONLY / ENGINE_FORCE_GROQ in .env, or Gemini auth failed and Groq fallback is active)."
         )
     if google_api_key():
         model = os.getenv("CREWAI_GEMINI_MODEL", "gemini/gemini-2.0-flash").strip() or "gemini/gemini-2.0-flash"
@@ -98,28 +99,6 @@ def _llm() -> LLM:
 
 def _groq_llm() -> LLM:
     return LLM(model="groq/llama-3.1-8b-instant", temperature=0.35)
-
-
-def _is_gemini_quota_or_rate_error(exc: BaseException) -> bool:
-    name = type(exc).__name__.lower()
-    if "resourceexhausted" in name or "ratelimit" in name:
-        return True
-    err = f"{exc!s} {exc!r}".lower()
-    return any(
-        s in err
-        for s in (
-            "429",
-            "resource exhausted",
-            "resource_exhausted",
-            "resourceexhausted",
-            "quota",
-            "rate limit",
-            "rate_limit",
-            "exceeded your current quota",
-            "limit: 0",
-            "gemini api error: 429",
-        )
-    )
 
 
 def load_active_businesses() -> list[dict[str, Any]]:
@@ -377,9 +356,9 @@ def run_crew_for_business(row: dict[str, Any]) -> str:
         try:
             result = str(crew.kickoff())
         except Exception as first_exc:  # noqa: BLE001
-            if groq_api_key() and _is_gemini_quota_or_rate_error(first_exc):
+            if gemini_error_should_use_groq(first_exc):
                 print(
-                    "Crew: Gemini quota/rate limited — retrying once with Groq. "
+                    "Crew: Gemini failed (quota, auth, or rate limit) — retrying once with Groq. "
                     "Tip: set ENGINE_USE_GROQ_ONLY=1 (and GROQ_API_KEY) to skip Gemini entirely."
                 )
                 groq_llm = _groq_llm()

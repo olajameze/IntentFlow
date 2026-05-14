@@ -8,6 +8,7 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import {
+  CartesianGrid,
   Line,
   LineChart,
   ResponsiveContainer,
@@ -15,6 +16,12 @@ import {
   XAxis,
   YAxis,
 } from "recharts";
+import {
+  chartGridStroke,
+  chartTooltipContentStyle,
+  chartTooltipItemStyle,
+  chartTooltipLabelStyle,
+} from "@/lib/chart-tooltip";
 import { umamiPageviewsFromPayload, umamiVisitorsFromPayload } from "@/lib/umami-payload";
 
 type Business = {
@@ -221,12 +228,42 @@ export function HomeOverview() {
                 <div className="w-full min-w-0 rounded-lg border bg-muted/30 p-2">
                   <div className="h-28 w-full min-w-0">
                     <ResponsiveContainer width="100%" height={112}>
-                      <LineChart data={sparkData}>
+                      <LineChart data={sparkData} margin={{ top: 4, right: 4, left: -16, bottom: 0 }}>
+                        <CartesianGrid stroke={chartGridStroke} strokeDasharray="3 3" vertical={false} opacity={0.4} />
                         <XAxis dataKey="label" hide />
                         <YAxis hide />
-                        <RTooltip />
-                        <Line type="monotone" dataKey="traffic" stroke="hsl(var(--primary))" strokeWidth={2} dot={false} />
-                        <Line type="monotone" dataKey="revenue" stroke="hsl(var(--chart-2))" strokeWidth={2} dot={false} />
+                        <RTooltip
+                          contentStyle={chartTooltipContentStyle}
+                          labelStyle={chartTooltipLabelStyle}
+                          itemStyle={chartTooltipItemStyle}
+                          formatter={(value, name) => {
+                            const nm = String(name ?? "");
+                            const num = Number(value ?? 0);
+                            const formatted =
+                              nm === "revenue" ?
+                                `£${Number.isFinite(num) ? num.toFixed(0) : "—"}`
+                              : String(value ?? "—");
+                            return [formatted, nm === "traffic" ? "Traffic" : "Revenue"];
+                          }}
+                        />
+                        <Line
+                          type="monotone"
+                          dataKey="traffic"
+                          name="traffic"
+                          stroke="var(--chart-1)"
+                          strokeWidth={2}
+                          dot={false}
+                          activeDot={{ r: 4, fill: "var(--chart-1)" }}
+                        />
+                        <Line
+                          type="monotone"
+                          dataKey="revenue"
+                          name="revenue"
+                          stroke="var(--chart-2)"
+                          strokeWidth={2}
+                          dot={false}
+                          activeDot={{ r: 4, fill: "var(--chart-2)" }}
+                        />
                       </LineChart>
                     </ResponsiveContainer>
                   </div>

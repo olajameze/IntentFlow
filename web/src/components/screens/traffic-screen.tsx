@@ -19,6 +19,13 @@ import {
   XAxis,
   YAxis,
 } from "recharts";
+import {
+  chartAxisTick,
+  chartGridStroke,
+  chartTooltipContentStyle,
+  chartTooltipItemStyle,
+  chartTooltipLabelStyle,
+} from "@/lib/chart-tooltip";
 import { umamiPageviewsFromPayload, umamiVisitorsFromPayload } from "@/lib/umami-payload";
 
 function githubTrafficWorkflowUrl(): string | null {
@@ -215,12 +222,25 @@ export function TrafficScreen() {
           </CardHeader>
           <CardContent className="min-w-0">
             <ResponsiveContainer width="100%" height={256}>
-              <LineChart data={chartData}>
-                <CartesianGrid strokeDasharray="3 3" opacity={0.2} />
-                <XAxis dataKey="label" />
-                <YAxis />
-                <Tooltip />
-                <Line type="monotone" dataKey="value" stroke="hsl(var(--primary))" strokeWidth={2} dot />
+              <LineChart data={chartData} margin={{ top: 8, right: 8, left: -8, bottom: 0 }}>
+                <CartesianGrid stroke={chartGridStroke} strokeDasharray="3 3" vertical={false} opacity={0.45} />
+                <XAxis dataKey="label" tick={chartAxisTick} tickLine={false} axisLine={{ stroke: "var(--border)" }} />
+                <YAxis tick={chartAxisTick} tickLine={false} axisLine={{ stroke: "var(--border)" }} width={36} />
+                <Tooltip
+                  contentStyle={chartTooltipContentStyle}
+                  labelStyle={chartTooltipLabelStyle}
+                  itemStyle={chartTooltipItemStyle}
+                  cursor={{ stroke: "var(--primary)", strokeWidth: 1, strokeDasharray: "4 4" }}
+                />
+                <Line
+                  type="monotone"
+                  dataKey="value"
+                  name="Pageviews"
+                  stroke="var(--chart-1)"
+                  strokeWidth={2.5}
+                  dot={{ r: 3, fill: "var(--chart-1)", stroke: "var(--card)", strokeWidth: 2 }}
+                  activeDot={{ r: 5 }}
+                />
               </LineChart>
             </ResponsiveContainer>
           </CardContent>
@@ -285,12 +305,17 @@ export function TrafficScreen() {
           </CardHeader>
           <CardContent className="min-w-0">
             <ResponsiveContainer width="100%" height={224}>
-              <BarChart data={chartData}>
-                <CartesianGrid strokeDasharray="3 3" opacity={0.2} />
+              <BarChart data={chartData} margin={{ top: 8, right: 4, left: -12, bottom: 0 }}>
+                <CartesianGrid stroke={chartGridStroke} strokeDasharray="3 3" vertical={false} opacity={0.45} />
                 <XAxis dataKey="label" hide />
                 <YAxis hide />
-                <Tooltip />
-                <Bar dataKey="value" fill="hsl(var(--chart-2))" radius={[8, 8, 0, 0]} />
+                <Tooltip
+                  contentStyle={chartTooltipContentStyle}
+                  labelStyle={chartTooltipLabelStyle}
+                  itemStyle={chartTooltipItemStyle}
+                  cursor={{ fill: "var(--muted)" }}
+                />
+                <Bar dataKey="value" name="Pageviews" fill="var(--chart-2)" radius={[6, 6, 0, 0]} maxBarSize={48} />
               </BarChart>
             </ResponsiveContainer>
           </CardContent>
