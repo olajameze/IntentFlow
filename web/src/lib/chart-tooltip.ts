@@ -20,6 +20,3 @@ export const chartTooltipLabelStyle: CSSProperties = {
 export const chartTooltipItemStyle: CSSProperties = {
   color: "var(--muted-foreground)",
 };
-
-export const chartAxisTick = { fill: "var(--muted-foreground)", fontSize: 11 };
-export const chartGridStroke = "var(--border)";

@@ -14,15 +14,15 @@ import {
   YAxis,
 } from "recharts";
 import {
-  chartAxisTick,
-  chartGridStroke,
   chartTooltipContentStyle,
   chartTooltipItemStyle,
   chartTooltipLabelStyle,
 } from "@/lib/chart-tooltip";
+import { useChartSvgColors } from "@/lib/use-chart-svg-colors";
 import { umamiPageviewsFromPayload } from "@/lib/umami-payload";
 
 export function AnalyticsScreen() {
+  const svg = useChartSvgColors();
   const [businesses, setBusinesses] = useState<Record<string, unknown>[]>([]);
   const [snapshots, setSnapshots] = useState<Record<string, unknown>[]>([]);
   const [revenue, setRevenue] = useState<Record<string, unknown>[]>([]);
@@ -91,15 +91,15 @@ export function AnalyticsScreen() {
         <CardContent className="min-w-0">
           <ResponsiveContainer width="100%" height={288}>
             <ComposedChart data={trend} margin={{ top: 12, right: 12, left: -4, bottom: 8 }}>
-              <CartesianGrid stroke={chartGridStroke} strokeDasharray="3 3" vertical={false} opacity={0.45} />
-              <XAxis dataKey="label" tick={chartAxisTick} tickLine={false} axisLine={{ stroke: "var(--border)" }} />
-              <YAxis yAxisId="left" tick={chartAxisTick} tickLine={false} axisLine={{ stroke: "var(--border)" }} width={44} />
+              <CartesianGrid stroke={svg.border} strokeDasharray="3 3" vertical={false} opacity={0.45} />
+              <XAxis dataKey="label" tick={svg.axisTick} tickLine={false} axisLine={{ stroke: svg.border }} />
+              <YAxis yAxisId="left" tick={svg.axisTick} tickLine={false} axisLine={{ stroke: svg.border }} width={44} />
               <YAxis
                 yAxisId="right"
                 orientation="right"
-                tick={chartAxisTick}
+                tick={svg.axisTick}
                 tickLine={false}
-                axisLine={{ stroke: "var(--border)" }}
+                axisLine={{ stroke: svg.border }}
                 width={44}
               />
               <Tooltip
@@ -113,7 +113,7 @@ export function AnalyticsScreen() {
                     nm === "revenue" ? `£${Number.isFinite(num) ? num.toFixed(0) : "—"}` : String(value ?? "—");
                   return [formatted, nm === "traffic" ? "Traffic (views)" : "Revenue (£)"];
                 }}
-                cursor={{ stroke: "var(--border)", strokeWidth: 1 }}
+                cursor={{ stroke: svg.border, strokeWidth: 1 }}
               />
               <Legend
                 wrapperStyle={{ paddingTop: 12, fontSize: 12 }}
@@ -125,18 +125,18 @@ export function AnalyticsScreen() {
                 name="traffic"
                 type="monotone"
                 dataKey="traffic"
-                stroke="var(--chart-1)"
+                stroke={svg.chart1}
                 strokeWidth={2.5}
-                dot={{ r: 2.5, fill: "var(--chart-1)", stroke: "var(--card)", strokeWidth: 1.5 }}
+                dot={{ r: 2.5, fill: svg.chart1, stroke: svg.card, strokeWidth: 1.5 }}
               />
               <Line
                 yAxisId="right"
                 name="revenue"
                 type="monotone"
                 dataKey="revenue"
-                stroke="var(--chart-2)"
+                stroke={svg.chart2}
                 strokeWidth={2.5}
-                dot={{ r: 2.5, fill: "var(--chart-2)", stroke: "var(--card)", strokeWidth: 1.5 }}
+                dot={{ r: 2.5, fill: svg.chart2, stroke: svg.card, strokeWidth: 1.5 }}
               />
             </ComposedChart>
           </ResponsiveContainer>

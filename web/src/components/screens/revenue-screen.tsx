@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useId, useMemo, useState } from "react";
 import { toast } from "sonner";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -21,14 +21,15 @@ import {
   YAxis,
 } from "recharts";
 import {
-  chartAxisTick,
-  chartGridStroke,
   chartTooltipContentStyle,
   chartTooltipItemStyle,
   chartTooltipLabelStyle,
 } from "@/lib/chart-tooltip";
+import { useChartSvgColors } from "@/lib/use-chart-svg-colors";
 
 export function RevenueScreen() {
+  const svg = useChartSvgColors();
+  const revenueGradId = useId().replace(/:/g, "");
   const [businesses, setBusinesses] = useState<Record<string, unknown>[]>([]);
   const [entries, setEntries] = useState<Record<string, unknown>[]>([]);
   const [selected, setSelected] = useState<string>("all");
@@ -151,14 +152,14 @@ export function RevenueScreen() {
               <ResponsiveContainer width="100%" height={256}>
                 <AreaChart data={chartData} margin={{ top: 8, right: 8, left: -8, bottom: 0 }}>
                   <defs>
-                    <linearGradient id="colorRev" x1="0" y1="0" x2="0" y2="1">
-                      <stop offset="5%" stopColor="var(--chart-1)" stopOpacity={0.45} />
-                      <stop offset="95%" stopColor="var(--chart-1)" stopOpacity={0.02} />
+                    <linearGradient id={revenueGradId} x1="0" y1="0" x2="0" y2="1">
+                      <stop offset="5%" stopColor={svg.chart1} stopOpacity={0.45} />
+                      <stop offset="95%" stopColor={svg.chart1} stopOpacity={0.02} />
                     </linearGradient>
                   </defs>
-                  <CartesianGrid stroke={chartGridStroke} strokeDasharray="3 3" vertical={false} opacity={0.45} />
-                  <XAxis dataKey="label" tick={chartAxisTick} tickLine={false} axisLine={{ stroke: "var(--border)" }} />
-                  <YAxis tick={chartAxisTick} tickLine={false} axisLine={{ stroke: "var(--border)" }} width={40} />
+                  <CartesianGrid stroke={svg.border} strokeDasharray="3 3" vertical={false} opacity={0.45} />
+                  <XAxis dataKey="label" tick={svg.axisTick} tickLine={false} axisLine={{ stroke: svg.border }} />
+                  <YAxis tick={svg.axisTick} tickLine={false} axisLine={{ stroke: svg.border }} width={40} />
                   <Tooltip
                     contentStyle={chartTooltipContentStyle}
                     labelStyle={chartTooltipLabelStyle}
@@ -167,16 +168,16 @@ export function RevenueScreen() {
                       const n = Number(v ?? 0);
                       return [`£${Number.isFinite(n) ? n.toFixed(2) : "—"}`, "Amount"];
                     }}
-                    cursor={{ stroke: "var(--chart-1)", strokeWidth: 1, strokeDasharray: "4 4" }}
+                    cursor={{ stroke: svg.chart1, strokeWidth: 1, strokeDasharray: "4 4" }}
                   />
                   <Area
                     type="monotone"
                     dataKey="value"
                     name="Revenue"
-                    stroke="var(--chart-1)"
+                    stroke={svg.chart1}
                     strokeWidth={2}
                     fillOpacity={1}
-                    fill="url(#colorRev)"
+                    fill={`url(#${revenueGradId})`}
                   />
                 </AreaChart>
               </ResponsiveContainer>
@@ -323,7 +324,7 @@ export function RevenueScreen() {
                   data={chartData.slice(-7)}
                   margin={{ top: 10, right: 10, left: 0, bottom: 0 }}
                 >
-                  <CartesianGrid stroke={chartGridStroke} strokeDasharray="3 3" vertical={false} opacity={0.45} />
+                  <CartesianGrid stroke={svg.border} strokeDasharray="3 3" vertical={false} opacity={0.45} />
                   <XAxis dataKey="label" hide />
                   <YAxis hide />
                   <Tooltip
@@ -334,9 +335,9 @@ export function RevenueScreen() {
                       const n = Number(v ?? 0);
                       return [`£${Number.isFinite(n) ? n.toFixed(2) : "—"}`, ""];
                     }}
-                    cursor={{ fill: "var(--muted)" }}
+                    cursor={{ fill: svg.muted }}
                   />
-                  <Bar dataKey="value" name="7d" fill="var(--chart-3)" radius={[6, 6, 0, 0]} maxBarSize={40} />
+                  <Bar dataKey="value" name="7d" fill={svg.chart3} radius={[6, 6, 0, 0]} maxBarSize={40} />
                 </BarChart>
               </ResponsiveContainer>
             </div>

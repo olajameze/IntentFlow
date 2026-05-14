@@ -17,11 +17,11 @@ import {
   YAxis,
 } from "recharts";
 import {
-  chartGridStroke,
   chartTooltipContentStyle,
   chartTooltipItemStyle,
   chartTooltipLabelStyle,
 } from "@/lib/chart-tooltip";
+import { useChartSvgColors } from "@/lib/use-chart-svg-colors";
 import { umamiPageviewsFromPayload, umamiVisitorsFromPayload } from "@/lib/umami-payload";
 
 type Business = {
@@ -50,6 +50,7 @@ async function formatApiFailure(res: Response): Promise<string> {
 }
 
 export function HomeOverview() {
+  const svg = useChartSvgColors();
   const [businesses, setBusinesses] = useState<Business[]>([]);
   const [snapshots, setSnapshots] = useState<Record<string, unknown>[]>([]);
   const [revenue, setRevenue] = useState<Record<string, unknown>[]>([]);
@@ -229,7 +230,7 @@ export function HomeOverview() {
                   <div className="h-28 w-full min-w-0">
                     <ResponsiveContainer width="100%" height={112}>
                       <LineChart data={sparkData} margin={{ top: 4, right: 4, left: -16, bottom: 0 }}>
-                        <CartesianGrid stroke={chartGridStroke} strokeDasharray="3 3" vertical={false} opacity={0.4} />
+                        <CartesianGrid stroke={svg.border} strokeDasharray="3 3" vertical={false} opacity={0.4} />
                         <XAxis dataKey="label" hide />
                         <YAxis hide />
                         <RTooltip
@@ -250,19 +251,19 @@ export function HomeOverview() {
                           type="monotone"
                           dataKey="traffic"
                           name="traffic"
-                          stroke="var(--chart-1)"
+                          stroke={svg.chart1}
                           strokeWidth={2}
                           dot={false}
-                          activeDot={{ r: 4, fill: "var(--chart-1)" }}
+                          activeDot={{ r: 4, fill: svg.chart1 }}
                         />
                         <Line
                           type="monotone"
                           dataKey="revenue"
                           name="revenue"
-                          stroke="var(--chart-2)"
+                          stroke={svg.chart2}
                           strokeWidth={2}
                           dot={false}
-                          activeDot={{ r: 4, fill: "var(--chart-2)" }}
+                          activeDot={{ r: 4, fill: svg.chart2 }}
                         />
                       </LineChart>
                     </ResponsiveContainer>

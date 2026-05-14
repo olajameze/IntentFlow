@@ -20,12 +20,11 @@ import {
   YAxis,
 } from "recharts";
 import {
-  chartAxisTick,
-  chartGridStroke,
   chartTooltipContentStyle,
   chartTooltipItemStyle,
   chartTooltipLabelStyle,
 } from "@/lib/chart-tooltip";
+import { useChartSvgColors } from "@/lib/use-chart-svg-colors";
 import { umamiPageviewsFromPayload, umamiVisitorsFromPayload } from "@/lib/umami-payload";
 
 function githubTrafficWorkflowUrl(): string | null {
@@ -35,6 +34,7 @@ function githubTrafficWorkflowUrl(): string | null {
 }
 
 export function TrafficScreen() {
+  const svg = useChartSvgColors();
   const [businesses, setBusinesses] = useState<Record<string, unknown>[]>([]);
   const [snapshots, setSnapshots] = useState<Record<string, unknown>[]>([]);
   const [selected, setSelected] = useState<string>("all");
@@ -223,22 +223,22 @@ export function TrafficScreen() {
           <CardContent className="min-w-0">
             <ResponsiveContainer width="100%" height={256}>
               <LineChart data={chartData} margin={{ top: 8, right: 8, left: -8, bottom: 0 }}>
-                <CartesianGrid stroke={chartGridStroke} strokeDasharray="3 3" vertical={false} opacity={0.45} />
-                <XAxis dataKey="label" tick={chartAxisTick} tickLine={false} axisLine={{ stroke: "var(--border)" }} />
-                <YAxis tick={chartAxisTick} tickLine={false} axisLine={{ stroke: "var(--border)" }} width={36} />
+                <CartesianGrid stroke={svg.border} strokeDasharray="3 3" vertical={false} opacity={0.45} />
+                <XAxis dataKey="label" tick={svg.axisTick} tickLine={false} axisLine={{ stroke: svg.border }} />
+                <YAxis tick={svg.axisTick} tickLine={false} axisLine={{ stroke: svg.border }} width={36} />
                 <Tooltip
                   contentStyle={chartTooltipContentStyle}
                   labelStyle={chartTooltipLabelStyle}
                   itemStyle={chartTooltipItemStyle}
-                  cursor={{ stroke: "var(--primary)", strokeWidth: 1, strokeDasharray: "4 4" }}
+                  cursor={{ stroke: svg.primary, strokeWidth: 1, strokeDasharray: "4 4" }}
                 />
                 <Line
                   type="monotone"
                   dataKey="value"
                   name="Pageviews"
-                  stroke="var(--chart-1)"
+                  stroke={svg.chart1}
                   strokeWidth={2.5}
-                  dot={{ r: 3, fill: "var(--chart-1)", stroke: "var(--card)", strokeWidth: 2 }}
+                  dot={{ r: 3, fill: svg.chart1, stroke: svg.card, strokeWidth: 2 }}
                   activeDot={{ r: 5 }}
                 />
               </LineChart>
@@ -306,16 +306,16 @@ export function TrafficScreen() {
           <CardContent className="min-w-0">
             <ResponsiveContainer width="100%" height={224}>
               <BarChart data={chartData} margin={{ top: 8, right: 4, left: -12, bottom: 0 }}>
-                <CartesianGrid stroke={chartGridStroke} strokeDasharray="3 3" vertical={false} opacity={0.45} />
+                <CartesianGrid stroke={svg.border} strokeDasharray="3 3" vertical={false} opacity={0.45} />
                 <XAxis dataKey="label" hide />
                 <YAxis hide />
                 <Tooltip
                   contentStyle={chartTooltipContentStyle}
                   labelStyle={chartTooltipLabelStyle}
                   itemStyle={chartTooltipItemStyle}
-                  cursor={{ fill: "var(--muted)" }}
+                  cursor={{ fill: svg.muted }}
                 />
-                <Bar dataKey="value" name="Pageviews" fill="var(--chart-2)" radius={[6, 6, 0, 0]} maxBarSize={48} />
+                <Bar dataKey="value" name="Pageviews" fill={svg.chart2} radius={[6, 6, 0, 0]} maxBarSize={48} />
               </BarChart>
             </ResponsiveContainer>
           </CardContent>
