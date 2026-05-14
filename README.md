@@ -50,7 +50,8 @@ Privacy-first portfolio operations: **Umami** analytics (no Google Analytics), *
 | **`/api/publish-approved`** rejects Facebook publish | Provide **`FACEBOOK_PAGE_ID`** + **`FACEBOOK_PAGE_ACCESS_TOKEN`**, or numbered **`FACEBOOK_PAGE_ID_N`** credentials per business. |
 | **Traffic / analytics show 0** | Rows come from **`analytics_snapshots`** (engine or GitHub Actions). Run **`python main.py traffic`** with valid **`UMAMI_*`** + **`umami_website_id`**. UI expects Umami **`pageviews.value`** shape (fixed in `web/src/lib/umami-payload.ts`). |
 | **PWA does not install in dev** | PWAs are **off in development** by default. Use **`npm run build && npm start`**, Vercel preview, or set **`NEXT_PUBLIC_ENABLE_PWA_DEV=1`** in `web/.env.local`. |
-| **Vercel: “No python entrypoint” / Python build** | The dashboard app is **Next.js in `web/`**, not Python. Prefer **Project → Settings → General → Root Directory = `web`** (then you can rely on default install/build). If the project root stays the repo root, root **`vercel.json`** runs **`npm install` / `npm run build` in `web/`** and there must be **no** root `requirements.txt` (Python lives under **`engine/`** only). |
+| **Vercel: “No python entrypoint” / Python build** | Do **not** commit a root **`requirements.txt`** (Python is **`engine/`** only). Deploy **`web/`** as the app (see Vercel section below). |
+| **Vercel: “Next.js output directory `.next` was not found”** | The Next build writes **`web/.next`**. In Vercel → **Settings → General → Root Directory**, set **`web`** (must match the folder that contains **`next.config.mjs`**). Remove any root **`vercel.json`** that builds with `--prefix web` while the Git root is still the project root. |
 
 **Cold start checklist:** [`docs/runbook-local.md`](docs/runbook-local.md).
 
@@ -84,10 +85,13 @@ From the **repo root** (without `cd engine`), install engine dependencies with: 
 
 ### Vercel (this repo)
 
-- **Recommended:** set **Root Directory** to **`web`** so Vercel detects Next.js and runs `npm install` / `next build` there (same as local `cd web`).
-- **Alternative:** leave the connected root at the monorepo root; root **`vercel.json`** then installs and builds **`web/`** explicitly. Do not add a root **`requirements.txt`** — Vercel would treat the repo as a **Python** project (`engine/` is for GitHub Actions / local only). The root **`package.json`** lists **`next` / `react` / `react-dom`** in **`dependencies`** (same versions as `web/`) so Vercel’s Next.js preset can detect the runtime version; **`vercel.json`** runs **`npm install`** at the root, then **`npm install --prefix web`**.
+**Required for a working production build:** in the Vercel project, open **Settings → General → Root Directory** and set it to **`web`** (the directory that contains **`package.json`**, **`next.config.mjs`**, and **`src/`**). Leave **Framework Preset** as **Next.js** and do **not** override the default **Install Command** / **Build Command** unless you know why.
 
-**One-time:** install dependencies in `web/` (pick one):
+The monorepo root only forwards scripts (`npm run dev` → `web/`). There is **no** root `vercel.json` on purpose: building from the Git root while output lives under **`web/.next`** makes Vercel look for **`.next`** in the wrong place.
+
+Do **not** add a root **`requirements.txt`** — Vercel would treat the repo as Python (`engine/` is for GitHub Actions and local runs only).
+
+**One-time:** install dependencies in **`web/`** (pick one):
 
 ```bash
 cd web && npm install
