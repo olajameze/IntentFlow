@@ -9,6 +9,10 @@ loadEnv({ path: path.resolve(__dirname, ".env.local") });
 const integration = /^1|true$/i.test(process.env.PLAYWRIGHT_INTEGRATION ?? "");
 const baseURL = process.env.BASE_URL || "http://127.0.0.1:3000";
 const githubActionsCi = process.env.GITHUB_ACTIONS === "true";
+// Turbopack (`npm run dev`) has been flaky on GitHub-hosted runners; webpack dev matches `dev:webpack` and is more stable for CI.
+const webServerCommand = githubActionsCi
+  ? "npm run dev:webpack -- --hostname 127.0.0.1 --port 3000"
+  : "npm run dev -- --hostname 127.0.0.1 --port 3000";
 
 /**
  * Tier A+C+D — smoke + shells + APIs (excluding @integration suffix in describe titles).
@@ -35,10 +39,10 @@ export default defineConfig({
   },
   projects: [{ name: "chromium", use: { ...devices["Desktop Chrome"] } }],
   webServer: {
-    command: "npm run dev -- --hostname 127.0.0.1 --port 3000",
+    command: webServerCommand,
     url: baseURL,
     // Local dev often already has `npm run dev` running — reuse it. GitHub Actions always starts fresh.
     reuseExistingServer: !githubActionsCi,
-    timeout: 180_000,
+    timeout: githubActionsCi ? 240_000 : 180_000,
   },
 });

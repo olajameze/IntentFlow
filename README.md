@@ -133,6 +133,8 @@ npm run test:e2e
 cd web && npm run test:e2e:integration
 ```
 
+GitHub Actions **Web E2E** uses **Node 22**, sets **`FORCE_JAVASCRIPT_ACTIONS_TO_NODE24`** for JS actions, and starts **`npm run dev:webpack`** (webpack dev server) for stability on runners; local runs keep default **`npm run dev`** (Turbopack).
+
 Overrides: set **`BASE_URL`** to point at a running dev/preview server. In CI only, **`ENFORCE_HEALTH_OK=1`** makes `/api/health` require **`ok: true`** (requires Supabase env in the GitHub Workflow).
 
 Docs: [Playwright](https://playwright.dev/docs/intro), [Next.js Playwright guide](https://nextjs.org/docs/app/building-your-application/testing/playwright).
