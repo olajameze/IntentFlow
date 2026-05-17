@@ -2,6 +2,9 @@
   "name": "intentflow",
   "private": true,
   "description": "Root scripts forward to web/ — Next.js app lives in web/. Deploy web/ on Vercel (set Root Directory to web).",
+  "dependencies": {
+    "next": "14.2.35"
+  },
   "scripts": {
     "dev": "npm run dev --prefix web",
     "build": "npm run build --prefix web",
