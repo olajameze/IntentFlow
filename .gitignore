@@ -34,3 +34,6 @@ docs/references/*.pdf
 .idea/
 .vscode/
 *.log
+
+.vercel
+.env*.local
