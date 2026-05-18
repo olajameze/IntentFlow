@@ -117,7 +117,7 @@ export function RevenueScreen() {
   };
 
   return (
-    <Tabs defaultValue="overview">
+    <Tabs defaultValue="overview" className="min-w-0">
       <TabsList className="grid w-full grid-cols-2 md:inline-flex">
         <TabsTrigger value="overview">Overview</TabsTrigger>
         <TabsTrigger value="import">Import / manual</TabsTrigger>

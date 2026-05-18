@@ -22,9 +22,10 @@ const updateSchema = z
     id: z.string().uuid(),
     status: z.enum(["approved", "rejected"]).optional(),
     content: z.string().min(1).max(12_000).optional(),
+    scheduled_at: z.string().datetime({ offset: true }).nullable().optional(),
   })
-  .refine((d) => d.status !== undefined || d.content !== undefined, {
-    message: "Provide status and/or content",
+  .refine((d) => d.status !== undefined || d.content !== undefined || d.scheduled_at !== undefined, {
+    message: "Provide at least one of: status, content, scheduled_at",
   });
 
 export async function PATCH(req: Request) {
@@ -32,10 +33,11 @@ export async function PATCH(req: Request) {
   const parsed = updateSchema.safeParse(json);
   if (!parsed.success) return NextResponse.json({ error: parsed.error.flatten() }, { status: 400 });
   return withSupabaseRoute(async (sb) => {
-    const { id, status, content } = parsed.data;
+    const { id, status, content, scheduled_at } = parsed.data;
     const updates: Record<string, unknown> = { updated_at: new Date().toISOString() };
     if (content !== undefined) updates.content = content;
     if (status !== undefined) updates.status = status;
+    if (scheduled_at !== undefined) updates.scheduled_at = scheduled_at;
 
     const q = sb.from("pending_posts").update(updates).eq("id", id).eq("status", "pending");
     const { data, error } = await q.select("*").maybeSingle();
