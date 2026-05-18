@@ -140,13 +140,13 @@ export function TrafficScreen() {
   const snippet = `<script async src="${umamiBase}/script.js" data-website-id="${websiteId ? String(websiteId) : "YOUR_WEBSITE_ID"}"></script>`;
 
   return (
-    <Tabs defaultValue="overview" className="min-w-0 space-y-4">
+    <Tabs defaultValue="overview" className="min-w-0">
       <TabsList className="grid w-full grid-cols-2 md:w-auto md:inline-flex">
         <TabsTrigger value="overview">Overview</TabsTrigger>
         <TabsTrigger value="tracking">Tracking code</TabsTrigger>
       </TabsList>
 
-      <TabsContent value="overview" className="space-y-4">
+      <TabsContent value="overview" className="min-w-0 space-y-4">
         <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
           <div>
             <label htmlFor="traffic-portfolio-filter" className="text-sm text-muted-foreground">
@@ -247,7 +247,7 @@ export function TrafficScreen() {
           </Card>
         ) : null}
 
-        <Card>
+        <Card className="overflow-hidden">
           <CardHeader className="flex flex-row items-center justify-between">
             <div>
               <CardTitle className="flex items-center gap-2 text-base">
@@ -309,7 +309,7 @@ export function TrafficScreen() {
         </Card>
       </TabsContent>
 
-      <TabsContent value="tracking" className="space-y-3">
+      <TabsContent value="tracking" className="min-w-0 space-y-3">
         <Card>
           <CardHeader>
             <CardTitle className="text-base">Install script</CardTitle>
@@ -337,7 +337,7 @@ export function TrafficScreen() {
           </CardContent>
         </Card>
 
-        <Card>
+        <Card className="overflow-hidden">
           <CardHeader>
             <CardTitle className="text-base">Device mix</CardTitle>
             <p className="text-xs text-muted-foreground">{portfolioLabel}</p>

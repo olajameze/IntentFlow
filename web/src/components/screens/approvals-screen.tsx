@@ -171,20 +171,20 @@ function PostCard({
               </div>
             )}
 
-            <div className="flex flex-wrap gap-3">
+            <div className="flex flex-col gap-2 sm:flex-row sm:flex-wrap sm:gap-3">
               {mode === "pending" && (
                 <>
-                  <Button type="button" variant="secondary" className="h-12 flex-1" disabled={saving} onClick={saveDraft}>
+                  <Button type="button" variant="secondary" className="h-12 w-full sm:flex-1" disabled={saving} onClick={saveDraft}>
                     {saving ? "Saving…" : "Save edits"}
                   </Button>
                   <Button
                     type="button"
-                    className="h-12 flex-1 bg-emerald-600 text-white hover:bg-emerald-500"
+                    className="h-12 w-full bg-emerald-600 text-white hover:bg-emerald-500 sm:flex-1"
                     onClick={() => void setStatus("approved")}
                   >
                     Approve
                   </Button>
-                  <Button type="button" variant="destructive" className="h-12 flex-1" onClick={() => void setStatus("rejected")}>
+                  <Button type="button" variant="destructive" className="h-12 w-full sm:flex-1" onClick={() => void setStatus("rejected")}>
                     Reject
                   </Button>
                 </>
@@ -265,13 +265,23 @@ export function ApprovalsScreen() {
 
       <Tabs defaultValue="pending" className="min-w-0">
         <TabsList className="grid w-full grid-cols-3 md:inline-flex">
-          <TabsTrigger value="pending">
-            Pending {pending.length > 0 && <span className="ml-1.5 rounded-full bg-primary/20 px-1.5 text-xs">{pending.length}</span>}
+          <TabsTrigger value="pending" className="gap-1 text-xs sm:text-sm">
+            Pending
+            {pending.length > 0 && (
+              <span className="hidden min-w-[1.25rem] rounded-full bg-primary/20 px-1 text-center text-[10px] leading-tight sm:inline-block">
+                {pending.length}
+              </span>
+            )}
           </TabsTrigger>
-          <TabsTrigger value="approved">
-            Approved {approved.length > 0 && <span className="ml-1.5 rounded-full bg-emerald-600/20 px-1.5 text-xs">{approved.length}</span>}
+          <TabsTrigger value="approved" className="gap-1 text-xs sm:text-sm">
+            Approved
+            {approved.length > 0 && (
+              <span className="hidden min-w-[1.25rem] rounded-full bg-emerald-600/20 px-1 text-center text-[10px] leading-tight sm:inline-block">
+                {approved.length}
+              </span>
+            )}
           </TabsTrigger>
-          <TabsTrigger value="published">Published</TabsTrigger>
+          <TabsTrigger value="published" className="text-xs sm:text-sm">Published</TabsTrigger>
         </TabsList>
 
         <TabsContent value="pending" className="mt-4 space-y-4">

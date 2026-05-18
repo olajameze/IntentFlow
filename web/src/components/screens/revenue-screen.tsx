@@ -123,7 +123,7 @@ export function RevenueScreen() {
         <TabsTrigger value="import">Import / manual</TabsTrigger>
       </TabsList>
 
-      <TabsContent value="overview" className="space-y-4">
+      <TabsContent value="overview" className="min-w-0 space-y-4">
         <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
           <Select value={selected} onValueChange={(v) => setSelected(typeof v === "string" ? v : "all")}>
             <SelectTrigger className="w-full md:w-72">
@@ -144,7 +144,7 @@ export function RevenueScreen() {
         </div>
 
         <div className="grid gap-4 md:grid-cols-2">
-          <Card className="md:col-span-2">
+          <Card className="overflow-hidden md:col-span-2">
             <CardHeader>
               <CardTitle className="text-base">Revenue cadence</CardTitle>
             </CardHeader>
@@ -185,11 +185,12 @@ export function RevenueScreen() {
           </Card>
         </div>
 
-        <Card>
+        <Card className="overflow-hidden">
           <CardHeader>
             <CardTitle className="text-base">Ledger</CardTitle>
           </CardHeader>
-          <CardContent>
+          <CardContent className="p-0">
+            <div className="overflow-x-auto px-4 pb-4 pt-0">
             <Table>
               <TableHeader>
                 <TableRow>
@@ -216,11 +217,12 @@ export function RevenueScreen() {
                 ))}
               </TableBody>
             </Table>
+            </div>
           </CardContent>
         </Card>
       </TabsContent>
 
-      <TabsContent value="import" className="space-y-4">
+      <TabsContent value="import" className="min-w-0 space-y-4">
         <Card>
           <CardHeader>
             <CardTitle className="text-base">Manual entry</CardTitle>
@@ -318,7 +320,7 @@ export function RevenueScreen() {
           </CardHeader>
           <CardContent className="text-sm text-muted-foreground space-y-2">
             <p>Add the restricted key under Settings → Businesses. RevenueTracker syncs every six hours via GitHub Actions.</p>
-            <div className="min-w-0 rounded-lg border bg-muted/40 p-4">
+            <div className="min-w-0 overflow-hidden rounded-lg border bg-muted/40 p-4">
               <ResponsiveContainer width="100%" height={160}>
                 <BarChart
                   data={chartData.slice(-7)}
