@@ -23,6 +23,8 @@ jobs:
       SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
       GOOGLE_API_KEY: ${{ secrets.GOOGLE_API_KEY }}
       GROQ_API_KEY: ${{ secrets.GROQ_API_KEY }}
+      ENGINE_USE_GROQ_ONLY: "1"
+      ENGINE_FORCE_GROQ: "1"
       UMAMI_URL: ${{ secrets.UMAMI_URL }}
       UMAMI_API_TOKEN: ${{ secrets.UMAMI_API_TOKEN }}
       STRIPE_SECRET_ENCRYPTION_KEY: ${{ secrets.STRIPE_SECRET_ENCRYPTION_KEY }}
@@ -51,12 +53,12 @@ jobs:
             exit 1
           fi
           test -n "$SUPABASE_SERVICE_ROLE_KEY" || { echo "::error::Secret SUPABASE_SERVICE_ROLE_KEY is empty"; exit 1; }
-          if [ -z "${GOOGLE_API_KEY:-}" ] && [ -z "${GROQ_API_KEY:-}" ]; then
-            echo "::error::Set at least one of GOOGLE_API_KEY or GROQ_API_KEY for CrewAI"
+          if [ -z "${GROQ_API_KEY:-}" ]; then
+            echo "::error::Set repository secret GROQ_API_KEY (workflow is Groq-only)."
             exit 1
           fi
-          if [ -z "${GOOGLE_API_KEY:-}" ] && [ -n "${GROQ_API_KEY:-}" ]; then
-            echo "::notice::GOOGLE_API_KEY is unset — using Groq only. Prefer GOOGLE_API_KEY in Actions to reduce rate limits."
+          if [ -n "${GOOGLE_API_KEY:-}" ]; then
+            echo "::notice::GOOGLE_API_KEY is present but ignored because ENGINE_USE_GROQ_ONLY=1 / ENGINE_FORCE_GROQ=1."
           fi
           test -n "${UMAMI_URL:-}" || { echo "::error::Secret UMAMI_URL is empty"; exit 1; }
           test -n "${UMAMI_API_TOKEN:-}" || { echo "::error::Secret UMAMI_API_TOKEN is empty"; exit 1; }
