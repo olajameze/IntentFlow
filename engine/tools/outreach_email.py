@@ -31,6 +31,7 @@ if str(_ROOT) not in sys.path:
     sys.path.insert(0, str(_ROOT))
 
 from config import (
+    outreach_from_email,
     outreach_from_name,
     smtp_configured,
     smtp_host,
@@ -218,7 +219,7 @@ def send_outreach_email(prospect: dict[str, Any]) -> bool:
         print(f"[outreach_email] Missing fields for {name} — skipping send")
         return False
 
-    from_addr = smtp_user() or ""
+    from_addr = outreach_from_email() or smtp_user() or ""
     from_name = outreach_from_name()
 
     msg = MIMEMultipart("alternative")

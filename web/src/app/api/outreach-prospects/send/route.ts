@@ -8,7 +8,8 @@ function getSmtpConfig() {
   const password = process.env.SMTP_PASSWORD?.trim();
   const port = parseInt(process.env.SMTP_PORT ?? "587", 10);
   const fromName = process.env.OUTREACH_FROM_NAME?.trim() || "PestTrace Team";
-  return { host, user, password, port, fromName, configured: !!(host && user && password) };
+  const fromEmail = process.env.OUTREACH_FROM_EMAIL?.trim() || user;
+  return { host, user, password, port, fromName, fromEmail, configured: !!(host && user && password) };
 }
 
 function getDailyLimit(): number {
@@ -34,7 +35,8 @@ async function sendEmail(
   });
 
   await transporter.sendMail({
-    from: `${cfg.fromName} <${cfg.user}>`,
+    from: `${cfg.fromName} <${cfg.fromEmail}>`,
+    replyTo: `${cfg.fromName} <${cfg.fromEmail}>`,
     to,
     subject,
     text: plain,
@@ -56,7 +58,7 @@ export async function POST(req: Request) {
     return NextResponse.json(
       {
         error: "SMTP is not configured.",
-        hint: "Add SMTP_HOST, SMTP_USER, SMTP_PASSWORD (and SMTP_PORT, OUTREACH_FROM_NAME) to your environment variables. For Gmail use an App Password.",
+        hint: "Add SMTP_HOST, SMTP_USER, SMTP_PASSWORD (and SMTP_PORT, OUTREACH_FROM_NAME, OUTREACH_FROM_EMAIL) to your environment variables. For Gmail use an App Password.",
       },
       { status: 400 },
     );

@@ -45,6 +45,7 @@ def _apply_web_env_local_overrides() -> None:
         "SMTP_USER",
         "SMTP_PASSWORD",
         "OUTREACH_FROM_NAME",
+        "OUTREACH_FROM_EMAIL",
         "OUTREACH_DAILY_SEND_LIMIT",
         "OUTREACH_SCRAPE_LIMIT",
         "OUTREACH_COUNTRIES",
@@ -213,6 +214,10 @@ def smtp_configured() -> bool:
 
 def outreach_from_name() -> str:
     return os.getenv("OUTREACH_FROM_NAME", "PestTrace Team").strip() or "PestTrace Team"
+
+
+def outreach_from_email() -> str | None:
+    return os.getenv("OUTREACH_FROM_EMAIL", "").strip() or None
 
 
 def outreach_daily_send_limit() -> int:
