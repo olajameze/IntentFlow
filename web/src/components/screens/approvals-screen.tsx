@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { toast } from "sonner";
-import { ChevronDown, ChevronUp, Trash2 } from "lucide-react";
+import { Check, ChevronDown, ChevronUp, Copy, Trash2 } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -46,6 +46,7 @@ function PostCard({
   const [saving, setSaving] = useState(false);
   const [publishing, setPublishing] = useState(false);
   const [deleting, setDeleting] = useState(false);
+  const [copied, setCopied] = useState(false);
 
   const preview = draft.length > PREVIEW_LENGTH ? draft.slice(0, PREVIEW_LENGTH).trimEnd() + "…" : draft;
 
@@ -104,6 +105,17 @@ function PostCard({
     } finally { setDeleting(false); }
   };
 
+  const copyToClipboard = async () => {
+    try {
+      await navigator.clipboard.writeText(draft);
+      setCopied(true);
+      toast.success("Copied — paste into Facebook or LinkedIn");
+      setTimeout(() => setCopied(false), 2500);
+    } catch {
+      toast.error("Copy failed — select the text manually");
+    }
+  };
+
   const publishNow = async () => {
     setPublishing(true);
     try {
@@ -158,8 +170,19 @@ function PostCard({
             )}
           </div>
 
-          {/* Delete + expand controls */}
+          {/* Copy / Delete / Expand controls */}
           <div className="flex shrink-0 items-center gap-1">
+            <Button
+              type="button"
+              variant="ghost"
+              size="icon"
+              className="h-8 w-8 text-muted-foreground hover:text-foreground"
+              onClick={() => void copyToClipboard()}
+              aria-label="Copy post content"
+              title="Copy to clipboard"
+            >
+              {copied ? <Check className="h-4 w-4 text-emerald-500" /> : <Copy className="h-4 w-4" />}
+            </Button>
             {mode !== "published" && (
               <Button
                 type="button"

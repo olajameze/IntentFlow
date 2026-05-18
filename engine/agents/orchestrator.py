@@ -274,20 +274,21 @@ def enqueue_three_pending_posts_direct(row: dict[str, Any]) -> None:
     brand = row.get("name") or "Brand"
     specs: list[tuple[str, str]] = [
         (
-            "linkedin",
-            "LinkedIn: authoritative operator voice. Strictly follow the mandatory Target Audience → Strategy → "
-            "Content (Headline, The Problem, The Solution, then closing line with domain/URL from JSON). "
-            "Under 2200 characters. No hashtag spam.",
+            "facebook",
+            "Facebook Page post #1: warm, trustworthy, community-operator tone. "
+            "Follow the mandatory Target Audience → Strategy → Content structure (problem–solution, CTA with domain/URL from JSON). "
+            "Max 400 words. Conversational UK English. No hashtag spam.",
         ),
         (
             "facebook",
-            "Facebook Page: warm, trustworthy, community-operator tone. Same mandatory section labels and order as "
-            "global doctrine (problem–solution, domain CTA). UK English.",
+            "Facebook Page post #2: different angle from post #1 — focus on a specific benefit, result, or seasonal/urgency hook. "
+            "Same warm community tone and mandatory structure. Max 400 words. UK English.",
         ),
         (
             "linkedin",
-            "LinkedIn: second angle — proof- or compliance-led framing that still fits the JSON industry/type. "
-            "Same mandatory structure; credible and professional; under 2200 characters.",
+            "LinkedIn: authoritative professional voice. Strictly follow the mandatory Target Audience → Strategy → "
+            "Content (Headline, The Problem, The Solution, then closing line with domain/URL from JSON). "
+            "Under 2200 characters. Credible and professional. No hashtag spam.",
         ),
     ]
     sb = get_supabase()
