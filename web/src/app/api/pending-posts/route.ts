@@ -28,6 +28,21 @@ const updateSchema = z
     message: "Provide at least one of: status, content, scheduled_at",
   });
 
+export async function DELETE(req: Request) {
+  return withSupabaseRoute(async (sb) => {
+    const { searchParams } = new URL(req.url);
+    const id = searchParams.get("id");
+    if (!id) return NextResponse.json({ error: "id required" }, { status: 400 });
+    const { error } = await sb
+      .from("pending_posts")
+      .delete()
+      .eq("id", id)
+      .neq("status", "published"); // prevent deleting already-published posts
+    if (error) return supabaseErrorResponse(error);
+    return NextResponse.json({ ok: true });
+  });
+}
+
 export async function PATCH(req: Request) {
   const json = await req.json();
   const parsed = updateSchema.safeParse(json);
@@ -39,7 +54,7 @@ export async function PATCH(req: Request) {
     if (status !== undefined) updates.status = status;
     if (scheduled_at !== undefined) updates.scheduled_at = scheduled_at;
 
-    const q = sb.from("pending_posts").update(updates).eq("id", id).eq("status", "pending");
+    const q = sb.from("pending_posts").update(updates).eq("id", id).in("status", ["pending", "approved"]);
     const { data, error } = await q.select("*").maybeSingle();
     if (error) return supabaseErrorResponse(error);
     if (!data) {

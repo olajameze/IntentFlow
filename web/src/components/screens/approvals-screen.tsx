@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { toast } from "sonner";
+import { ChevronDown, ChevronUp, Trash2 } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -12,6 +13,8 @@ import { Label } from "@/components/ui/label";
 import { Input } from "@/components/ui/input";
 
 type Post = Record<string, unknown>;
+
+const PREVIEW_LENGTH = 160;
 
 function platformBadgeClass(platform: string) {
   if (platform === "facebook") return "bg-blue-600/15 text-blue-400 border-blue-600/30";
@@ -34,14 +37,17 @@ function PostCard({
   const brand = String(businesses.find((b) => String(b.id) === String(post.business_id))?.name ?? "Unknown");
   const platform = String(post.platform ?? "");
   const [draft, setDraft] = useState(String(post.content ?? ""));
+  const [expanded, setExpanded] = useState(false);
   const [scheduledAt, setScheduledAt] = useState(() => {
     const v = post.scheduled_at as string | null | undefined;
     if (!v) return "";
-    // datetime-local needs "YYYY-MM-DDTHH:mm"
     return v.slice(0, 16);
   });
   const [saving, setSaving] = useState(false);
   const [publishing, setPublishing] = useState(false);
+  const [deleting, setDeleting] = useState(false);
+
+  const preview = draft.length > PREVIEW_LENGTH ? draft.slice(0, PREVIEW_LENGTH).trimEnd() + "…" : draft;
 
   const saveDraft = async () => {
     if (!draft.trim()) { toast.error("Post cannot be empty"); return; }
@@ -83,6 +89,21 @@ function PostCard({
     await onRefresh();
   };
 
+  const deletePost = async () => {
+    if (!window.confirm("Delete this post? This cannot be undone.")) return;
+    setDeleting(true);
+    try {
+      const res = await fetch(`/api/pending-posts?id=${encodeURIComponent(id)}`, { method: "DELETE" });
+      if (!res.ok) {
+        const d = await res.json().catch(() => ({})) as Record<string, unknown>;
+        toast.error(typeof d.error === "string" ? d.error : "Could not delete post");
+        return;
+      }
+      toast.success("Post deleted");
+      await onRefresh();
+    } finally { setDeleting(false); }
+  };
+
   const publishNow = async () => {
     setPublishing(true);
     try {
@@ -103,7 +124,7 @@ function PostCard({
           : typeof data.facebook_post_id === "string"
             ? `Published to Facebook (${data.facebook_post_id})`
             : typeof data.linkedin_post_urn === "string"
-              ? `Published to LinkedIn`
+              ? "Published to LinkedIn"
               : "Marked published";
       toast.success(note, { duration: 8000 });
       await onRefresh();
@@ -111,98 +132,146 @@ function PostCard({
   };
 
   const schedAt = post.scheduled_at as string | null | undefined;
+  const isExpandable = draft.length > PREVIEW_LENGTH || mode === "pending";
 
   return (
     <Card className="border border-border/80 shadow-sm" data-testid="pending-post-card" data-post-id={id}>
-      <CardHeader className="space-y-2">
-        <div className="flex items-center justify-between gap-2 flex-wrap">
-          <CardTitle className="text-base">{brand}</CardTitle>
-          <div className="flex items-center gap-2">
-            <Badge variant="outline" className={platformBadgeClass(platform)}>
-              {platform}
-            </Badge>
-            {mode === "published" && (
-              <Badge variant="secondary" className="rounded-full text-xs">Published</Badge>
-            )}
-            {mode === "approved" && (
-              <Badge className="rounded-full bg-emerald-600/15 text-emerald-400 border border-emerald-600/30 text-xs">
-                Approved
+      {/* ── Header — always visible ───────────────────────────── */}
+      <CardHeader className="pb-2">
+        <div className="flex items-start justify-between gap-2">
+          <div className="min-w-0 flex-1">
+            <div className="flex flex-wrap items-center gap-2">
+              <CardTitle className="text-sm font-semibold">{brand}</CardTitle>
+              <Badge variant="outline" className={`text-[10px] ${platformBadgeClass(platform)}`}>
+                {platform}
               </Badge>
+              {mode === "approved" && (
+                <Badge className="rounded-full border border-emerald-600/30 bg-emerald-600/15 text-[10px] text-emerald-400">
+                  Approved
+                </Badge>
+              )}
+            </div>
+            {schedAt && (
+              <p className="mt-0.5 text-[11px] text-muted-foreground">
+                Scheduled: {new Date(schedAt).toLocaleString()}
+              </p>
+            )}
+          </div>
+
+          {/* Delete + expand controls */}
+          <div className="flex shrink-0 items-center gap-1">
+            {mode !== "published" && (
+              <Button
+                type="button"
+                variant="ghost"
+                size="icon"
+                className="h-8 w-8 text-destructive hover:text-destructive"
+                disabled={deleting}
+                onClick={() => void deletePost()}
+                aria-label="Delete post"
+              >
+                <Trash2 className="h-4 w-4" />
+              </Button>
+            )}
+            {isExpandable && (
+              <Button
+                type="button"
+                variant="ghost"
+                size="icon"
+                className="h-8 w-8"
+                onClick={() => setExpanded((v) => !v)}
+                aria-label={expanded ? "Collapse post" : "Expand post"}
+              >
+                {expanded ? <ChevronUp className="h-4 w-4" /> : <ChevronDown className="h-4 w-4" />}
+              </Button>
             )}
           </div>
         </div>
-        <p className="text-xs text-muted-foreground">
-          {schedAt ? `Scheduled: ${new Date(schedAt).toLocaleString()}` : "Immediate"}
-        </p>
+
+        {/* Preview — shown when collapsed */}
+        {!expanded && (
+          <p
+            className="mt-2 cursor-pointer text-xs leading-relaxed text-muted-foreground"
+            onClick={() => setExpanded(true)}
+          >
+            {preview}
+            {draft.length > PREVIEW_LENGTH && (
+              <span className="ml-1 text-primary underline-offset-2 hover:underline">more</span>
+            )}
+          </p>
+        )}
       </CardHeader>
 
-      <CardContent className="space-y-4">
-        {mode === "published" ? (
-          // Published: read-only view
-          <p className="whitespace-pre-wrap rounded-lg bg-muted/40 px-4 py-3 text-sm leading-relaxed">{draft}</p>
-        ) : (
-          <>
-            <div className="space-y-2">
-              <Label htmlFor={`post-edit-${id}`}>
-                {mode === "approved" ? "Copy (read-only until re-queued)" : "Edit before approve"}
-              </Label>
-              <Textarea
-                id={`post-edit-${id}`}
-                aria-label={`Edit post for ${brand}`}
-                rows={10}
-                className="min-h-[180px] resize-y text-sm leading-relaxed"
-                value={draft}
-                readOnly={mode === "approved"}
-                onChange={mode === "pending" ? (e) => setDraft(e.target.value) : undefined}
-              />
-            </div>
-
-            {mode === "pending" && (
-              <div className="space-y-2">
-                <Label htmlFor={`sched-${id}`}>Schedule (optional)</Label>
-                <Input
-                  id={`sched-${id}`}
-                  type="datetime-local"
-                  value={scheduledAt}
-                  onChange={(e) => setScheduledAt(e.target.value)}
-                  className="h-10 text-sm"
+      {/* ── Expanded body ─────────────────────────────────────── */}
+      {expanded && (
+        <CardContent className="space-y-3 pt-0">
+          {mode === "published" ? (
+            <p className="whitespace-pre-wrap rounded-lg bg-muted/40 px-3 py-2.5 text-xs leading-relaxed">
+              {draft}
+            </p>
+          ) : (
+            <>
+              <div className="space-y-1.5">
+                <Label htmlFor={`post-edit-${id}`} className="text-xs">
+                  {mode === "approved" ? "Copy (tap Save to re-queue for editing)" : "Edit copy"}
+                </Label>
+                <Textarea
+                  id={`post-edit-${id}`}
+                  aria-label={`Edit post for ${brand}`}
+                  rows={6}
+                  className="min-h-[120px] resize-y text-xs leading-relaxed"
+                  value={draft}
+                  readOnly={mode === "approved"}
+                  onChange={mode === "pending" ? (e) => setDraft(e.target.value) : undefined}
                 />
-                <p className="text-xs text-muted-foreground">Leave blank to post immediately when you click Publish.</p>
               </div>
-            )}
 
-            <div className="flex flex-col gap-2 sm:flex-row sm:flex-wrap sm:gap-3">
               {mode === "pending" && (
-                <>
-                  <Button type="button" variant="secondary" className="h-12 w-full sm:flex-1" disabled={saving} onClick={saveDraft}>
-                    {saving ? "Saving…" : "Save edits"}
-                  </Button>
+                <div className="space-y-1.5">
+                  <Label htmlFor={`sched-${id}`} className="text-xs">Schedule (optional)</Label>
+                  <Input
+                    id={`sched-${id}`}
+                    type="datetime-local"
+                    value={scheduledAt}
+                    onChange={(e) => setScheduledAt(e.target.value)}
+                    className="h-9 text-xs"
+                  />
+                </div>
+              )}
+
+              <div className="flex flex-col gap-2 sm:flex-row sm:flex-wrap">
+                {mode === "pending" && (
+                  <>
+                    <Button type="button" variant="secondary" className="h-10 w-full text-xs sm:flex-1" disabled={saving} onClick={saveDraft}>
+                      {saving ? "Saving…" : "Save edits"}
+                    </Button>
+                    <Button
+                      type="button"
+                      className="h-10 w-full bg-emerald-600 text-xs text-white hover:bg-emerald-500 sm:flex-1"
+                      onClick={() => void setStatus("approved")}
+                    >
+                      Approve
+                    </Button>
+                    <Button type="button" variant="destructive" className="h-10 w-full text-xs sm:flex-1" onClick={() => void setStatus("rejected")}>
+                      Reject
+                    </Button>
+                  </>
+                )}
+                {mode === "approved" && (
                   <Button
                     type="button"
-                    className="h-12 w-full bg-emerald-600 text-white hover:bg-emerald-500 sm:flex-1"
-                    onClick={() => void setStatus("approved")}
+                    className="h-10 w-full bg-blue-600 text-xs text-white hover:bg-blue-500"
+                    disabled={publishing}
+                    onClick={() => void publishNow()}
                   >
-                    Approve
+                    {publishing ? "Publishing…" : `Publish to ${platform}`}
                   </Button>
-                  <Button type="button" variant="destructive" className="h-12 w-full sm:flex-1" onClick={() => void setStatus("rejected")}>
-                    Reject
-                  </Button>
-                </>
-              )}
-              {(mode === "approved") && (
-                <Button
-                  type="button"
-                  className="h-12 w-full bg-blue-600 text-white hover:bg-blue-500"
-                  disabled={publishing}
-                  onClick={() => void publishNow()}
-                >
-                  {publishing ? "Publishing…" : `Publish to ${platform}`}
-                </Button>
-              )}
-            </div>
-          </>
-        )}
-      </CardContent>
+                )}
+              </div>
+            </>
+          )}
+        </CardContent>
+      )}
     </Card>
   );
 }
@@ -237,17 +306,15 @@ export function ApprovalsScreen() {
   const published = filter(publishedPosts);
 
   const empty = (label: string) => (
-    <Card>
-      <CardContent className="py-12 text-center text-sm text-muted-foreground">{label}</CardContent>
-    </Card>
+    <p className="py-8 text-center text-sm text-muted-foreground">{label}</p>
   );
 
   return (
-    <div className="min-w-0 space-y-4">
-      <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
+    <div className="min-w-0 space-y-3">
+      <div className="flex items-center gap-3">
         <Select value={biz} onValueChange={(v) => setBiz(typeof v === "string" ? v : "all")}>
-          <SelectTrigger className="w-full md:w-64">
-            <SelectValue placeholder="Filter business" />
+          <SelectTrigger className="h-9 flex-1 text-sm md:max-w-64">
+            <SelectValue placeholder="All brands" />
           </SelectTrigger>
           <SelectContent>
             <SelectItem value="all">All brands</SelectItem>
@@ -258,9 +325,9 @@ export function ApprovalsScreen() {
             ))}
           </SelectContent>
         </Select>
-        <p className="text-sm text-muted-foreground">
-          {pending.length} pending · {approved.length} approved · {published.length} published
-        </p>
+        <span className="shrink-0 text-xs text-muted-foreground">
+          {pending.length}p · {approved.length}a · {published.length}pub
+        </span>
       </div>
 
       <Tabs defaultValue="pending" className="min-w-0">
@@ -284,26 +351,23 @@ export function ApprovalsScreen() {
           <TabsTrigger value="published" className="text-xs sm:text-sm">Published</TabsTrigger>
         </TabsList>
 
-        <TabsContent value="pending" className="mt-4 space-y-4">
+        <TabsContent value="pending" className="mt-3 space-y-2">
           {pending.length
             ? pending.map((p) => (
                 <PostCard key={String(p.id)} post={p} businesses={businesses} mode="pending" onRefresh={load} />
               ))
-            : empty("Nothing waiting for review — the engine will queue drafts on the next run.")}
+            : empty("Nothing waiting — the engine will queue drafts on the next run.")}
         </TabsContent>
 
-        <TabsContent value="approved" className="mt-4 space-y-4">
-          <p className="text-sm text-muted-foreground">
-            These posts are approved and ready. Click <strong>Publish</strong> on each card to push live.
-          </p>
+        <TabsContent value="approved" className="mt-3 space-y-2">
           {approved.length
             ? approved.map((p) => (
                 <PostCard key={String(p.id)} post={p} businesses={businesses} mode="approved" onRefresh={load} />
               ))
-            : empty("No approved posts waiting — approve items from the Pending tab first.")}
+            : empty("No approved posts — approve items from the Pending tab first.")}
         </TabsContent>
 
-        <TabsContent value="published" className="mt-4 space-y-4">
+        <TabsContent value="published" className="mt-3 space-y-2">
           {published.length
             ? published.map((p) => (
                 <PostCard key={String(p.id)} post={p} businesses={businesses} mode="published" onRefresh={load} />
