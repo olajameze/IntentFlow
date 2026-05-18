@@ -1,18 +1,12 @@
-"""Scrape pest control business listings from public directories.
+"""Scrape pest control business websites and extract contact emails.
 
-Targets by country:
-  UK  — Yell.com
-  US  — Yelp.com
-  CA  — YellowPages.ca
-  AU  — Yelp.com.au
+Strategy (works without being blocked):
+  1. Use DuckDuckGo search to find pest control business websites per city/country.
+  2. For each result URL, use requests to visit the site and hunt for a contact email.
+  3. Skip councils, aggregators, Wikipedia, and government sites.
+  4. Insert new prospects into outreach_prospects (unique on email).
 
-Pipeline per business found:
-  1. Extract name, website, phone, address from listing page.
-  2. Visit business website and hunt for contact email (mailto: links, contact pages).
-  3. Validate: skip if no email found, no website, or site appears inactive.
-  4. Insert into outreach_prospects (ON CONFLICT DO NOTHING on email uniqueness).
-
-Returns the number of new prospects written to the DB.
+No Playwright needed — DuckDuckGo + requests is far more reliable.
 """
 
 from __future__ import annotations
@@ -21,7 +15,6 @@ import re
 import sys
 import time
 from pathlib import Path
-from typing import Any
 from urllib.parse import urljoin, urlparse
 
 _ROOT = Path(__file__).resolve().parents[1]
@@ -32,330 +25,283 @@ from config import outreach_scrape_limit
 from supabase_client import get_supabase
 
 
-# ── Email extraction helpers ────────────────────────────────────────────────
+# ── Safe print (ASCII-safe for Windows cp1252 terminals) ─────────────────────
 
-_EMAIL_RE = re.compile(
-    r"[a-zA-Z0-9._%+\-]+@[a-zA-Z0-9.\-]+\.[a-zA-Z]{2,}",
+def _p(msg: str) -> None:
+    print(msg.encode("ascii", errors="replace").decode("ascii"))
+
+
+# ── Email extraction ─────────────────────────────────────────────────────────
+
+_EMAIL_RE = re.compile(r"[a-zA-Z0-9._%+\-]+@[a-zA-Z0-9.\-]+\.[a-zA-Z]{2,}", re.IGNORECASE)
+
+_JUNK = re.compile(
+    r"(example\.com|sentry|noreply|no-reply|donotreply|@2x|\.png|\.jpg|\.gif|\.svg|wix|wordpress|squarespace)",
     re.IGNORECASE,
 )
 
-_JUNK_EMAIL_PATTERNS = re.compile(
-    r"(example|test|noreply|no-reply|donotreply|sentry|support@sentry|@2x|\.png|\.jpg|\.css|wix|wordpress|squarespace)",
+_SKIP_DOMAINS = re.compile(
+    r"(gov\.uk|gov\.au|gov\.ca|\.gov\.|council\.|nhs\.|wikipedia|yelp\.|yell\.|checkatrade|trustmark|"
+    r"checktrade|google\.|facebook\.|twitter\.|instagram\.|linkedin\.|youtube\.)",
     re.IGNORECASE,
 )
 
+_PREFERRED_LOCAL = re.compile(r"^(info|contact|hello|enquiries|admin|office|mail|team|pest)@", re.IGNORECASE)
 
-def _extract_emails_from_text(text: str) -> list[str]:
-    found = _EMAIL_RE.findall(text)
+
+def _extract_emails(html: str) -> list[str]:
+    found = _EMAIL_RE.findall(html)
     clean = []
     for e in found:
-        if _JUNK_EMAIL_PATTERNS.search(e):
+        e = e.lower().strip(".,;:")
+        if _JUNK.search(e):
             continue
-        if len(e) > 80:
+        if len(e) > 80 or "@" not in e:
             continue
-        clean.append(e.lower())
-    return list(dict.fromkeys(clean))  # deduplicate preserving order
+        domain = e.split("@")[-1]
+        if "." not in domain:
+            continue
+        clean.append(e)
+    return list(dict.fromkeys(clean))
 
 
 def _best_email(emails: list[str]) -> str | None:
-    """Pick the most likely contact email — prefer info@/contact@/hello@ over others."""
     if not emails:
         return None
-    priority = ["info@", "contact@", "hello@", "enquiries@", "admin@", "office@"]
-    for prefix in priority:
-        for e in emails:
-            if e.startswith(prefix):
-                return e
+    for e in emails:
+        if _PREFERRED_LOCAL.match(e):
+            return e
     return emails[0]
 
 
-# ── Playwright helpers ──────────────────────────────────────────────────────
+# ── HTTP fetch ────────────────────────────────────────────────────────────────
 
-def _new_browser_context(playwright: Any):  # type: ignore[type-arg]
-    """Launch a headed-less Chromium with realistic headers."""
-    browser = playwright.chromium.launch(headless=True, args=["--no-sandbox"])
-    ctx = browser.new_context(
-        user_agent=(
-            "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
-            "AppleWebKit/537.36 (KHTML, like Gecko) "
-            "Chrome/124.0.0.0 Safari/537.36"
-        ),
-        viewport={"width": 1280, "height": 800},
-        locale="en-GB",
-    )
-    return browser, ctx
+_HEADERS = {
+    "User-Agent": (
+        "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
+        "AppleWebKit/537.36 (KHTML, like Gecko) "
+        "Chrome/124.0.0.0 Safari/537.36"
+    ),
+    "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
+    "Accept-Language": "en-GB,en;q=0.9",
+}
 
 
-def _safe_goto(page: Any, url: str, timeout: int = 15_000) -> bool:
+def _fetch(url: str, timeout: int = 10) -> str:
     try:
-        page.goto(url, timeout=timeout, wait_until="domcontentloaded")
-        return True
+        import requests
+        r = requests.get(url, headers=_HEADERS, timeout=timeout, allow_redirects=True)
+        return r.text
     except Exception:  # noqa: BLE001
-        return False
+        return ""
 
 
-def _find_email_on_website(page: Any, base_url: str) -> str | None:
-    """Visit a business website and return the best contact email found."""
-    # Step 1: scan homepage for mailto links and raw emails
-    text = page.content()
-    emails = _extract_emails_from_text(text)
+def _find_email_on_site(base_url: str) -> str | None:
+    """Fetch homepage + /contact page and return best contact email."""
+    html = _fetch(base_url)
+    emails = _extract_emails(html)
 
-    # Also extract from mailto: hrefs specifically
-    hrefs = page.eval_on_selector_all("a[href^='mailto:']", "els => els.map(e => e.href)")
-    for href in hrefs:
-        m = _EMAIL_RE.search(href.replace("mailto:", ""))
-        if m:
-            emails.append(m.group(0).lower())
+    # Extract from mailto: href attributes
+    for m in re.finditer(r'mailto:([^\s"\'<>?&]+)', html, re.IGNORECASE):
+        candidate = m.group(1).split("?")[0].strip().lower()
+        if "@" in candidate:
+            emails.append(candidate)
 
     best = _best_email(list(dict.fromkeys(emails)))
     if best:
         return best
 
-    # Step 2: try /contact page
-    for slug in ["/contact", "/contact-us", "/get-in-touch", "/about"]:
-        contact_url = urljoin(base_url, slug)
-        if _safe_goto(page, contact_url, timeout=10_000):
-            time.sleep(0.5)
-            text2 = page.content()
-            emails2 = _extract_emails_from_text(text2)
-            hrefs2 = page.eval_on_selector_all("a[href^='mailto:']", "els => els.map(e => e.href)")
-            for href in hrefs2:
-                m = _EMAIL_RE.search(href.replace("mailto:", ""))
-                if m:
-                    emails2.append(m.group(0).lower())
-            best2 = _best_email(list(dict.fromkeys(emails2)))
-            if best2:
-                return best2
+    # Try contact pages
+    for slug in ("/contact", "/contact-us", "/get-in-touch", "/about", "/about-us"):
+        contact_html = _fetch(urljoin(base_url.rstrip("/"), slug), timeout=8)
+        if not contact_html:
+            continue
+        emails2 = _extract_emails(contact_html)
+        for m in re.finditer(r'mailto:([^\s"\'<>?&]+)', contact_html, re.IGNORECASE):
+            candidate = m.group(1).split("?")[0].strip().lower()
+            if "@" in candidate:
+                emails2.append(candidate)
+        best2 = _best_email(list(dict.fromkeys(emails2)))
+        if best2:
+            return best2
 
     return None
 
 
-# ── Country-specific directory scrapers ────────────────────────────────────
+# ── Search queries per country ────────────────────────────────────────────────
 
-def _scrape_yell_uk(page: Any, limit: int) -> list[dict]:
-    """Scrape Yell.com for UK pest control businesses."""
-    results: list[dict] = []
-    locations = ["London", "Manchester", "Birmingham", "Leeds", "Bristol", "Sheffield", "Edinburgh", "Glasgow"]
+_QUERIES: dict[str, list[tuple[str, str]]] = {
+    "UK": [
+        ("pest control London site:.co.uk",         "London"),
+        ("pest control Manchester site:.co.uk",     "Manchester"),
+        ("pest control Birmingham site:.co.uk",     "Birmingham"),
+        ("pest control Bristol site:.co.uk",        "Bristol"),
+        ("pest control Leeds site:.co.uk",          "Leeds"),
+        ("pest control Sheffield site:.co.uk",      "Sheffield"),
+        ("pest control Glasgow site:.co.uk",        "Glasgow"),
+        ("pest control Edinburgh site:.co.uk",      "Edinburgh"),
+        ("pest control Liverpool site:.co.uk",      "Liverpool"),
+        ("pest control Nottingham site:.co.uk",     "Nottingham"),
+        ("pest control Leicester site:.co.uk",      "Leicester"),
+        ("pest control Southampton site:.co.uk",    "Southampton"),
+    ],
+    "US": [
+        ("local pest control company New York contact email",     "New York"),
+        ("local pest control company Los Angeles contact email",  "Los Angeles"),
+        ("local pest control company Chicago contact email",      "Chicago"),
+        ("local pest control company Houston contact email",      "Houston"),
+        ("local pest control company Phoenix contact email",      "Phoenix"),
+        ("local pest control company Philadelphia contact email", "Philadelphia"),
+        ("local pest control company San Antonio contact",        "San Antonio"),
+        ("local pest control company Dallas contact email",       "Dallas"),
+    ],
+    "CA": [
+        ("pest control company Toronto site:.ca",   "Toronto"),
+        ("pest control company Vancouver site:.ca", "Vancouver"),
+        ("pest control company Calgary site:.ca",   "Calgary"),
+        ("pest control company Ottawa site:.ca",    "Ottawa"),
+        ("pest control company Montreal site:.ca",  "Montreal"),
+        ("pest control company Edmonton site:.ca",  "Edmonton"),
+    ],
+    "AU": [
+        ("pest control company Sydney site:.com.au",    "Sydney"),
+        ("pest control company Melbourne site:.com.au", "Melbourne"),
+        ("pest control company Brisbane site:.com.au",  "Brisbane"),
+        ("pest control company Perth site:.com.au",     "Perth"),
+        ("pest control company Adelaide site:.com.au",  "Adelaide"),
+        ("pest control company Canberra site:.com.au",  "Canberra"),
+    ],
+}
 
-    for location in locations:
-        if len(results) >= limit:
-            break
-        url = f"https://www.yell.com/s/pest-control-{location.lower().replace(' ', '-')}.html"
-        if not _safe_goto(page, url):
-            continue
-        time.sleep(1.5)
 
+def _is_skippable_url(url: str) -> bool:
+    """Return True for government, aggregator, social, or non-business URLs."""
+    if not url or not url.startswith("http"):
+        return True
+    if _SKIP_DOMAINS.search(url):
+        return True
+    # Skip obvious aggregators / review sites
+    skip_keywords = ("finder", "nearme", "directory", "listingsuk", "localservices",
+                     "bark.com", "rated.com", "ratedpeople", "trustatrader",
+                     "mybuilder", "quotatis", "homeadvisor", "angi.com")
+    lower = url.lower()
+    return any(k in lower for k in skip_keywords)
+
+
+def _ddg_search(query: str, country_code: str, max_results: int = 8) -> list[str]:
+    """Search DuckDuckGo using both backends and return deduplicated result URLs.
+
+    Runs the query twice — once with the default backend, once with the 'html'
+    backend — to get broader coverage. Results from both are merged and deduped.
+    """
+    from ddgs import DDGS
+
+    region_map = {"UK": "uk-en", "US": "us-en", "CA": "ca-en", "AU": "au-en"}
+    region = region_map.get(country_code, "wt-wt")
+    seen: set[str] = set()
+    results: list[str] = []
+
+    def _collect(backend: str) -> None:
         try:
-            cards = page.query_selector_all("article.businessCapsule")
-            for card in cards:
-                if len(results) >= limit:
-                    break
-                try:
-                    name_el = card.query_selector("h2.businessCapsule--name a")
-                    name = name_el.inner_text().strip() if name_el else ""
-                    if not name:
+            with DDGS() as ddg:
+                kwargs: dict = dict(region=region, safesearch="off", max_results=max_results)
+                if backend != "default":
+                    kwargs["backend"] = backend
+                for r in ddg.text(query, **kwargs):
+                    url = r.get("href") or r.get("url") or ""
+                    if not url or _is_skippable_url(url):
                         continue
-                    website_el = card.query_selector("a[data-tracking='website']")
-                    website = website_el.get_attribute("href") if website_el else ""
-                    phone_el = card.query_selector("span.businessCapsule--telephoneNumber")
-                    phone = phone_el.inner_text().strip() if phone_el else ""
-                    address_el = card.query_selector("span.businessCapsule--address")
-                    address = address_el.inner_text().strip() if address_el else location
+                    parsed = urlparse(url)
+                    root = f"{parsed.scheme}://{parsed.netloc}"
+                    if root not in seen:
+                        seen.add(root)
+                        results.append(root)
+        except Exception as exc:  # noqa: BLE001
+            _p(f"  [ddg/{backend}] Search error: {exc}")
 
-                    if website:
-                        results.append({
-                            "name": name, "website_url": website, "phone": phone,
-                            "city": location, "country": "UK", "source": "yell",
-                            "raw": {"address": address, "yell_url": url},
-                        })
-                except Exception:  # noqa: BLE001
-                    continue
-        except Exception:  # noqa: BLE001
-            continue
+    _collect("default")
+    time.sleep(0.8)  # avoid rate limiting between two rapid calls
+    _collect("html")
 
     return results
 
 
-def _scrape_yelp(page: Any, country: str, limit: int) -> list[dict]:
-    """Scrape Yelp for US, CA, or AU pest control businesses."""
-    results: list[dict] = []
-    domain_map = {"US": "yelp.com", "CA": "yelp.ca", "AU": "yelp.com.au"}
-    city_map = {
-        "US": ["New York", "Los Angeles", "Chicago", "Houston", "Phoenix"],
-        "CA": ["Toronto", "Vancouver", "Calgary", "Montreal", "Ottawa"],
-        "AU": ["Sydney", "Melbourne", "Brisbane", "Perth", "Adelaide"],
-    }
-    domain = domain_map.get(country, "yelp.com")
-    cities = city_map.get(country, [])
-
-    for city in cities:
-        if len(results) >= limit:
-            break
-        city_slug = city.lower().replace(" ", "-")
-        url = f"https://www.{domain}/search?find_desc=pest+control&find_loc={city_slug}"
-        if not _safe_goto(page, url):
-            continue
-        time.sleep(2)
-
-        try:
-            # Yelp renders client-side; extract from JSON-LD or visible text
-            content = page.content()
-            # Extract business names and URLs from Yelp result links
-            links = page.query_selector_all("a[href*='/biz/']")
-            seen: set[str] = set()
-            for link in links:
-                if len(results) >= limit:
-                    break
-                try:
-                    href = link.get_attribute("href") or ""
-                    if not href or href in seen:
-                        continue
-                    seen.add(href)
-                    name = link.inner_text().strip()
-                    if not name or len(name) < 3:
-                        continue
-                    full_href = href if href.startswith("http") else f"https://www.{domain}{href}"
-                    results.append({
-                        "name": name, "website_url": "", "phone": "",
-                        "city": city, "country": country, "source": "yelp",
-                        "raw": {"yelp_url": full_href, "search_url": url},
-                    })
-                except Exception:  # noqa: BLE001
-                    continue
-        except Exception:  # noqa: BLE001
-            continue
-
-    return results
-
-
-def _scrape_yellowpages_ca(page: Any, limit: int) -> list[dict]:
-    """Scrape YellowPages.ca for Canadian pest control businesses."""
-    results: list[dict] = []
-    cities = ["Toronto", "Vancouver", "Calgary", "Edmonton", "Ottawa"]
-
-    for city in cities:
-        if len(results) >= limit:
-            break
-        url = f"https://www.yellowpages.ca/search/si/1/pest+control/{city}"
-        if not _safe_goto(page, url):
-            continue
-        time.sleep(1.5)
-
-        try:
-            cards = page.query_selector_all("div.listing__content")
-            for card in cards:
-                if len(results) >= limit:
-                    break
-                try:
-                    name_el = card.query_selector("a.listing__name")
-                    name = name_el.inner_text().strip() if name_el else ""
-                    if not name:
-                        continue
-                    website_el = card.query_selector("a.listing__website")
-                    website = website_el.get_attribute("href") if website_el else ""
-                    phone_el = card.query_selector("span.listing__phone")
-                    phone = phone_el.inner_text().strip() if phone_el else ""
-                    results.append({
-                        "name": name, "website_url": website, "phone": phone,
-                        "city": city, "country": "CA", "source": "yellowpages_ca",
-                        "raw": {"search_url": url},
-                    })
-                except Exception:  # noqa: BLE001
-                    continue
-        except Exception:  # noqa: BLE001
-            continue
-
-    return results
-
-
-# ── Main scrape entry point ─────────────────────────────────────────────────
+# ── Main entry point ──────────────────────────────────────────────────────────
 
 def scrape_prospects(countries: list[str] | None = None) -> int:
-    """Scrape pest control businesses for the given countries and write new prospects to DB.
+    """Search DuckDuckGo for pest control businesses and extract contact emails.
 
-    Returns the number of newly inserted prospects.
+    Returns number of newly inserted prospects.
     """
-    from playwright.sync_api import sync_playwright
-
     target_countries = [c.upper() for c in (countries or ["UK", "US", "CA", "AU"])]
-    per_country = max(5, outreach_scrape_limit() // max(1, len(target_countries)))
+    limit = outreach_scrape_limit()
+    per_country = max(3, limit // max(1, len(target_countries)))
 
     sb = get_supabase()
     inserted = 0
+    total_searched = 0
 
-    with sync_playwright() as pw:
-        browser, ctx = _new_browser_context(pw)
-        listing_page = ctx.new_page()
-        detail_page = ctx.new_page()
+    for country in target_countries:
+        queries = _QUERIES.get(country, [])
+        country_inserted = 0
+        _p(f"\n[scraper] ── {country} (target {per_country}) ──")
 
-        try:
-            raw_prospects: list[dict] = []
+        for query, city in queries:
+            if country_inserted >= per_country:
+                break
 
-            for country in target_countries:
-                print(f"[scraper] Scraping {country} (limit {per_country})…")
+            _p(f"  [ddg] '{query}'")
+            urls = _ddg_search(query, country, max_results=6)
+            _p(f"  [ddg] {len(urls)} candidate URLs")
+            time.sleep(1.5)  # be polite to DuckDuckGo
+
+            for url in urls:
+                if country_inserted >= per_country:
+                    break
+                total_searched += 1
+
+                # Extract business name from domain
                 try:
-                    if country == "UK":
-                        raw_prospects.extend(_scrape_yell_uk(listing_page, per_country))
-                    elif country in ("US", "AU"):
-                        raw_prospects.extend(_scrape_yelp(listing_page, country, per_country))
-                    elif country == "CA":
-                        raw_prospects.extend(_scrape_yellowpages_ca(listing_page, per_country))
-                except Exception as exc:  # noqa: BLE001
-                    print(f"[scraper] {country} directory error: {exc}")
-
-            print(f"[scraper] Found {len(raw_prospects)} listings. Hunting for emails…")
-
-            for prospect in raw_prospects:
-                website = (prospect.get("website_url") or "").strip()
-                if not website or not website.startswith("http"):
-                    continue
-
-                # Validate domain looks real
-                try:
-                    parsed = urlparse(website)
-                    if not parsed.netloc or len(parsed.netloc) < 4:
-                        continue
+                    netloc = urlparse(url).netloc.replace("www.", "")
+                    name_guess = netloc.split(".")[0].replace("-", " ").replace("_", " ").title()
                 except Exception:  # noqa: BLE001
-                    continue
+                    name_guess = url
 
-                # Find email on the business website
-                email: str | None = None
-                try:
-                    if _safe_goto(detail_page, website, timeout=12_000):
-                        time.sleep(0.8)
-                        email = _find_email_on_website(detail_page, website)
-                except Exception:  # noqa: BLE001
-                    pass
+                _p(f"    [{total_searched}] {name_guess} ({url})")
 
+                # Hunt for email
+                email = _find_email_on_site(url)
                 if not email:
+                    _p(f"      → no email found")
+                    time.sleep(0.3)
                     continue
 
-                # Insert — unique constraint on lower(email) prevents duplicates
+                _p(f"      → email: {email}")
+
+                # Insert into DB
                 try:
-                    sb.table("outreach_prospects").insert(
-                        {
-                            "name": prospect["name"],
-                            "email": email,
-                            "website_url": website,
-                            "phone": prospect.get("phone") or "",
-                            "city": prospect.get("city") or "",
-                            "country": prospect.get("country") or "UK",
-                            "source": prospect.get("source") or "scraper",
-                            "status": "scraped",
-                            "raw": prospect.get("raw") or {},
-                        }
-                    ).execute()
+                    sb.table("outreach_prospects").insert({
+                        "name": name_guess,
+                        "email": email,
+                        "website_url": url,
+                        "phone": "",
+                        "city": city,
+                        "country": country,
+                        "source": f"ddg_{country.lower()}",
+                        "status": "scraped",
+                        "raw": {"query": query},
+                    }).execute()
                     inserted += 1
-                    print(f"[scraper] + {prospect['name']} <{email}>")
+                    country_inserted += 1
+                    _p(f"      + Saved: {name_guess} <{email}>")
                 except Exception as exc:  # noqa: BLE001
-                    err = str(exc)
-                    if "duplicate" in err.lower() or "unique" in err.lower():
-                        pass  # already in DB — skip silently
+                    err = str(exc).lower()
+                    if "duplicate" in err or "unique" in err:
+                        _p(f"      (duplicate — already in DB)")
                     else:
-                        print(f"[scraper] Insert error for {prospect['name']}: {exc}")
+                        _p(f"      Insert error: {exc}")
 
-        finally:
-            browser.close()
+                time.sleep(0.5)
 
-    print(f"[scraper] Done — {inserted} new prospects inserted.")
+    _p(f"\n[scraper] Done — {inserted} new prospects inserted.")
     return inserted
