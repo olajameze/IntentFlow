@@ -16,6 +16,7 @@ Flow:
 
 from __future__ import annotations
 
+import re
 import smtplib
 import sys
 import textwrap
@@ -276,6 +277,3 @@ def _mark_bounced(prospect_id: str) -> None:
     except Exception:  # noqa: BLE001
         pass
 
-
-# Import re at module level (used in send_outreach_email)
-import re  # noqa: E402  (placed after class def for readability; still at module scope)
