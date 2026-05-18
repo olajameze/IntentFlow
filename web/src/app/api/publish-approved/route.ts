@@ -66,6 +66,17 @@ export async function POST(req: Request) {
       return NextResponse.json({ ok: true, linkedin_post_urn: published.postUrn });
     }
 
+    // ── LinkedIn — credentials not configured ─────────────────────────────────
+    if (platform === "linkedin") {
+      return NextResponse.json(
+        {
+          error: "LinkedIn publishing is not configured.",
+          hint: "Add LINKEDIN_ACCESS_TOKEN and LINKEDIN_AUTHOR_URN to your environment variables to enable auto-posting. For now you can copy the post content and paste it manually on LinkedIn.",
+        },
+        { status: 400 },
+      );
+    }
+
     // ── Other platforms (mark published locally) ──────────────────────────────
     await markPublished();
     return NextResponse.json({
