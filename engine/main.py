@@ -17,8 +17,8 @@ def main() -> None:
         "mode",
         nargs="?",
         default="full",
-        choices=["full", "traffic", "revenue"],
-        help="full crew run, traffic-only snapshots, or revenue-only snapshots",
+        choices=["full", "traffic", "revenue", "outreach"],
+        help="full crew run, traffic-only, revenue-only, or PestTrace outreach pipeline",
     )
     args = parser.parse_args()
 
@@ -26,6 +26,10 @@ def main() -> None:
     from tools.stripe_revenue import fetch_stripe_revenue
     from tools.persistence import save_revenue_snapshot
 
+    if args.mode == "outreach":
+        from agents.outreach import run_outreach
+        run_outreach()
+        return
     if args.mode == "full":
         run_all()
     elif args.mode == "traffic":

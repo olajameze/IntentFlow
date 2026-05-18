@@ -7,6 +7,7 @@ import {
   CheckCircle2,
   Home,
   LineChart,
+  Mail,
   Settings,
   TrendingUp,
   Wallet,
@@ -17,8 +18,9 @@ const items = [
   { href: "/", label: "Home", icon: Home },
   { href: "/traffic", label: "Traffic", icon: TrendingUp },
   { href: "/revenue", label: "Revenue", icon: Wallet },
-  { href: "/approvals", label: "Approvals", icon: CheckCircle2 },
-  { href: "/analytics", label: "Analytics", icon: LineChart },
+  { href: "/approvals", label: "Posts", icon: CheckCircle2 },
+  { href: "/outreach", label: "Outreach", icon: Mail },
+  { href: "/analytics", label: "Stats", icon: LineChart },
   { href: "/settings", label: "Settings", icon: Settings },
 ];
 
@@ -45,7 +47,8 @@ export function DashboardNav() {
                 )}
               >
                 <Icon className="h-5 w-5" />
-                {item.label}
+                {/* Sidebar shows full labels */}
+                {item.href === "/approvals" ? "Approvals" : item.href === "/analytics" ? "Analytics" : item.label}
               </Link>
             );
           })}
@@ -59,6 +62,7 @@ export function DashboardNav() {
         </div>
       </aside>
 
+      {/* Mobile bottom nav — 7 items, short labels to fit */}
       <nav
         className="fixed inset-x-0 bottom-0 z-40 flex border-t bg-background/95 pb-[env(safe-area-inset-bottom)] backdrop-blur md:hidden"
         aria-label="Mobile primary"
@@ -71,12 +75,12 @@ export function DashboardNav() {
               key={item.href}
               href={item.href}
               className={cn(
-                "flex min-h-[52px] flex-1 flex-col items-center justify-center gap-1 text-[11px]",
+                "flex min-h-[52px] flex-1 flex-col items-center justify-center gap-0.5 text-[9px]",
                 active ? "text-primary" : "text-muted-foreground",
               )}
             >
-              <Icon className="h-5 w-5" />
-              <span className="font-medium">{item.label}</span>
+              <Icon className="h-4 w-4" />
+              <span className="font-medium leading-tight">{item.label}</span>
             </Link>
           );
         })}

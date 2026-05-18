@@ -40,6 +40,14 @@ def _apply_web_env_local_overrides() -> None:
         "OLLAMA_BASE_URL",
         "OLLAMA_TEXT_MODEL",
         "STRIPE_SECRET_ENCRYPTION_KEY",
+        "SMTP_HOST",
+        "SMTP_PORT",
+        "SMTP_USER",
+        "SMTP_PASSWORD",
+        "OUTREACH_FROM_NAME",
+        "OUTREACH_DAILY_SEND_LIMIT",
+        "OUTREACH_SCRAPE_LIMIT",
+        "OUTREACH_COUNTRIES",
     ):
         raw = vals.get(key)
         if raw is None:
@@ -178,6 +186,52 @@ def active_llm_summary() -> str:
     else:
         parts.append("ollama_fallback=disabled")
     return " | ".join(parts)
+
+
+def smtp_host() -> str | None:
+    return os.getenv("SMTP_HOST", "").strip() or None
+
+
+def smtp_port() -> int:
+    try:
+        return int(os.getenv("SMTP_PORT", "587").strip())
+    except ValueError:
+        return 587
+
+
+def smtp_user() -> str | None:
+    return os.getenv("SMTP_USER", "").strip() or None
+
+
+def smtp_password() -> str | None:
+    return os.getenv("SMTP_PASSWORD", "").strip() or None
+
+
+def smtp_configured() -> bool:
+    return bool(smtp_host() and smtp_user() and smtp_password())
+
+
+def outreach_from_name() -> str:
+    return os.getenv("OUTREACH_FROM_NAME", "PestTrace Team").strip() or "PestTrace Team"
+
+
+def outreach_daily_send_limit() -> int:
+    try:
+        return max(1, int(os.getenv("OUTREACH_DAILY_SEND_LIMIT", "20").strip()))
+    except ValueError:
+        return 20
+
+
+def outreach_scrape_limit() -> int:
+    try:
+        return max(1, int(os.getenv("OUTREACH_SCRAPE_LIMIT", "30").strip()))
+    except ValueError:
+        return 30
+
+
+def outreach_countries() -> list[str]:
+    raw = os.getenv("OUTREACH_COUNTRIES", "UK,US,CA,AU").strip()
+    return [c.strip().upper() for c in raw.split(",") if c.strip()]
 
 
 google_api_key.cache_clear()

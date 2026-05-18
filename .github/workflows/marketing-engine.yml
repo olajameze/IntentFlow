@@ -35,6 +35,16 @@ jobs:
       STRIPE_SECRET_ENCRYPTION_KEY: ${{ secrets.STRIPE_SECRET_ENCRYPTION_KEY }}
       # Pace Groq/API calls between portfolio brands (seconds). Set 0 to disable.
       ENGINE_SLEEP_BETWEEN_BUSINESSES_SEC: "20"
+      # ── PestTrace outreach (disabled by default; set OUTREACH_ENABLED=1 in secrets to enable)
+      OUTREACH_ENABLED: ${{ secrets.OUTREACH_ENABLED || '0' }}
+      SMTP_HOST: ${{ secrets.SMTP_HOST }}
+      SMTP_PORT: ${{ secrets.SMTP_PORT || '587' }}
+      SMTP_USER: ${{ secrets.SMTP_USER }}
+      SMTP_PASSWORD: ${{ secrets.SMTP_PASSWORD }}
+      OUTREACH_FROM_NAME: ${{ secrets.OUTREACH_FROM_NAME || 'PestTrace Team' }}
+      OUTREACH_DAILY_SEND_LIMIT: ${{ secrets.OUTREACH_DAILY_SEND_LIMIT || '20' }}
+      OUTREACH_SCRAPE_LIMIT: ${{ secrets.OUTREACH_SCRAPE_LIMIT || '30' }}
+      OUTREACH_COUNTRIES: ${{ secrets.OUTREACH_COUNTRIES || 'UK,US,CA,AU' }}
     defaults:
       run:
         working-directory: engine
@@ -110,3 +120,9 @@ jobs:
           EOF
       - name: Run CrewAI engine
         run: python main.py full
+      # PestTrace outreach: scrape new pest control businesses + generate email drafts.
+      # Enabled only when OUTREACH_ENABLED=1 is set as a repository secret.
+      # Actual email sending is done from the dashboard after human review.
+      - name: Run outreach pipeline (PestTrace)
+        if: ${{ env.OUTREACH_ENABLED == '1' }}
+        run: python main.py outreach
