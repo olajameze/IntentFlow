@@ -92,7 +92,8 @@ def _llm() -> LLM:
 
 
 def _groq_llm() -> LLM:
-    return LLM(model="groq/llama-3.1-8b-instant", temperature=0.35)
+    model = os.getenv("GROQ_TEXT_MODEL", "llama-3.1-8b-instant").strip() or "llama-3.1-8b-instant"
+    return LLM(model=f"groq/{model}", temperature=0.35)
 
 
 def _crew_tool_calls_enabled() -> bool:
@@ -298,7 +299,7 @@ def enqueue_three_pending_posts_direct(row: dict[str, Any]) -> None:
         "Configure GROQ_API_KEY",
         "[Draft — configure LLM fallback]",
         "[Draft — LLM fallback failed]",
-        "[Draft — LLM error] Gemini failed",
+        "[Draft — LLM error]",
     )
     for platform, template in specs:
         body = ""

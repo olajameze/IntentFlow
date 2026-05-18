@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 import os
+import re
 import sys
 import time
 from pathlib import Path
@@ -45,6 +46,28 @@ def _gemini_model_name() -> str:
     return os.getenv("GEMINI_TEXT_MODEL", "gemini-2.0-flash").strip() or "gemini-2.0-flash"
 
 
+def _groq_model_name() -> str:
+    return os.getenv("GROQ_TEXT_MODEL", "llama-3.1-8b-instant").strip() or "llama-3.1-8b-instant"
+
+
+def _is_groq_rate_limit(exc: BaseException) -> bool:
+    err = str(exc).lower()
+    return (
+        "rate_limit_exceeded" in err
+        or "rate limit reached" in err
+        or "tokens per minute" in err
+        or "too many requests" in err
+        or ("tpm" in err and "limit" in err)
+    )
+
+
+def _groq_wait_seconds(exc: BaseException) -> float:
+    m = re.search(r"try again in ([0-9.]+)\s*s", str(exc), re.I)
+    if m:
+        return min(90.0, float(m.group(1)) + 1.5)
+    return 12.0
+
+
 def _groq_generate(prompt: str) -> str:
     gq = groq_api_key()
     if not gq:
@@ -52,12 +75,26 @@ def _groq_generate(prompt: str) -> str:
     from groq import Groq
 
     client = Groq(api_key=gq)
-    chat = client.chat.completions.create(
-        model="llama-3.1-8b-instant",
-        messages=[{"role": "user", "content": prompt}],
-        temperature=0.7,
-    )
-    return (chat.choices[0].message.content or "").strip()
+    raw_retries = os.getenv("GROQ_TEXT_RETRIES", "3").strip()
+    try:
+        retries = max(1, int(raw_retries))
+    except ValueError:
+        retries = 3
+
+    for attempt in range(retries):
+        try:
+            chat = client.chat.completions.create(
+                model=_groq_model_name(),
+                messages=[{"role": "user", "content": prompt}],
+                temperature=0.7,
+            )
+            return (chat.choices[0].message.content or "").strip()
+        except Exception as exc:  # noqa: BLE001
+            if _is_groq_rate_limit(exc) and attempt < retries - 1:
+                time.sleep(_groq_wait_seconds(exc))
+                continue
+            return ""
+    return ""
 
 
 def _google_error_try_groq(exc: BaseException) -> bool:

@@ -140,7 +140,7 @@ export function TrafficScreen() {
   const snippet = `<script async src="${umamiBase}/script.js" data-website-id="${websiteId ? String(websiteId) : "YOUR_WEBSITE_ID"}"></script>`;
 
   return (
-    <Tabs defaultValue="overview" className="space-y-4">
+    <Tabs defaultValue="overview" className="min-w-0 space-y-4">
       <TabsList className="grid w-full grid-cols-2 md:w-auto md:inline-flex">
         <TabsTrigger value="overview">Overview</TabsTrigger>
         <TabsTrigger value="tracking">Tracking code</TabsTrigger>
