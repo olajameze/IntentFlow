@@ -2,14 +2,33 @@ import { NextResponse } from "next/server";
 import { withSupabaseRoute } from "@/lib/with-supabase-route";
 import nodemailer from "nodemailer";
 
+type EmailProvider = "smtp" | "resend" | "auto";
+
+function getEmailProvider(): EmailProvider {
+  const raw = process.env.OUTREACH_EMAIL_PROVIDER?.trim().toLowerCase();
+  if (raw === "smtp" || raw === "resend" || raw === "auto") return raw;
+  return "auto";
+}
+
+function getBaseConfig() {
+  const fromName = process.env.OUTREACH_FROM_NAME?.trim() || "PestTrace Team";
+  const fromEmail = process.env.OUTREACH_FROM_EMAIL?.trim() || process.env.SMTP_USER?.trim();
+  return { fromName, fromEmail };
+}
+
 function getSmtpConfig() {
   const host = process.env.SMTP_HOST?.trim();
   const user = process.env.SMTP_USER?.trim();
   const password = process.env.SMTP_PASSWORD?.trim();
   const port = parseInt(process.env.SMTP_PORT ?? "587", 10);
-  const fromName = process.env.OUTREACH_FROM_NAME?.trim() || "PestTrace Team";
-  const fromEmail = process.env.OUTREACH_FROM_EMAIL?.trim() || user;
+  const { fromName, fromEmail } = getBaseConfig();
   return { host, user, password, port, fromName, fromEmail, configured: !!(host && user && password) };
+}
+
+function getResendConfig() {
+  const apiKey = process.env.RESEND_API_KEY?.trim();
+  const { fromName, fromEmail } = getBaseConfig();
+  return { apiKey, fromName, fromEmail, configured: !!(apiKey && fromEmail) };
 }
 
 function getDailyLimit(): number {
@@ -18,7 +37,7 @@ function getDailyLimit(): number {
   return Number.isFinite(n) && n > 0 ? n : 20;
 }
 
-async function sendEmail(
+async function sendEmailViaSmtp(
   to: string,
   subject: string,
   html: string,
@@ -44,6 +63,75 @@ async function sendEmail(
   });
 }
 
+async function sendEmailViaResend(
+  to: string,
+  subject: string,
+  html: string,
+  plain: string,
+) {
+  const cfg = getResendConfig();
+  if (!cfg.configured) throw new Error("Resend not configured");
+
+  const response = await fetch("https://api.resend.com/emails", {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      Authorization: `Bearer ${cfg.apiKey}`,
+    },
+    body: JSON.stringify({
+      from: `${cfg.fromName} <${cfg.fromEmail}>`,
+      to: [to],
+      subject,
+      html,
+      text: plain,
+      reply_to: cfg.fromEmail,
+    }),
+  });
+
+  if (!response.ok) {
+    const body = await response.text();
+    throw new Error(`Resend error (${response.status}): ${body || "Unknown error"}`);
+  }
+}
+
+async function sendEmail(
+  to: string,
+  subject: string,
+  html: string,
+  plain: string,
+) {
+  const provider = getEmailProvider();
+  const smtpConfigured = getSmtpConfig().configured;
+  const resendConfigured = getResendConfig().configured;
+
+  if (provider === "smtp") {
+    await sendEmailViaSmtp(to, subject, html, plain);
+    return;
+  }
+
+  if (provider === "resend") {
+    await sendEmailViaResend(to, subject, html, plain);
+    return;
+  }
+
+  // auto: prefer Resend when configured, then fallback to SMTP
+  if (resendConfigured) {
+    try {
+      await sendEmailViaResend(to, subject, html, plain);
+      return;
+    } catch (firstError) {
+      if (!smtpConfigured) throw firstError;
+    }
+  }
+
+  if (smtpConfigured) {
+    await sendEmailViaSmtp(to, subject, html, plain);
+    return;
+  }
+
+  throw new Error("No email provider configured");
+}
+
 function htmlToPlain(html: string): string {
   return html.replace(/<[^>]+>/g, " ").replace(/\s{2,}/g, " ").trim();
 }
@@ -53,12 +141,20 @@ export async function POST(req: Request) {
   const body = await req.json().catch(() => ({})) as Record<string, unknown>;
   const bulk = body.bulk === true;
 
-  const cfg = getSmtpConfig();
-  if (!cfg.configured) {
+  const provider = getEmailProvider();
+  const smtpConfigured = getSmtpConfig().configured;
+  const resendConfigured = getResendConfig().configured;
+  const configuredForRequestedProvider = provider === "smtp"
+    ? smtpConfigured
+    : provider === "resend"
+      ? resendConfigured
+      : (smtpConfigured || resendConfigured);
+
+  if (!configuredForRequestedProvider) {
     return NextResponse.json(
       {
-        error: "SMTP is not configured.",
-        hint: "Add SMTP_HOST, SMTP_USER, SMTP_PASSWORD (and SMTP_PORT, OUTREACH_FROM_NAME, OUTREACH_FROM_EMAIL) to your environment variables. For Gmail use an App Password.",
+        error: "Email sender is not configured.",
+        hint: "Set OUTREACH_EMAIL_PROVIDER=smtp|resend|auto. For SMTP: SMTP_HOST, SMTP_USER, SMTP_PASSWORD (and SMTP_PORT). For Resend: RESEND_API_KEY and OUTREACH_FROM_EMAIL.",
       },
       { status: 400 },
     );
