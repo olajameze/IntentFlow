@@ -15,13 +15,13 @@ import {
 import { cn } from "@/lib/utils";
 
 const items = [
-  { href: "/", label: "Home", icon: Home },
-  { href: "/traffic", label: "Traffic", icon: TrendingUp },
-  { href: "/revenue", label: "Revenue", icon: Wallet },
-  { href: "/approvals", label: "Posts", icon: CheckCircle2 },
-  { href: "/outreach", label: "Outreach", icon: Mail },
-  { href: "/analytics", label: "Stats", icon: LineChart },
-  { href: "/settings", label: "Settings", icon: Settings },
+  { href: "/", label: "Home",     mobileLabel: "Home",     icon: Home },
+  { href: "/traffic",   label: "Traffic",   mobileLabel: "Traffic",  icon: TrendingUp },
+  { href: "/revenue",   label: "Revenue",   mobileLabel: "Revenue",  icon: Wallet },
+  { href: "/approvals", label: "Approvals", mobileLabel: "Posts",    icon: CheckCircle2 },
+  { href: "/outreach",  label: "Outreach",  mobileLabel: "Email",    icon: Mail },
+  { href: "/analytics", label: "Analytics", mobileLabel: "Stats",    icon: LineChart },
+  { href: "/settings",  label: "Settings",  mobileLabel: "Settings", icon: Settings },
 ];
 
 export function DashboardNav() {
@@ -47,8 +47,7 @@ export function DashboardNav() {
                 )}
               >
                 <Icon className="h-5 w-5" />
-                {/* Sidebar shows full labels */}
-                {item.href === "/approvals" ? "Approvals" : item.href === "/analytics" ? "Analytics" : item.label}
+                {item.label}
               </Link>
             );
           })}
@@ -80,7 +79,7 @@ export function DashboardNav() {
               )}
             >
               <Icon className="h-4 w-4" />
-              <span className="font-medium leading-tight">{item.label}</span>
+              <span className="font-medium leading-tight">{item.mobileLabel}</span>
             </Link>
           );
         })}

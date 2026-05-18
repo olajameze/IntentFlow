@@ -28,7 +28,7 @@ from supabase_client import get_supabase
 # ── Safe print (ASCII-safe for Windows cp1252 terminals) ─────────────────────
 
 def _p(msg: str) -> None:
-    print(msg.encode("ascii", errors="replace").decode("ascii"))
+    print(msg)
 
 
 # ── Email extraction ─────────────────────────────────────────────────────────
@@ -99,15 +99,19 @@ def _fetch(url: str, timeout: int = 10) -> str:
 def _find_email_on_site(base_url: str) -> str | None:
     """Fetch homepage + /contact page and return best contact email."""
     html = _fetch(base_url)
-    emails = _extract_emails(html)
+    def _emails_from_html(source: str) -> list[str]:
+        """Extract and validate emails from both raw text and mailto: hrefs."""
+        raw_text_emails = _extract_emails(source)
+        mailto_candidates = [
+            m.group(1).split("?")[0].strip().lower()
+            for m in re.finditer(r'mailto:([^\s"\'<>?&]+)', source, re.IGNORECASE)
+        ]
+        # Validate mailto candidates through the same regex + junk filter
+        mailto_emails = _extract_emails(" ".join(mailto_candidates))
+        return list(dict.fromkeys(raw_text_emails + mailto_emails))
 
-    # Extract from mailto: href attributes
-    for m in re.finditer(r'mailto:([^\s"\'<>?&]+)', html, re.IGNORECASE):
-        candidate = m.group(1).split("?")[0].strip().lower()
-        if "@" in candidate:
-            emails.append(candidate)
-
-    best = _best_email(list(dict.fromkeys(emails)))
+    emails = _emails_from_html(html)
+    best = _best_email(emails)
     if best:
         return best
 
@@ -116,12 +120,7 @@ def _find_email_on_site(base_url: str) -> str | None:
         contact_html = _fetch(urljoin(base_url.rstrip("/"), slug), timeout=8)
         if not contact_html:
             continue
-        emails2 = _extract_emails(contact_html)
-        for m in re.finditer(r'mailto:([^\s"\'<>?&]+)', contact_html, re.IGNORECASE):
-            candidate = m.group(1).split("?")[0].strip().lower()
-            if "@" in candidate:
-                emails2.append(candidate)
-        best2 = _best_email(list(dict.fromkeys(emails2)))
+        best2 = _best_email(_emails_from_html(contact_html))
         if best2:
             return best2
 
