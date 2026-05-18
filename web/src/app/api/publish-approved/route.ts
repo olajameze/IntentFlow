@@ -51,9 +51,8 @@ export async function POST(req: Request) {
       if (!creds) {
         return NextResponse.json(
           {
-            error:
-              "LinkedIn credentials not configured. Set LINKEDIN_ACCESS_TOKEN and LINKEDIN_AUTHOR_URN in your environment variables.",
-            hint: "Get a token from the LinkedIn Developer Portal. Author URN: call GET https://api.linkedin.com/v2/me and use 'urn:li:person:{id}' (for an organisation use 'urn:li:organization:{orgId}').",
+            error: "LinkedIn publishing is not configured.",
+            hint: "Add LINKEDIN_ACCESS_TOKEN and LINKEDIN_AUTHOR_URN to your environment variables to enable auto-posting. For now, copy the post content and paste it manually on LinkedIn.",
           },
           { status: 400 },
         );
@@ -64,17 +63,6 @@ export async function POST(req: Request) {
       }
       await markPublished();
       return NextResponse.json({ ok: true, linkedin_post_urn: published.postUrn });
-    }
-
-    // ── LinkedIn — credentials not configured ─────────────────────────────────
-    if (platform === "linkedin") {
-      return NextResponse.json(
-        {
-          error: "LinkedIn publishing is not configured.",
-          hint: "Add LINKEDIN_ACCESS_TOKEN and LINKEDIN_AUTHOR_URN to your environment variables to enable auto-posting. For now you can copy the post content and paste it manually on LinkedIn.",
-        },
-        { status: 400 },
-      );
     }
 
     // ── Other platforms (mark published locally) ──────────────────────────────
