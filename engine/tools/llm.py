@@ -1,4 +1,4 @@
-"""LLM helpers — Gemini (preferred) or Groq fallback."""
+"""LLM helpers — Groq (primary) → Ollama (local fallback) → Gemini (optional legacy)."""
 
 from __future__ import annotations
 
@@ -35,7 +35,14 @@ def _dbg_llm(hypothesis_id: str, location: str, message: str, data: dict) -> Non
     # #endregion
 
 
-from config import google_api_key, groq_api_key, llm_skip_google
+from config import (
+    google_api_key,
+    groq_api_key,
+    llm_skip_google,
+    ollama_base_url,
+    ollama_fallback_enabled,
+    ollama_text_model,
+)
 from .copy_doctrine import GLOBAL_COPY_DOCTRINE
 
 # Set True after Gemini auth/permission fails once and Groq returns copy — avoids hammering Gemini for every draft in the same process.
@@ -95,6 +102,39 @@ def _groq_generate(prompt: str) -> str:
                 continue
             return ""
     return ""
+
+
+def _ollama_generate(prompt: str) -> str:
+    """Call a local Ollama server for copy generation. Uses stdlib only (no extra deps).
+
+    Returns empty string on any failure (server not running, model not pulled, timeout, etc.)
+    so callers can fall through to the next provider.
+    """
+    if not ollama_fallback_enabled():
+        return ""
+    import urllib.error
+    import urllib.request
+
+    base = ollama_base_url().rstrip("/")
+    model = ollama_text_model()
+    payload = json.dumps({"model": model, "prompt": prompt, "stream": False}).encode()
+    raw_timeout = os.getenv("OLLAMA_TIMEOUT_SEC", "120").strip()
+    try:
+        timeout = max(30, int(raw_timeout))
+    except ValueError:
+        timeout = 120
+    try:
+        req = urllib.request.Request(
+            f"{base}/api/generate",
+            data=payload,
+            headers={"Content-Type": "application/json"},
+            method="POST",
+        )
+        with urllib.request.urlopen(req, timeout=timeout) as resp:
+            body = json.loads(resp.read().decode())
+            return (body.get("response") or "").strip()
+    except Exception:  # noqa: BLE001
+        return ""
 
 
 def _google_error_try_groq(exc: BaseException) -> bool:
@@ -196,13 +236,23 @@ Return concise, compliant copy only (no meta-commentary). UK English."""
             "groq_after_gemini_fail": _groq_only_after_gemini_auth_failure,
             "has_google_api_key": bool(google_api_key()),
             "has_groq_env": _groq_raw,
+            "ollama_fallback_enabled": ollama_fallback_enabled(),
+            "ollama_model": ollama_text_model() if ollama_fallback_enabled() else None,
             "gemini_model": _gemini_model_name(),
         },
     )
     # #endregion
 
     if llm_skip_google() or _groq_only_after_gemini_auth_failure:
-        return _groq_generate(prompt) or "Set GROQ_API_KEY (Groq-only: no Gemini key or ENGINE_USE_GROQ_ONLY=1)."
+        result = _groq_generate(prompt)
+        if result:
+            return result
+        # Groq returned empty (rate-limit, bad key, network) — try local Ollama before giving up.
+        ollama_result = _ollama_generate(prompt)
+        if ollama_result:
+            print("IntentFlow: Groq returned empty — used Ollama fallback successfully.")
+            return ollama_result
+        return "Set GROQ_API_KEY or start Ollama with ENGINE_USE_OLLAMA_FALLBACK=1 (Groq-only mode, both unavailable)."
     gkey = google_api_key()
     if gkey:
         import google.generativeai as genai
@@ -266,4 +316,11 @@ Return concise, compliant copy only (no meta-commentary). UK English."""
                 "Fix GOOGLE_API_KEY / model access, or add GROQ_API_KEY and set ENGINE_USE_GROQ_ONLY=1 to draft with Groq."
             )
 
-    return _groq_generate(prompt) or "Set GROQ_API_KEY in engine/.env or web/.env.local (no GOOGLE_API_KEY — Groq-only)."
+    result = _groq_generate(prompt)
+    if result:
+        return result
+    ollama_result = _ollama_generate(prompt)
+    if ollama_result:
+        print("IntentFlow: Groq returned empty — used Ollama fallback successfully.")
+        return ollama_result
+    return "Set GROQ_API_KEY in engine/.env or web/.env.local, or enable ENGINE_USE_OLLAMA_FALLBACK=1 (no GOOGLE_API_KEY — Groq-only)."

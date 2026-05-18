@@ -36,6 +36,9 @@ def _apply_web_env_local_overrides() -> None:
         "GROQ_API_KEY",
         "ENGINE_USE_GROQ_ONLY",
         "ENGINE_FORCE_GROQ",
+        "ENGINE_USE_OLLAMA_FALLBACK",
+        "OLLAMA_BASE_URL",
+        "OLLAMA_TEXT_MODEL",
         "STRIPE_SECRET_ENCRYPTION_KEY",
     ):
         raw = vals.get(key)
@@ -140,6 +143,41 @@ def umami_api_key() -> str | None:
 def stripe_encryption_key() -> str | None:
     v = os.getenv("STRIPE_SECRET_ENCRYPTION_KEY", "").strip()
     return v or None
+
+
+def ollama_base_url() -> str:
+    """Base URL for a running Ollama server (default: localhost)."""
+    v = os.getenv("OLLAMA_BASE_URL", "http://127.0.0.1:11434").strip().strip('"').strip("'")
+    return v or "http://127.0.0.1:11434"
+
+
+def ollama_text_model() -> str:
+    """Ollama model tag to use for copy generation (default: llama3.2:1b — fast, ~770 MB)."""
+    v = os.getenv("OLLAMA_TEXT_MODEL", "llama3.2:1b").strip().strip('"').strip("'")
+    return v or "llama3.2:1b"
+
+
+def ollama_fallback_enabled() -> bool:
+    """True when ENGINE_USE_OLLAMA_FALLBACK=1 is set — enables Ollama as fallback after Groq fails/returns empty."""
+    return os.getenv("ENGINE_USE_OLLAMA_FALLBACK", "").strip().lower() in {"1", "true", "yes"}
+
+
+def active_llm_summary() -> str:
+    """Human-readable string describing the active LLM provider chain for log/diagnostic output."""
+    parts: list[str] = []
+    if llm_skip_google():
+        parts.append("groq_only=true")
+    elif google_api_key():
+        parts.append("google=true")
+    if groq_api_key():
+        parts.append(f"groq={os.getenv('GROQ_TEXT_MODEL', 'llama-3.1-8b-instant')}")
+    else:
+        parts.append("groq=missing_key")
+    if ollama_fallback_enabled():
+        parts.append(f"ollama_fallback={ollama_text_model()}@{ollama_base_url()}")
+    else:
+        parts.append("ollama_fallback=disabled")
+    return " | ".join(parts)
 
 
 google_api_key.cache_clear()

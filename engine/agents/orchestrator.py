@@ -22,7 +22,7 @@ from crewai.tools import tool
 
 from agents.factory import agents_for_type
 from agents.tasks import build_social_generation_task
-from config import google_api_key, groq_api_key, llm_skip_google
+from config import active_llm_summary, google_api_key, groq_api_key, llm_skip_google, ollama_fallback_enabled
 from crypto_util import decrypt_stripe_secret
 from supabase_client import get_supabase
 from tools.copy_doctrine import PESTTRACE_B2B_FOCUS
@@ -308,9 +308,9 @@ def enqueue_three_pending_posts_direct(row: dict[str, Any]) -> None:
         except Exception as exc:  # noqa: BLE001
             print(f"enqueue_three_pending_posts_direct ({platform}) LLM error: {exc}")
             body = (
-                f"[Draft — LLM error] Placeholder {platform} post for {brand}. "
-                f"Fix Gemini quota / GEMINI_TEXT_MODEL or set GROQ_API_KEY "
-                f"with ENGINE_USE_GROQ_ONLY=1 / ENGINE_FORCE_GROQ=1. ({type(exc).__name__})"
+                f"[Draft — LLM error] Could not generate {platform} post for {brand}. "
+                f"Check GROQ_API_KEY (primary) and ENGINE_USE_OLLAMA_FALLBACK=1 (fallback). "
+                f"({type(exc).__name__})"
             )
         if not body.strip() or any(marker in body for marker in _llm_key_hint_markers):
             body = f"[Draft — add LLM keys] Short {platform} update for {brand}."
@@ -506,6 +506,14 @@ def run_crew_for_business(row: dict[str, Any]) -> str:
 
 
 def run_all() -> None:
+    print("=" * 60)
+    print("IntentFlow engine — LLM provider chain:", active_llm_summary())
+    if ollama_fallback_enabled():
+        print("Ollama fallback is ON — engine will use local model if Groq is unavailable.")
+    else:
+        print("Ollama fallback is OFF — set ENGINE_USE_OLLAMA_FALLBACK=1 to enable credit-free fallback.")
+    print("=" * 60)
+
     raw = os.getenv("ENGINE_SLEEP_BETWEEN_BUSINESSES_SEC", "0").strip()
     try:
         inter_sleep = max(0.0, float(raw))

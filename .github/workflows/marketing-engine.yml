@@ -25,6 +25,11 @@ jobs:
       GROQ_API_KEY: ${{ secrets.GROQ_API_KEY }}
       ENGINE_USE_GROQ_ONLY: "1"
       ENGINE_FORCE_GROQ: "1"
+      # Ollama local fallback — used automatically when Groq returns empty / rate-limits.
+      ENGINE_USE_OLLAMA_FALLBACK: "1"
+      OLLAMA_BASE_URL: "http://127.0.0.1:11434"
+      OLLAMA_TEXT_MODEL: "llama3.2:1b"
+      OLLAMA_TIMEOUT_SEC: "180"
       UMAMI_URL: ${{ secrets.UMAMI_URL }}
       UMAMI_API_TOKEN: ${{ secrets.UMAMI_API_TOKEN }}
       STRIPE_SECRET_ENCRYPTION_KEY: ${{ secrets.STRIPE_SECRET_ENCRYPTION_KEY }}
@@ -62,8 +67,46 @@ jobs:
           fi
           test -n "${UMAMI_URL:-}" || { echo "::error::Secret UMAMI_URL is empty"; exit 1; }
           test -n "${UMAMI_API_TOKEN:-}" || { echo "::error::Secret UMAMI_API_TOKEN is empty"; exit 1; }
+          echo "::notice::LLM chain: Groq (primary) → Ollama llama3.2:1b (fallback) → safe placeholder"
+      # Install and start Ollama so it is available as a fallback if Groq rate-limits.
+      # The pull (~770 MB) runs in parallel with the import check to save time.
+      - name: Install Ollama
+        run: |
+          curl -fsSL https://ollama.com/install.sh | sh
+          ollama serve &
+          # Wait until the server is accepting connections (up to 30 s).
+          for i in $(seq 1 30); do
+            curl -sf http://127.0.0.1:11434/ > /dev/null 2>&1 && echo "Ollama ready after ${i}s" && break
+            sleep 1
+          done
+      - name: Pull Ollama model
+        run: |
+          ollama pull llama3.2:1b
+          echo "::notice::Ollama llama3.2:1b ready — will be used if Groq is unavailable."
       # Fails fast if engine is run as scripts (no package parent) with relative imports left in place.
       - name: Verify engine imports (CLI layout)
         run: python -c "import crypto_util, supabase_client, main; print('CLI import graph OK')"
+      - name: LLM provider diagnostics
+        run: |
+          python - <<'EOF'
+          import sys
+          sys.path.insert(0, ".")
+          from config import active_llm_summary, ollama_fallback_enabled, ollama_text_model, ollama_base_url
+          import urllib.request, json
+          print("LLM provider chain:", active_llm_summary())
+          # Verify Ollama is reachable
+          if ollama_fallback_enabled():
+              try:
+                  with urllib.request.urlopen(f"{ollama_base_url()}/api/tags", timeout=5) as r:
+                      tags = json.loads(r.read())
+                      names = [m.get("name") for m in tags.get("models", [])]
+                      print("Ollama models available:", names)
+                      if ollama_text_model() in names:
+                          print(f"Ollama fallback: {ollama_text_model()} confirmed ready.")
+                      else:
+                          print(f"::warning::Ollama model {ollama_text_model()} not in list — fallback may fail.")
+              except Exception as e:
+                  print(f"::warning::Ollama not reachable: {e}")
+          EOF
       - name: Run CrewAI engine
         run: python main.py full
