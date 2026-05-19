@@ -25,8 +25,10 @@ def build_social_generation_task(
             "only when those terms are justified by the JSON context (do not invent stack, clients, or awards).\n\n"
             "Business context (JSON — source of truth; do not contradict):\n"
             f"{business_context_json}\n\n"
-            "Structure the copy with an authoritative headline, a clear problem context, an engineered solution description, "
+            "Structure the copy with an authoritative headline, a specific real-world problem context, a clear solution from this business, "
             "and end strictly with the domain or website URL as a clean action line (plain text).\n"
+            "Every post must follow PROBLEM -> SOLUTION logic. No generic promotional copy.\n"
+            "Strictly no TikTok/video content references; output must suit text-only, image, carousel, or article formats for LinkedIn/Facebook.\n"
             "The tone must be professional, reassuring, and completely free from needy or desperate sales pitches.\n\n"
             "Call generate_personalised_copy_tool exactly once. Arguments must be **strings**:\n"
             f"- business_context: paste the JSON block above as a single string (same characters)\n"
@@ -44,8 +46,10 @@ def build_social_generation_task(
             "only when those terms are justified by the JSON context (do not invent stack, clients, or awards).\n\n"
             "Business context (JSON — source of truth; do not contradict):\n"
             f"{business_context_json}\n\n"
-            "Structure the copy with an authoritative headline, a clear problem context, an engineered solution description, "
+            "Structure the copy with an authoritative headline, a specific real-world problem context, a clear solution from this business, "
             "and end strictly with the domain or website URL as a clean action line (plain text).\n"
+            "Every post must follow PROBLEM -> SOLUTION logic. No generic promotional copy.\n"
+            "Strictly no TikTok/video content references; output must suit text-only, image, carousel, or article formats for LinkedIn/Facebook.\n"
             "The tone must be professional, reassuring, and completely free from needy or desperate sales pitches.\n\n"
             "Do **not** call any tools — write the final post yourself. Follow the multiline specification between "
             "<<<TEMPLATE>>> and <<<END>>> as your rubric (same sections and order).\n\n"
@@ -58,7 +62,8 @@ def build_social_generation_task(
         description=body,
         expected_output=(
             "A high-converting, uniquely framed social post tailored specifically for Facebook and LinkedIn, "
-            "with Target Audience, Strategy, and Content (Headline / The Problem / The Solution) plus domain CTA."
+            "with Target Audience, Strategy, and Content (Headline / The Problem / The Solution) plus domain CTA, "
+            "following strict problem->solution logic and non-video channel constraints."
         ),
         agent=agent,
     )

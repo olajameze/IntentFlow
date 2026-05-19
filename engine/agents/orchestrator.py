@@ -25,7 +25,7 @@ from agents.tasks import build_social_generation_task
 from config import active_llm_summary, google_api_key, groq_api_key, llm_skip_google, ollama_fallback_enabled
 from crypto_util import decrypt_stripe_secret
 from supabase_client import get_supabase
-from tools.copy_doctrine import PESTTRACE_B2B_FOCUS
+from tools.copy_doctrine import JGDEVS_MARKETING_FOCUS, PESTTRACE_B2B_FOCUS, WEATHERS_SEASONAL_FOCUS
 from tools.llm import generate_personalised_copy, gemini_error_should_use_groq, groq_only_after_gemini_auth_failure
 from tools.persistence import save_revenue_snapshot, save_traffic_snapshot
 from tools.similarweb import scrape_similarweb_traffic
@@ -34,10 +34,16 @@ from tools.umami import fetch_umami_stats
 
 
 def _extra_copy_doctrine_for_row(row: dict[str, Any]) -> str | None:
-    """PestTrace B2B SaaS: compliance-led operator positioning (see requirements.md)."""
+    """Brand-specific doctrine overlays for social and marketing copy."""
     name = (row.get("name") or "").lower()
     web = (row.get("website_url") or "").lower()
-    if (row.get("type") or "").strip() == "b2b_saas" and ("pesttrace" in name or "pesttrace" in web):
+    business_type = (row.get("type") or "").strip().lower()
+
+    if business_type == "local_service" and ("weathers" in name or "weatherspestsolutions" in web):
+        return WEATHERS_SEASONAL_FOCUS
+    if business_type == "agency" and ("jgdev" in name or "jgdev" in web):
+        return JGDEVS_MARKETING_FOCUS
+    if business_type == "b2b_saas" and ("pesttrace" in name or "pesttrace" in web):
         return PESTTRACE_B2B_FOCUS
     return None
 
@@ -276,19 +282,23 @@ def enqueue_three_pending_posts_direct(row: dict[str, Any]) -> None:
         (
             "facebook",
             "Facebook Page post #1: warm, trustworthy, community-operator tone. "
-            "Follow the mandatory Target Audience → Strategy → Content structure (problem–solution, CTA with domain/URL from JSON). "
-            "Max 400 words. Conversational UK English. No hashtag spam.",
+            "Mandatory structure: Target Audience -> Strategy -> Content (Headline, The Problem, The Solution) -> closing CTA line with domain/URL from JSON. "
+            "The Problem must be a specific real-world pain point happening now for the audience; The Solution must clearly position this business as the fix. "
+            "No generic promotional copy. Max 400 words. Conversational UK English. "
+            "Strictly no TikTok/video references; keep format suitable for text/image/carousel/article and no hashtag spam.",
         ),
         (
             "facebook",
-            "Facebook Page post #2: different angle from post #1 — focus on a specific benefit, result, or seasonal/urgency hook. "
-            "Same warm community tone and mandatory structure. Max 400 words. UK English.",
+            "Facebook Page post #2: different angle from post #1; focus on a different concrete audience pain point (or seasonal trigger if relevant). "
+            "Use the same mandatory structure and explicit problem -> solution logic; avoid repeating post #1's angle. "
+            "Max 400 words. UK English. Strictly no TikTok/video references; format must suit text/image/carousel/article.",
         ),
         (
             "linkedin",
-            "LinkedIn: authoritative professional voice. Strictly follow the mandatory Target Audience → Strategy → "
+            "LinkedIn: authoritative professional voice. Strictly follow mandatory Target Audience -> Strategy -> "
             "Content (Headline, The Problem, The Solution, then closing line with domain/URL from JSON). "
-            "Under 2200 characters. Credible and professional. No hashtag spam.",
+            "Lead with one specific business pain point and its consequence; then present this business as the practical solution. "
+            "Under 2200 characters. Credible and professional. Strictly no TikTok/video references; no hashtag spam.",
         ),
     ]
     sb = get_supabase()

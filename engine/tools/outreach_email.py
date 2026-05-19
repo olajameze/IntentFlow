@@ -47,28 +47,29 @@ from tools.llm import generate_personalised_copy
 
 _SUBJECT_PROMPT = """You are writing a cold B2B email subject line for PestTrace.com.
 
-PestTrace is a compliance and field-documentation SaaS for pest control operators.
+PestTrace is a digital compliance and job-tracking platform built specifically for UK pest control businesses.
 
 The recipient is a pest control business owner or manager at: {name} ({website})
 
 Write ONE concise subject line (max 60 characters). Rules:
-- Focus on a compliance or audit-readiness problem they may have.
+- Focus on ONE specific compliance or audit-readiness problem they may have now.
 - Do NOT mention PestTrace in the subject — the subject should feel like a relevant industry question.
 - No clickbait. No exclamation marks. No emojis.
 - UK English.
+- Keep it aligned to real industry pain points such as: paper logs failing audits, missing treatment documentation, qualification expiry risk, BRCGS/SALSA/Red Tractor/BS EN 16636 pressure, rodenticide stewardship evidence.
 
 Examples of good subject lines:
   "Are your pest control records audit-ready?"
   "Field documentation gaps are a growing compliance risk"
-  "One CQC audit question most operators aren't ready for"
+  "Could you evidence 12 months of treatments today?"
 
 Return ONLY the subject line — no quotes, no explanation."""
 
 
 _BODY_PROMPT = """You are writing a cold B2B email on behalf of PestTrace.com.
 
-PestTrace is a compliance and field-documentation SaaS built for pest control operators.
-It helps businesses digitise job records, stay audit-ready, and reduce admin time.
+PestTrace is a compliance and job-tracking platform built specifically for UK pest control businesses.
+It replaces paper/spreadsheet records with digital evidence trails that are audit-ready.
 
 Recipient business: {name}
 Website: {website}
@@ -76,12 +77,21 @@ Country: {country}
 
 Write a professional B2B outreach email. Rules:
 - Tone: calm authority. Never needy, never begging. Read like advice from a peer, not a sales pitch.
-- Structure: short opener (1 sentence) → compliance/operational problem (2–3 sentences) → how PestTrace solves it (2–3 sentences) → soft CTA (visit pesttrace.com or reply)
+- Mandatory structure: short opener (1 sentence) -> specific compliance/paperwork problem (2-3 sentences) -> how PestTrace solves that exact issue (2-3 sentences) -> soft CTA (visit pesttrace.com or reply)
+- Problem must be concrete and credible. Use one angle such as:
+  - audit pressure under BRCGS/SALSA/Red Tractor/BS EN 16636,
+  - BPCA assessment documentation risk (including potential £5,000 fines),
+  - rodenticide stewardship record-keeping pressure,
+  - qualification/certificate expiry being missed,
+  - office backlog from transcribing field paperwork,
+  - lost/damaged paper logs,
+  - 2027 machine-readable electronic record expectations for PPP workflows.
+- Solution section should frame PestTrace capabilities as practical outcomes: digital logbook, photos/e-signatures/follow-ups, audit-ready reports, expiry tracking, dashboard visibility, and UK pest-control-specific workflows.
 - Do NOT mention pricing, discounts, or urgency pressure.
 - Do NOT use phrases like "I hope this email finds you well", "just reaching out", or "I wanted to touch base".
 - Max 180 words total body text.
 - UK English unless the business is in the US, Canada, or Australia.
-- End with a professional sign-off: "Best regards, [Your Name]\nPestTrace Team\nhttps://pesttrace.com"
+- End with a professional sign-off: "Best regards,\nThe PestTrace Team\nhttps://pesttrace.com"
 - Replace [Your Name] with just "The PestTrace Team" — do not invent a person's name.
 
 Return ONLY the email body text — no subject line, no meta-commentary."""
@@ -149,13 +159,13 @@ def generate_outreach_email(prospect: dict[str, Any]) -> bool:
 
 def _fallback_body(name: str, website: str) -> str:
     return textwrap.dedent(f"""
-        Pest control businesses face increasing pressure to maintain accurate, timestamped records for every job — from pesticide applications to re-inspection schedules.
+        Pest control businesses are under growing pressure to produce clean, verifiable treatment records during audits and customer compliance checks.
 
-        Manual paperwork and spreadsheets leave gaps that regulators and auditors increasingly flag.
+        Paper logs and spreadsheets often leave documentation gaps, especially when field notes must be retyped later by office staff.
 
-        PestTrace digitises field documentation for operators like {name}, making audit trails automatic and inspection reports instant.
+        PestTrace gives teams like {name} a digital logbook for treatments, photos, signatures, follow-ups, and qualification tracking, so records stay audit-ready.
 
-        If keeping records compliant is on your agenda, it's worth a look at pesttrace.com.
+        If compliance confidence is a priority this quarter, it's worth seeing how pesttrace.com works.
 
         Best regards,
         The PestTrace Team
