@@ -14,6 +14,7 @@ const CAMPAIGN_ENV = {
   pesttrace: {
     fromName: "OUTREACH_FROM_NAME",
     fromEmail: "OUTREACH_FROM_EMAIL",
+    replyTo: "OUTREACH_REPLY_TO",
     smtpHost: "SMTP_HOST",
     smtpUser: "SMTP_USER",
     smtpPassword: "SMTP_PASSWORD",
@@ -24,6 +25,10 @@ const CAMPAIGN_ENV = {
   weathers: {
     fromName: "WEATHERS_OUTREACH_FROM_NAME",
     fromEmail: "WEATHERS_OUTREACH_FROM_EMAIL",
+    // Set this to the address you want replies to land in — useful when relaying
+    // from a domain mailbox (e.g. info@weatherspestsolutions.co.uk) but want replies
+    // to come back to the Hotmail inbox the operator actually monitors.
+    replyTo: "WEATHERS_REPLY_TO",
     smtpHost: "WEATHERS_SMTP_HOST",
     smtpUser: "WEATHERS_SMTP_USER",
     smtpPassword: "WEATHERS_SMTP_PASSWORD",
@@ -57,7 +62,8 @@ function getBaseConfig(campaign: CampaignId) {
     envVal(keys.fromName) ?? envVal(CAMPAIGN_ENV.pesttrace.fromName) ?? keys.defaultFromName;
   const fromEmail =
     envVal(keys.fromEmail) ?? envVal(CAMPAIGN_ENV.pesttrace.fromEmail) ?? envVal(keys.smtpUser) ?? envVal("SMTP_USER");
-  return { fromName, fromEmail };
+  const replyTo = envVal(keys.replyTo) ?? envVal(CAMPAIGN_ENV.pesttrace.replyTo);
+  return { fromName, fromEmail, replyTo };
 }
 
 function getSmtpConfig(campaign: CampaignId) {
@@ -67,15 +73,15 @@ function getSmtpConfig(campaign: CampaignId) {
   const password = envVal(keys.smtpPassword) ?? envVal("SMTP_PASSWORD");
   const portRaw = envVal(keys.smtpPort) ?? envVal("SMTP_PORT") ?? "587";
   const port = parseInt(portRaw, 10);
-  const { fromName, fromEmail } = getBaseConfig(campaign);
-  return { host, user, password, port, fromName, fromEmail, configured: !!(host && user && password) };
+  const { fromName, fromEmail, replyTo } = getBaseConfig(campaign);
+  return { host, user, password, port, fromName, fromEmail, replyTo, configured: !!(host && user && password) };
 }
 
 function getResendConfig(campaign: CampaignId) {
   const keys = CAMPAIGN_ENV[campaign];
   const apiKey = envVal(keys.resendApiKey) ?? envVal("RESEND_API_KEY");
-  const { fromName, fromEmail } = getBaseConfig(campaign);
-  return { apiKey, fromName, fromEmail, configured: !!(apiKey && fromEmail) };
+  const { fromName, fromEmail, replyTo } = getBaseConfig(campaign);
+  return { apiKey, fromName, fromEmail, replyTo, configured: !!(apiKey && fromEmail) };
 }
 
 function getDailyLimit(): number {
@@ -101,9 +107,10 @@ async function sendEmailViaSmtp(
     auth: { user: cfg.user, pass: cfg.password },
   });
 
+  const replyTo = cfg.replyTo ?? `${cfg.fromName} <${cfg.fromEmail}>`;
   await transporter.sendMail({
     from: `${cfg.fromName} <${cfg.fromEmail}>`,
-    replyTo: `${cfg.fromName} <${cfg.fromEmail}>`,
+    replyTo,
     to,
     subject,
     text: plain,
@@ -133,7 +140,7 @@ async function sendEmailViaResend(
       subject,
       html,
       text: plain,
-      reply_to: cfg.fromEmail,
+      reply_to: cfg.replyTo ?? cfg.fromEmail,
     }),
   });
 

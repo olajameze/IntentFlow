@@ -175,11 +175,11 @@ export async function POST(req: Request) {
     );
   }
 
-  const body = await gh.text();
+  const ghBody = await gh.text();
   return NextResponse.json(
     {
       error: `GitHub API error (${gh.status})`,
-      hint: body.slice(0, 600),
+      hint: ghBody.slice(0, 600),
       ...(manual && { manualUrl: manual }),
     },
     { status: gh.status >= 400 && gh.status < 600 ? gh.status : 502 },

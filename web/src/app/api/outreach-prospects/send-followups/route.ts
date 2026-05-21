@@ -121,11 +121,12 @@ function renderFollowUpHtml(campaign: CampaignId, bodyText: string, prospectId: 
 
 const CAMPAIGN_ENV: Record<
   CampaignId,
-  { fromName: string; fromEmail: string; smtpHost: string; smtpUser: string; smtpPassword: string; smtpPort: string; defaultFromName: string }
+  { fromName: string; fromEmail: string; replyTo: string; smtpHost: string; smtpUser: string; smtpPassword: string; smtpPort: string; defaultFromName: string }
 > = {
   pesttrace: {
     fromName: "OUTREACH_FROM_NAME",
     fromEmail: "OUTREACH_FROM_EMAIL",
+    replyTo: "OUTREACH_REPLY_TO",
     smtpHost: "SMTP_HOST",
     smtpUser: "SMTP_USER",
     smtpPassword: "SMTP_PASSWORD",
@@ -135,6 +136,7 @@ const CAMPAIGN_ENV: Record<
   weathers: {
     fromName: "WEATHERS_OUTREACH_FROM_NAME",
     fromEmail: "WEATHERS_OUTREACH_FROM_EMAIL",
+    replyTo: "WEATHERS_REPLY_TO",
     smtpHost: "WEATHERS_SMTP_HOST",
     smtpUser: "WEATHERS_SMTP_USER",
     smtpPassword: "WEATHERS_SMTP_PASSWORD",
@@ -156,7 +158,8 @@ function getSmtp(campaign: CampaignId) {
   const port = parseInt(envVal(k.smtpPort) ?? envVal("SMTP_PORT") ?? "587", 10);
   const fromName = envVal(k.fromName) ?? envVal("OUTREACH_FROM_NAME") ?? k.defaultFromName;
   const fromEmail = envVal(k.fromEmail) ?? envVal("OUTREACH_FROM_EMAIL") ?? user;
-  return { host, user, password, port, fromName, fromEmail, configured: !!(host && user && password) };
+  const replyTo = envVal(k.replyTo) ?? envVal("OUTREACH_REPLY_TO");
+  return { host, user, password, port, fromName, fromEmail, replyTo, configured: !!(host && user && password) };
 }
 
 function getPublicBaseUrl(req: Request): string {
@@ -263,7 +266,7 @@ export async function POST(req: Request) {
 
         await transporter.sendMail({
           from: `${smtp.fromName} <${smtp.fromEmail}>`,
-          replyTo: `${smtp.fromName} <${smtp.fromEmail}>`,
+          replyTo: smtp.replyTo ?? `${smtp.fromName} <${smtp.fromEmail}>`,
           to: p.email,
           subject,
           text: htmlToPlain(html),
