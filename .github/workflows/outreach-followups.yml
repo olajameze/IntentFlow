@@ -1,0 +1,51 @@
+name: Outreach Follow-ups (Daily)
+
+# Klaviyo step 6 — automated 3-touch sequence (Day 0 → Day 3 → Day 7) for cold outreach.
+# This cron hits /api/outreach-prospects/send-followups on the deployed dashboard, which
+# picks up every prospect whose next_send_at <= now() and dispatches the next touch.
+#
+# Setup:
+#   • Add OUTREACH_DASHBOARD_URL repo secret → https://<your-vercel-deployment>.vercel.app
+#   • Add CRON_SECRET repo secret → any random string; also set the same value as a
+#     Vercel env var on the dashboard project so the endpoint requires Bearer auth.
+#
+# This job is independent of marketing-engine.yml so a Groq outage on the marketing
+# crew doesn't block follow-up delivery.
+
+on:
+  workflow_dispatch: {}
+  schedule:
+    - cron: "0 9 * * *"   # 09:00 UTC daily
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  send-followups:
+    runs-on: ubuntu-latest
+    env:
+      DASHBOARD_URL: ${{ secrets.OUTREACH_DASHBOARD_URL }}
+      CRON_SECRET: ${{ secrets.CRON_SECRET }}
+    steps:
+      - name: Verify required secrets
+        run: |
+          set -e
+          if [ -z "${DASHBOARD_URL:-}" ]; then
+            echo "::error::Secret OUTREACH_DASHBOARD_URL is empty (e.g. https://intentflow.vercel.app)"
+            exit 1
+          fi
+          echo "::notice::Dispatching follow-ups to ${DASHBOARD_URL}/api/outreach-prospects/send-followups"
+
+      - name: POST to follow-up endpoint
+        run: |
+          set -e
+          AUTH=""
+          if [ -n "${CRON_SECRET:-}" ]; then
+            AUTH="-H \"Authorization: Bearer ${CRON_SECRET}\""
+          fi
+          # shellcheck disable=SC2086
+          eval curl -fsSL -X POST $AUTH "${DASHBOARD_URL}/api/outreach-prospects/send-followups" -w "\nHTTP %{http_code}\n"

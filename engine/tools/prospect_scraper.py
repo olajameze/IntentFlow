@@ -27,6 +27,7 @@ if str(_ROOT) not in sys.path:
 from config import outreach_scrape_limit
 from supabase_client import get_supabase
 from tools.outreach_campaigns import CampaignConfig, get_campaign
+from tools.outreach_sector import classify_sector
 
 
 # ── Safe print (ASCII-safe for Windows cp1252 terminals) ─────────────────────
@@ -273,6 +274,7 @@ def scrape_prospects(
 
                 _p(f"      → email: {email}")
 
+                sector = classify_sector(name_guess, query, url)
                 try:
                     sb.table("outreach_prospects").insert({
                         "name": name_guess,
@@ -284,7 +286,8 @@ def scrape_prospects(
                         "source": f"ddg_{cfg.id}_{country.lower()}",
                         "status": "scraped",
                         "campaign": cfg.id,
-                        "raw": {"query": query, "campaign": cfg.id},
+                        "sector": sector,
+                        "raw": {"query": query, "campaign": cfg.id, "sector": sector},
                     }).execute()
                     inserted += 1
                     country_inserted += 1

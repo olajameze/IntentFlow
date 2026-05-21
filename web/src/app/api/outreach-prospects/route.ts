@@ -37,10 +37,20 @@ const patchSchema = z
     status: z.enum(VALID_STATUSES).optional(),
     email_subject: z.string().min(1).max(200).optional(),
     email_body: z.string().min(1).max(50_000).optional(),
+    // Conversion flags (Klaviyo step 9) — operator-set from the dashboard.
+    // Pass ``true`` to stamp now; ``false`` to clear; omit to leave unchanged.
+    replied: z.boolean().optional(),
+    booked: z.boolean().optional(),
   })
-  .refine((d) => d.status !== undefined || d.email_subject !== undefined || d.email_body !== undefined, {
-    message: "Provide at least one of: status, email_subject, email_body",
-  });
+  .refine(
+    (d) =>
+      d.status !== undefined ||
+      d.email_subject !== undefined ||
+      d.email_body !== undefined ||
+      d.replied !== undefined ||
+      d.booked !== undefined,
+    { message: "Provide at least one of: status, email_subject, email_body, replied, booked" },
+  );
 
 export async function PATCH(req: Request) {
   const json = await req.json();
@@ -48,19 +58,29 @@ export async function PATCH(req: Request) {
   if (!parsed.success) return NextResponse.json({ error: parsed.error.flatten() }, { status: 400 });
 
   return withSupabaseRoute(async (sb) => {
-    const { id, status, email_subject, email_body } = parsed.data;
-    const updates: Record<string, unknown> = { updated_at: new Date().toISOString() };
+    const { id, status, email_subject, email_body, replied, booked } = parsed.data;
+    const now = new Date().toISOString();
+    const updates: Record<string, unknown> = { updated_at: now };
     if (status !== undefined) updates.status = status;
     if (email_subject !== undefined) updates.email_subject = email_subject;
     if (email_body !== undefined) updates.email_body = email_body;
+    if (replied !== undefined) updates.replied_at = replied ? now : null;
+    if (booked !== undefined) updates.booked_at = booked ? now : null;
 
-    const { data, error } = await sb
-      .from("outreach_prospects")
-      .update(updates)
-      .eq("id", id)
-      .not("status", "in", '("sent","bounced")')
-      .select("*")
-      .maybeSingle();
+    // For replied/booked stamps we allow updates even on "sent" rows (that's the whole point).
+    // For other patches we still block once sent/bounced to avoid editing live drafts.
+    const isConversionFlagOnly =
+      (replied !== undefined || booked !== undefined) &&
+      status === undefined &&
+      email_subject === undefined &&
+      email_body === undefined;
+
+    let query = sb.from("outreach_prospects").update(updates).eq("id", id);
+    if (!isConversionFlagOnly) {
+      query = query.not("status", "in", '("sent","bounced")');
+    }
+
+    const { data, error } = await query.select("*").maybeSingle();
 
     if (error) return supabaseErrorResponse(error);
     if (!data) {
@@ -68,6 +88,22 @@ export async function PATCH(req: Request) {
         { error: "Prospect not found or already sent — refresh the list." },
         { status: 409 },
       );
+    }
+
+    // Log conversion events for the KPI panel
+    if (replied === true) {
+      await sb.from("outreach_email_events").insert({
+        prospect_id: id,
+        campaign: data.campaign ?? "pesttrace",
+        event_type: "reply",
+      });
+    }
+    if (booked === true) {
+      await sb.from("outreach_email_events").insert({
+        prospect_id: id,
+        campaign: data.campaign ?? "pesttrace",
+        event_type: "booked",
+      });
     }
     return NextResponse.json(data);
   });

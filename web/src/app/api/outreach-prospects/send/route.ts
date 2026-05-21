@@ -185,6 +185,90 @@ function htmlToPlain(html: string): string {
   return html.replace(/<[^>]+>/g, " ").replace(/\s{2,}/g, " ").trim();
 }
 
+/** Resolve the absolute base URL the recipient inbox will use to reach our tracking endpoints.
+ *
+ * Priority:
+ *   1. ``OUTREACH_PUBLIC_BASE_URL`` — explicit override (e.g. "https://intentflow.app").
+ *   2. ``NEXT_PUBLIC_SITE_URL`` — Vercel project URL used elsewhere.
+ *   3. ``VERCEL_PROJECT_PRODUCTION_URL`` — auto-populated on Vercel.
+ *   4. Fall back to the request's own origin — works locally and in preview, but inbox
+ *      tracking won't fire from a recipient's inbox unless this host is publicly reachable.
+ */
+function getPublicBaseUrl(req: Request): string {
+  const fromEnv =
+    process.env.OUTREACH_PUBLIC_BASE_URL?.trim() ||
+    process.env.NEXT_PUBLIC_SITE_URL?.trim() ||
+    (process.env.VERCEL_PROJECT_PRODUCTION_URL?.trim()
+      ? `https://${process.env.VERCEL_PROJECT_PRODUCTION_URL.trim()}`
+      : "");
+  if (fromEnv) return fromEnv.replace(/\/$/, "");
+  try {
+    return new URL(req.url).origin;
+  } catch {
+    return "";
+  }
+}
+
+/** Rewrite the email body for delivery:
+ *   • Every CTA anchor (``data-outreach-cta="true"``) → /api/outreach-track/click redirector
+ *   • The ``<!-- OUTREACH_TRACKING_PIXEL -->`` comment → real 1×1 open-tracking pixel
+ *
+ * Both are best-effort: if ``baseUrl`` is empty we leave the body alone so the email still
+ * reaches the recipient even when tracking is misconfigured.
+ */
+function injectTracking(html: string, prospectId: string, baseUrl: string): string {
+  if (!html || !baseUrl) return html;
+
+  let out = html;
+
+  // Wrap CTA anchors. We match the data attribute irrespective of attribute order.
+  out = out.replace(
+    /<a\b([^>]*?)\bdata-outreach-cta="true"([^>]*?)\bhref="([^"]+)"([^>]*)>/gi,
+    (_match, pre, mid, href, post) => {
+      const tracked = `${baseUrl}/api/outreach-track/click?p=${encodeURIComponent(prospectId)}&to=${encodeURIComponent(href)}`;
+      return `<a${pre}data-outreach-cta="true"${mid}href="${tracked}"${post}>`;
+    },
+  );
+  // Same pattern but href appears before data-outreach-cta
+  out = out.replace(
+    /<a\b([^>]*?)\bhref="([^"]+)"([^>]*?)\bdata-outreach-cta="true"([^>]*)>/gi,
+    (_match, pre, href, mid, post) => {
+      const tracked = `${baseUrl}/api/outreach-track/click?p=${encodeURIComponent(prospectId)}&to=${encodeURIComponent(href)}`;
+      return `<a${pre}href="${tracked}"${mid}data-outreach-cta="true"${post}>`;
+    },
+  );
+
+  // Open pixel — replace the placeholder. If the placeholder is missing, append at end of body.
+  const pixel = `<img src="${baseUrl}/api/outreach-track/open?p=${encodeURIComponent(prospectId)}" alt="" width="1" height="1" style="display:block;width:1px;height:1px;border:0;" />`;
+  if (out.includes("<!-- OUTREACH_TRACKING_PIXEL -->")) {
+    out = out.replace("<!-- OUTREACH_TRACKING_PIXEL -->", pixel);
+  } else if (out.includes("</body>")) {
+    out = out.replace("</body>", `${pixel}</body>`);
+  } else {
+    out += pixel;
+  }
+
+  return out;
+}
+
+/** A/B subject selection — Klaviyo step 8.
+ *
+ * If both ``email_subject`` and ``email_subject_b`` are populated, flip a fair coin per
+ * recipient and return both the chosen subject and its variant label (``"A"`` or ``"B"``).
+ * Legacy rows without an ``email_subject_b`` always send variant A.
+ */
+function pickSubjectVariant(a: string | null, b: string | null): { subject: string; variant: "A" | "B" } {
+  const sA = (a || "").trim();
+  const sB = (b || "").trim();
+  if (sA && sB) {
+    const pickB = Math.random() < 0.5;
+    return { subject: pickB ? sB : sA, variant: pickB ? "B" : "A" };
+  }
+  return { subject: sA || sB || "", variant: "A" };
+}
+
+const FOLLOW_UP_DAYS = 3;
+
 function isConfiguredForCampaign(campaign: CampaignId): { ok: boolean; hint?: string } {
   const provider = getEmailProvider();
   const smtpCfg = getSmtpConfig(campaign);
@@ -211,6 +295,7 @@ function isConfiguredForCampaign(campaign: CampaignId): { ok: boolean; hint?: st
 export async function POST(req: Request) {
   const body = (await req.json().catch(() => ({}))) as Record<string, unknown>;
   const bulk = body.bulk === true;
+  const baseUrl = getPublicBaseUrl(req);
 
   return withSupabaseRoute(async (sb) => {
     if (!bulk) {
@@ -227,7 +312,7 @@ export async function POST(req: Request) {
       if (prospect.status !== "approved") {
         return NextResponse.json({ error: "Prospect must be approved before sending." }, { status: 400 });
       }
-      if (!prospect.email || !prospect.email_subject || !prospect.email_body) {
+      if (!prospect.email || (!prospect.email_subject && !prospect.email_subject_b) || !prospect.email_body) {
         return NextResponse.json({ error: "Missing email address, subject, or body." }, { status: 400 });
       }
 
@@ -240,13 +325,16 @@ export async function POST(req: Request) {
         );
       }
 
+      const { subject, variant } = pickSubjectVariant(prospect.email_subject, prospect.email_subject_b);
+      const trackedHtml = injectTracking(prospect.email_body, prospect.id, baseUrl);
+
       try {
         await sendEmail(
           campaign,
           prospect.email,
-          prospect.email_subject,
-          prospect.email_body,
-          htmlToPlain(prospect.email_body),
+          subject,
+          trackedHtml,
+          htmlToPlain(trackedHtml),
         );
       } catch (err) {
         const msg = err instanceof Error ? err.message : "SMTP error";
@@ -256,13 +344,18 @@ export async function POST(req: Request) {
         return NextResponse.json({ error: `Send failed: ${msg}` }, { status: 502 });
       }
 
+      const now = new Date();
+      const nextSendAt = new Date(now.getTime() + FOLLOW_UP_DAYS * 24 * 60 * 60 * 1000).toISOString();
       await sb.from("outreach_prospects").update({
         status: "sent",
-        sent_at: new Date().toISOString(),
-        updated_at: new Date().toISOString(),
+        sent_at: now.toISOString(),
+        subject_variant: variant,
+        // Schedule follow-up #1 ~3 days from now (touched up by the follow-up cron)
+        next_send_at: nextSendAt,
+        updated_at: now.toISOString(),
       }).eq("id", id);
 
-      return NextResponse.json({ ok: true, sent_to: prospect.email, campaign });
+      return NextResponse.json({ ok: true, sent_to: prospect.email, campaign, subject_variant: variant });
     }
 
     // ── Bulk send — all approved in one campaign, up to daily limit ──
@@ -292,19 +385,25 @@ export async function POST(req: Request) {
     let sent = 0;
     let failed = 0;
     for (const prospect of prospects) {
-      if (!prospect.email || !prospect.email_subject || !prospect.email_body) continue;
+      if (!prospect.email || (!prospect.email_subject && !prospect.email_subject_b) || !prospect.email_body) continue;
+      const { subject, variant } = pickSubjectVariant(prospect.email_subject, prospect.email_subject_b);
+      const trackedHtml = injectTracking(prospect.email_body, prospect.id, baseUrl);
       try {
         await sendEmail(
           campaign,
           prospect.email,
-          prospect.email_subject,
-          prospect.email_body,
-          htmlToPlain(prospect.email_body),
+          subject,
+          trackedHtml,
+          htmlToPlain(trackedHtml),
         );
+        const now = new Date();
+        const nextSendAt = new Date(now.getTime() + FOLLOW_UP_DAYS * 24 * 60 * 60 * 1000).toISOString();
         await sb.from("outreach_prospects").update({
           status: "sent",
-          sent_at: new Date().toISOString(),
-          updated_at: new Date().toISOString(),
+          sent_at: now.toISOString(),
+          subject_variant: variant,
+          next_send_at: nextSendAt,
+          updated_at: now.toISOString(),
         }).eq("id", prospect.id);
         sent++;
       } catch {

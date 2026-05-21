@@ -46,16 +46,46 @@ from tools.outreach_campaigns import (
     DEFAULT_CAMPAIGN_ID,
     get_campaign,
     render_fallback_body,
+    sector_angle,
 )
 
 
 # ── Generation ───────────────────────────────────────────────────────────────
 
+def _parse_subject_variants(raw: str, fallback: str) -> tuple[str, str]:
+    """Split LLM output into two subject variants for A/B testing (Klaviyo step 8).
+
+    Accepts either two clean lines or a single line (in which case variant B falls back
+    to the campaign's default subject). Both variants are sanitised and length-capped.
+    """
+    cleaned: list[str] = []
+    for line in (raw or "").splitlines():
+        s = line.strip()
+        if not s:
+            continue
+        if s.startswith("[Draft"):
+            continue
+        # Strip leading "Line N — variant X:" / "A:" / "1." style prefixes the LLM may emit
+        s = re.sub(r"^(line\s*\d+\s*[—\-:]?\s*(variant\s*[ab]\s*[:\-]?)?\s*)", "", s, flags=re.IGNORECASE)
+        s = re.sub(r"^(variant\s*[ab]\s*[:\-]\s*)", "", s, flags=re.IGNORECASE)
+        s = re.sub(r"^\d+[\.\)]\s*", "", s)
+        s = s.strip(' "\'')
+        if s:
+            cleaned.append(s[:80])
+        if len(cleaned) == 2:
+            break
+    if not cleaned:
+        return fallback, fallback
+    if len(cleaned) == 1:
+        return cleaned[0], fallback
+    return cleaned[0], cleaned[1]
+
+
 def generate_outreach_email(
     prospect: dict[str, Any],
     campaign: CampaignConfig | str | None = None,
 ) -> bool:
-    """Generate a draft email for a scraped prospect and store it in the DB.
+    """Generate a draft email (subject A/B + sector-aware body + CTA HTML) and store it in the DB.
 
     The campaign is resolved in this priority order:
       1. Explicit ``campaign`` argument (CampaignConfig or id)
@@ -77,38 +107,50 @@ def generate_outreach_email(
         )
 
     website = (prospect.get("website_url") or cfg.website).strip()
+    sector = str(prospect.get("sector") or "generic").strip().lower() or "generic"
+    angle = sector_angle(cfg, sector)
 
-    # Subject
-    subject_prompt = cfg.subject_prompt.format(name=name, website=website, country=country)
-    subject = generate_personalised_copy(
-        business_context=f'{{"name": "{name}", "website": "{website}", "country": "{country}"}}',
+    # ── Subject (A + B for Klaviyo-style A/B testing) ───────────────────────
+    subject_prompt = cfg.subject_prompt.format(
+        name=name, website=website, country=country, sector_angle=angle
+    )
+    subject_raw = generate_personalised_copy(
+        business_context=f'{{"name": "{name}", "website": "{website}", "country": "{country}", "sector": "{sector}"}}',
         lead=f"Prospect: {name}",
         template=subject_prompt,
-    ).strip().strip('"').strip("'")
-    subject = subject.split("\n")[0].strip()[:80]
-    if not subject or subject.startswith("[Draft"):
-        subject = cfg.fallback_subject
+    )
+    subject_a, subject_b = _parse_subject_variants(subject_raw, cfg.fallback_subject)
 
-    # Body
-    body_prompt = cfg.body_prompt.format(name=name, website=website, country=country)
+    # ── Body ─────────────────────────────────────────────────────────────────
+    body_prompt = cfg.body_prompt.format(
+        name=name, website=website, country=country, sector_angle=angle
+    )
     body_text = generate_personalised_copy(
-        business_context=f'{{"name": "{name}", "website": "{website}", "country": "{country}"}}',
+        business_context=f'{{"name": "{name}", "website": "{website}", "country": "{country}", "sector": "{sector}"}}',
         lead=f"Prospect: {name}",
         template=body_prompt,
     ).strip()
     if not body_text or body_text.startswith("[Draft"):
         body_text = render_fallback_body(cfg, name)
 
-    html_body = _render_html(body_text, cfg)
+    # NOTE: the CTA URL and tracking pixel are injected at *send time* by the
+    # Next.js send route, because they need the absolute base URL of the app
+    # (so the tracking redirector points to /api/outreach-track/click etc).
+    # We render a placeholder CTA + pixel here so the email looks complete in
+    # the dashboard preview. The send route swaps the placeholders for real
+    # tracking URLs before delivery.
+    html_body = _render_html(body_text, cfg, prospect_id=str(pid))
 
     try:
         sb = get_supabase()
         sb.table("outreach_prospects").update(
             {
-                "email_subject": subject,
+                "email_subject": subject_a,
+                "email_subject_b": subject_b,
                 "email_body": html_body,
                 "status": "draft_ready",
                 "campaign": cfg.id,
+                "sector": sector,
                 "updated_at": datetime.now(timezone.utc).isoformat(),
             }
         ).eq("id", pid).execute()
@@ -118,10 +160,29 @@ def generate_outreach_email(
         return False
 
 
-def _render_html(plain_text: str, cfg: CampaignConfig) -> str:
-    """Wrap plain-text email body in minimal, professional HTML with the campaign's opt-out footer."""
+def _render_html(plain_text: str, cfg: CampaignConfig, prospect_id: str = "") -> str:
+    """Render the campaign's branded conversion-focused HTML email.
+
+    Klaviyo steps 6 + 7: tailor to journey stage with ONE clear CTA button, trust badges
+    above the fold, mobile-first layout.
+
+    The default CTA href is the UTM-tagged campaign URL (works fine if the email is sent
+    without tracking). The send route in Next.js detects ``data-outreach-cta="true"`` on
+    the anchor and ``<!-- OUTREACH_TRACKING_PIXEL -->`` in the markup and swaps them for
+    a click-tracked redirector + a 1×1 open-tracking pixel at delivery time.
+    """
     paragraphs = [p.strip() for p in plain_text.split("\n\n") if p.strip()]
-    body_html = "\n".join(f"<p>{p.replace(chr(10), '<br>')}</p>" for p in paragraphs)
+    body_html = "\n".join(
+        f'<p style="margin:0 0 16px 0;font-size:15px;line-height:1.55;color:#1a1a1a;">'
+        f"{p.replace(chr(10), '<br>')}</p>"
+        for p in paragraphs
+    )
+
+    badges_html = " &nbsp;·&nbsp; ".join(
+        f'<span style="color:#4a5568;">{b}</span>' for b in cfg.trust_badges
+    )
+
+    cta_url = cfg.cta_url_template.format(prospect_id=prospect_id or "preview")
 
     return f"""<!DOCTYPE html>
 <html lang="en">
@@ -130,15 +191,40 @@ def _render_html(plain_text: str, cfg: CampaignConfig) -> str:
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>{cfg.label}</title>
 </head>
-<body style="margin:0;padding:0;background:#ffffff;font-family:Arial,Helvetica,sans-serif;color:#1a1a1a;">
-  <table width="100%" cellpadding="0" cellspacing="0" style="max-width:580px;margin:32px auto;padding:0 16px;">
+<body style="margin:0;padding:0;background:#f7f7f5;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Arial,Helvetica,sans-serif;color:#1a1a1a;">
+  <table width="100%" cellpadding="0" cellspacing="0" border="0" style="background:#f7f7f5;padding:24px 0;">
     <tr>
-      <td>
-        {body_html}
-        <hr style="border:none;border-top:1px solid #e5e5e5;margin:24px 0;">
-        <p style="font-size:11px;color:#999999;margin:0;">
-          {cfg.opt_out_footer}
-        </p>
+      <td align="center">
+        <table width="100%" cellpadding="0" cellspacing="0" border="0" style="max-width:580px;background:#ffffff;border-radius:12px;border:1px solid #e5e5e5;overflow:hidden;">
+          <tr>
+            <td style="background:{cfg.accent_color};padding:14px 24px;color:#ffffff;font-weight:600;font-size:14px;letter-spacing:0.3px;">
+              {cfg.sender_signature}
+            </td>
+          </tr>
+          <tr>
+            <td style="padding:28px 28px 8px 28px;">
+              {body_html}
+            </td>
+          </tr>
+          <tr>
+            <td align="center" style="padding:12px 24px 24px 24px;">
+              <a data-outreach-cta="true" href="{cta_url}" style="display:inline-block;background:{cfg.accent_color};color:#ffffff;text-decoration:none;padding:14px 28px;border-radius:8px;font-weight:600;font-size:15px;">
+                {cfg.cta_label}
+              </a>
+            </td>
+          </tr>
+          <tr>
+            <td align="center" style="padding:0 24px 24px 24px;font-size:12px;color:#4a5568;">
+              {badges_html}
+            </td>
+          </tr>
+          <tr>
+            <td style="background:#fafafa;border-top:1px solid #eeeeee;padding:16px 24px;font-size:11px;line-height:1.5;color:#888888;">
+              {cfg.opt_out_footer}
+            </td>
+          </tr>
+        </table>
+        <!-- OUTREACH_TRACKING_PIXEL -->
       </td>
     </tr>
   </table>

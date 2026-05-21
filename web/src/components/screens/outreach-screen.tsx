@@ -2,7 +2,7 @@
 
 import { useEffect, useRef, useState } from "react";
 import { toast } from "sonner";
-import { Check, ChevronDown, ChevronUp, Copy, Eye, Globe, Loader2, Mail, Send, Sparkles, Trash2, X } from "lucide-react";
+import { Check, CheckCircle2, ChevronDown, ChevronUp, Copy, Eye, Globe, Loader2, Mail, MailOpen, MousePointerClick, Reply, Send, Sparkles, Trash2, X } from "lucide-react";
 import { Card, CardContent, CardHeader } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -100,6 +100,124 @@ function EmailPreviewModal({
 type Prospect = Record<string, unknown>;
 type Campaign = "pesttrace" | "weathers";
 
+type CampaignStats = {
+  campaign: Campaign;
+  sent: number;
+  opened: number;
+  clicked: number;
+  replied: number;
+  booked: number;
+  bounced: number;
+  open_rate: number;
+  click_rate: number;
+  reply_rate: number;
+  booking_rate: number;
+  bounce_rate: number;
+  ab_test: {
+    variant_a_sent: number;
+    variant_a_replies: number;
+    variant_a_reply_rate: number;
+    variant_b_sent: number;
+    variant_b_replies: number;
+    variant_b_reply_rate: number;
+  };
+};
+
+function pct(n: number): string {
+  if (!Number.isFinite(n) || n <= 0) return "0%";
+  return `${(n * 100).toFixed(n >= 0.1 ? 0 : 1)}%`;
+}
+
+/** Klaviyo step 9 — conversion funnel KPI strip. Sent → Open → Click → Reply → Booked. */
+function StatsPanel({ stats }: { stats: CampaignStats | null }) {
+  if (!stats) {
+    return (
+      <div className="rounded-lg border bg-card p-3 text-xs text-muted-foreground">
+        Loading conversion metrics…
+      </div>
+    );
+  }
+
+  const tiles: Array<{
+    label: string;
+    value: string;
+    sub: string;
+    icon: React.ReactNode;
+    accent: string;
+  }> = [
+    {
+      label: "Sent",
+      value: String(stats.sent),
+      sub: stats.bounced > 0 ? `${stats.bounced} bounced` : "delivered",
+      icon: <Send className="h-3.5 w-3.5" />,
+      accent: "text-foreground",
+    },
+    {
+      label: "Open rate",
+      value: pct(stats.open_rate),
+      sub: `${stats.opened} opens`,
+      icon: <MailOpen className="h-3.5 w-3.5" />,
+      accent: "text-sky-500",
+    },
+    {
+      label: "Click rate",
+      value: pct(stats.click_rate),
+      sub: `${stats.clicked} clicks`,
+      icon: <MousePointerClick className="h-3.5 w-3.5" />,
+      accent: "text-amber-500",
+    },
+    {
+      label: "Reply rate",
+      value: pct(stats.reply_rate),
+      sub: `${stats.replied} replies`,
+      icon: <Reply className="h-3.5 w-3.5" />,
+      accent: "text-violet-400",
+    },
+    {
+      label: "Booked",
+      value: pct(stats.booking_rate),
+      sub: `${stats.booked} customers`,
+      icon: <CheckCircle2 className="h-3.5 w-3.5" />,
+      accent: "text-emerald-500",
+    },
+  ];
+
+  const ab = stats.ab_test;
+  const aMin = 5;  // minimum sample size before declaring a winner
+  let abVerdict: string | null = null;
+  if (ab.variant_a_sent >= aMin && ab.variant_b_sent >= aMin) {
+    const aR = ab.variant_a_reply_rate;
+    const bR = ab.variant_b_reply_rate;
+    if (Math.abs(aR - bR) < 0.01) abVerdict = "Tie — keep testing";
+    else if (aR > bR) abVerdict = `Subject A winning (+${pct(aR - bR)})`;
+    else abVerdict = `Subject B winning (+${pct(bR - aR)})`;
+  } else if (ab.variant_a_sent + ab.variant_b_sent > 0) {
+    abVerdict = `A: ${ab.variant_a_sent} · B: ${ab.variant_b_sent} — need ${aMin} each`;
+  }
+
+  return (
+    <div className="space-y-2 rounded-lg border bg-card p-3">
+      <div className="grid grid-cols-2 gap-2 md:grid-cols-5">
+        {tiles.map((t) => (
+          <div key={t.label} className="rounded-md border bg-background/50 p-2">
+            <p className="flex items-center gap-1 text-[10px] uppercase tracking-wide text-muted-foreground">
+              <span className={t.accent}>{t.icon}</span>
+              {t.label}
+            </p>
+            <p className="mt-1 text-lg font-semibold tabular-nums">{t.value}</p>
+            <p className="text-[11px] text-muted-foreground">{t.sub}</p>
+          </div>
+        ))}
+      </div>
+      {abVerdict && (
+        <p className="text-[11px] text-muted-foreground">
+          <span className="font-medium text-foreground">Subject A/B:</span> {abVerdict}
+        </p>
+      )}
+    </div>
+  );
+}
+
 const COUNTRY_LABELS: Record<string, string> = { UK: "UK", US: "USA", CA: "Canada", AU: "Australia" };
 const PREVIEW_LEN = 140;
 
@@ -153,6 +271,12 @@ function ProspectCard({
   const city = String(prospect.city ?? "");
   const website = String(prospect.website_url ?? "");
   const sentAt = prospect.sent_at as string | null | undefined;
+  const sector = (prospect.sector as string | null | undefined) || "";
+  const openedAt = prospect.opened_at as string | null | undefined;
+  const clickedAt = prospect.clicked_at as string | null | undefined;
+  const repliedAt = prospect.replied_at as string | null | undefined;
+  const bookedAt = prospect.booked_at as string | null | undefined;
+  const subjectVariant = (prospect.subject_variant as string | null | undefined) || "";
   const campaign: Campaign = prospect.campaign === "weathers" ? "weathers" : "pesttrace";
   const fromLabel = `${CAMPAIGN_META[campaign].label} <${CAMPAIGN_META[campaign].fromEmail}>`;
 
@@ -208,6 +332,22 @@ function ProspectCard({
       return;
     }
     toast.success(status === "approved" ? "Approved — move to Approved tab to send." : "Rejected");
+    await onRefresh();
+  };
+
+  const markFlag = async (flag: "replied" | "booked", value: boolean) => {
+    const res = await fetch("/api/outreach-prospects", {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ id, [flag]: value }),
+    });
+    if (!res.ok) {
+      toast.error(`Could not mark ${flag}`);
+      return;
+    }
+    toast.success(
+      value ? `Marked as ${flag === "booked" ? "paying customer" : "replied"}` : `Cleared ${flag} flag`,
+    );
     await onRefresh();
   };
 
@@ -278,8 +418,40 @@ function ProspectCard({
                 >
                   {CAMPAIGN_META[campaign].short}
                 </Badge>
+                {sector && (
+                  <Badge variant="outline" className="shrink-0 text-[10px] capitalize" title="Detected sector">
+                    {sector.replace(/_/g, " ")}
+                  </Badge>
+                )}
                 {city && <span className="shrink-0 text-[11px] text-muted-foreground">{city}</span>}
               </div>
+              {mode === "sent" && (openedAt || clickedAt || repliedAt || bookedAt || subjectVariant) && (
+                <div className="mt-1 flex flex-wrap items-center gap-1.5 text-[10px]">
+                  {subjectVariant && (
+                    <span className="rounded bg-muted px-1.5 py-0.5 font-mono">Subj {subjectVariant}</span>
+                  )}
+                  {openedAt && (
+                    <span className="flex items-center gap-0.5 text-sky-400" title={`Opened ${new Date(openedAt).toLocaleString()}`}>
+                      <MailOpen className="h-3 w-3" /> opened
+                    </span>
+                  )}
+                  {clickedAt && (
+                    <span className="flex items-center gap-0.5 text-amber-400" title={`Clicked CTA ${new Date(clickedAt).toLocaleString()}`}>
+                      <MousePointerClick className="h-3 w-3" /> clicked
+                    </span>
+                  )}
+                  {repliedAt && (
+                    <span className="flex items-center gap-0.5 text-violet-400" title={`Replied ${new Date(repliedAt).toLocaleString()}`}>
+                      <Reply className="h-3 w-3" /> replied
+                    </span>
+                  )}
+                  {bookedAt && (
+                    <span className="flex items-center gap-0.5 text-emerald-400" title={`Booked ${new Date(bookedAt).toLocaleString()}`}>
+                      <CheckCircle2 className="h-3 w-3" /> booked
+                    </span>
+                  )}
+                </div>
+              )}
               <div className="mt-0.5 flex flex-wrap items-center gap-2 text-[11px] text-muted-foreground">
                 <span className="flex min-w-0 items-center gap-0.5 truncate">
                   <Mail className="h-3 w-3 shrink-0" />
@@ -365,12 +537,34 @@ function ProspectCard({
         {expanded && (
           <CardContent className="space-y-3 pt-0">
             {mode === "sent" ? (
-              <div className="space-y-2">
+              <div className="space-y-3">
                 <p className="text-xs font-medium text-muted-foreground">Subject</p>
                 <p className="text-xs font-semibold">{subject}</p>
                 <p className="whitespace-pre-wrap rounded-lg bg-muted/40 px-3 py-2 text-xs leading-relaxed">
                   {bodyText}
                 </p>
+                {/* Klaviyo step 9 — operator manually closes the conversion loop */}
+                <div className="flex flex-col gap-2 border-t pt-3 sm:flex-row sm:flex-wrap">
+                  <Button
+                    type="button"
+                    variant={repliedAt ? "default" : "secondary"}
+                    className="h-9 w-full text-xs sm:flex-1"
+                    onClick={() => void markFlag("replied", !repliedAt)}
+                  >
+                    <Reply className="mr-1.5 h-3.5 w-3.5" />
+                    {repliedAt ? "Replied ✓ (click to clear)" : "Mark as replied"}
+                  </Button>
+                  <Button
+                    type="button"
+                    className={`h-9 w-full text-xs text-white sm:flex-1 ${
+                      bookedAt ? "bg-emerald-700 hover:bg-emerald-600" : "bg-emerald-600 hover:bg-emerald-500"
+                    }`}
+                    onClick={() => void markFlag("booked", !bookedAt)}
+                  >
+                    <CheckCircle2 className="mr-1.5 h-3.5 w-3.5" />
+                    {bookedAt ? "Booked ✓ (click to clear)" : "Mark as paying customer"}
+                  </Button>
+                </div>
               </div>
             ) : (
               <>
@@ -432,22 +626,26 @@ export function OutreachScreen() {
   const [approvedProspects, setApprovedProspects] = useState<Prospect[]>([]);
   const [sentProspects, setSentProspects] = useState<Prospect[]>([]);
   const [rejectedProspects, setRejectedProspects] = useState<Prospect[]>([]);
+  const [stats, setStats] = useState<CampaignStats | null>(null);
   const [country, setCountry] = useState<string>("all");
   const [bulkSending, setBulkSending] = useState(false);
   const [dispatching, setDispatching] = useState(false);
 
   const load = async (forCampaign: Campaign = campaign) => {
     const q = `campaign=${forCampaign}`;
-    const [review, approved, sent, rejected] = await Promise.all([
+    const [review, approved, sent, rejected, statsRes] = await Promise.all([
       fetch(`/api/outreach-prospects?status=draft_ready&${q}`),
       fetch(`/api/outreach-prospects?status=approved&${q}`),
       fetch(`/api/outreach-prospects?status=sent&${q}`),
       fetch(`/api/outreach-prospects?status=rejected&${q}`),
+      fetch(`/api/outreach-prospects/stats?${q}`),
     ]);
     if (review.ok) setReviewProspects(await review.json());
     if (approved.ok) setApprovedProspects(await approved.json());
     if (sent.ok) setSentProspects(await sent.json());
     if (rejected.ok) setRejectedProspects(await rejected.json());
+    if (statsRes.ok) setStats(await statsRes.json());
+    else setStats(null);
   };
 
   // Re-load whenever the operator switches campaign tab
@@ -572,6 +770,9 @@ export function OutreachScreen() {
           {dispatching ? "Dispatching…" : `Run ${meta.short} engine`}
         </Button>
       </div>
+
+      {/* KPI panel — Klaviyo step 9: track open / click / reply / booking conversion */}
+      <StatsPanel stats={stats} />
 
       {/* Toolbar */}
       <div className="flex flex-wrap items-center gap-3">

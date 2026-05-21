@@ -44,36 +44,48 @@ class CampaignConfig:
     smtp_port_env: str                                # env key holding SMTP port
     countries: tuple[str, ...]                        # 2-letter ISO country codes to scrape
     queries: dict[str, list[SearchQuery]]             # per-country search queries → URL discovery
-    subject_prompt: str                               # LLM template, .format(name=..., website=..., country=...)
+    subject_prompt: str                               # LLM template, .format(name=..., website=..., country=..., sector_angle=...)
     body_prompt: str                                  # LLM template, same fields
     fallback_subject: str                             # used when LLM returns empty / starts with "[Draft"
     fallback_body_template: str                       # textwrap.dedent-style, .format(name=..., website=...)
     opt_out_footer: str                               # plain-text footer appended to HTML email
+    cta_label: str                                    # text on the primary CTA button
+    cta_url_template: str                             # CTA destination, .format(prospect_id=...) — supports UTM tracking
+    accent_color: str                                 # hex colour used for the CTA button + headline rule
+    trust_badges: tuple[str, ...]                     # plain-text trust badges shown above the CTA
+    sector_angles: dict[str, str] = field(default_factory=dict)
+    """Per-sector copy hints injected into the LLM prompt for sharper personalisation."""
+    follow_up_prompts: tuple[str, ...] = field(default_factory=tuple)
+    """Optional per-touch prompts for follow-ups 1 and 2. Empty tuple → no follow-up sequence."""
     skip_url_keywords: tuple[str, ...] = field(default_factory=tuple)
     """Extra keywords that disqualify a candidate URL (in addition to global aggregator/social filters)."""
 
 
 # ── PestTrace (existing campaign) ────────────────────────────────────────────
 
-_PESTTRACE_SUBJECT_PROMPT = """You are writing a cold B2B email subject line for PestTrace.com.
+_PESTTRACE_SUBJECT_PROMPT = """You are writing TWO cold B2B email subject line variants for PestTrace.com (for A/B testing).
 
 PestTrace is a digital compliance and job-tracking platform built specifically for UK pest control businesses.
 
 The recipient is a pest control business owner or manager at: {name} ({website})
+Sector angle to incorporate: {sector_angle}
 
-Write ONE concise subject line (max 60 characters). Rules:
-- Focus on ONE specific compliance or audit-readiness problem they may have now.
-- Do NOT mention PestTrace in the subject — the subject should feel like a relevant industry question.
+Return EXACTLY two lines:
+Line 1 — variant A (a question style): focuses on ONE specific compliance or audit-readiness problem they may have now.
+Line 2 — variant B (a statement style): names a concrete operational risk without a question mark.
+
+Rules for BOTH:
+- Max 60 characters each.
+- Do NOT mention PestTrace in the subject — feel like a relevant industry question/observation.
 - No clickbait. No exclamation marks. No emojis.
 - UK English.
-- Keep it aligned to real industry pain points such as: paper logs failing audits, missing treatment documentation, qualification expiry risk, BRCGS/SALSA/Red Tractor/BS EN 16636 pressure, rodenticide stewardship evidence.
+- Keep aligned to real pain points: paper logs failing audits, missing treatment documentation, qualification expiry risk, BRCGS/SALSA/Red Tractor/BS EN 16636 pressure, rodenticide stewardship evidence.
 
-Examples of good subject lines:
-  "Are your pest control records audit-ready?"
-  "Field documentation gaps are a growing compliance risk"
-  "Could you evidence 12 months of treatments today?"
+Examples:
+  Are your pest control records audit-ready?
+  Field documentation gaps are a growing compliance risk
 
-Return ONLY the subject line — no quotes, no explanation."""
+Return ONLY two lines — no labels, no quotes, no explanation."""
 
 
 _PESTTRACE_BODY_PROMPT = """You are writing a cold B2B email on behalf of PestTrace.com.
@@ -84,6 +96,7 @@ It replaces paper/spreadsheet records with digital evidence trails that are audi
 Recipient business: {name}
 Website: {website}
 Country: {country}
+Sector angle to incorporate: {sector_angle}
 
 Write a professional B2B outreach email. Rules:
 - Tone: calm authority. Never needy, never begging. Read like advice from a peer, not a sales pitch.
@@ -165,6 +178,34 @@ _PESTTRACE_QUERIES: dict[str, list[SearchQuery]] = {
 }
 
 
+_PESTTRACE_FOLLOWUP_PROMPTS = (
+    # Touch 2 (Day 3)
+    """You are writing a SHORT follow-up email (max 90 words) from PestTrace.com to a UK pest control business that didn't reply to your first email three days ago.
+
+Recipient: {name} ({website})
+Sector angle: {sector_angle}
+
+Rules:
+- Reference (gently) that you wrote a few days ago — no apology, no guilt-tripping.
+- Open with a different angle from the first email — pick ONE: lost paperwork story, an upcoming audit risk, qualification expiry, or 2027 electronic record expectations.
+- Frame PestTrace as the obvious fix in one sentence.
+- End with a single CTA: "Worth a 10-minute look at pesttrace.com?"
+- Sign off: "Best regards,\\nThe PestTrace Team\\nhttps://pesttrace.com"
+- UK English. No clickbait. No emojis. No quotes around the email.""",
+    # Touch 3 (Day 7) — break-up email
+    """You are writing a final, brief 'breakup' follow-up email (max 60 words) from PestTrace.com.
+
+Recipient: {name} ({website})
+
+Rules:
+- Acknowledge silence is fine — say you'll stop emailing after this.
+- Reaffirm in one sentence what PestTrace would do for them.
+- Single CTA: "If you ever want to come back to this, the door's open at pesttrace.com."
+- Sign off: "Best regards,\\nThe PestTrace Team"
+- UK English. No emojis. Return only the email body.""",
+)
+
+
 PESTTRACE = CampaignConfig(
     id="pesttrace",
     label="PestTrace (compliance SaaS → pest control firms)",
@@ -186,6 +227,16 @@ PESTTRACE = CampaignConfig(
         "You received this email because your pest control business was found in a public directory. "
         "To opt out, reply with <strong>STOP</strong> and we will never contact you again."
     ),
+    cta_label="See how PestTrace works",
+    # UTM tracking + per-prospect attribution so Umami can attribute landing visits to outreach
+    cta_url_template="https://pesttrace.com/?utm_source=outreach&utm_medium=email&utm_campaign=pesttrace&p={prospect_id}",
+    accent_color="#0F766E",  # teal — distinct from Weathers green
+    trust_badges=("UK-built", "Audit-ready records", "BPCA-aligned workflows"),
+    sector_angles={
+        "pest_control_firm": "audit pressure, missing field documentation, and qualification expiry that's silently building risk",
+        "generic":           "audit pressure, missing field documentation, and qualification expiry that's silently building risk",
+    },
+    follow_up_prompts=_PESTTRACE_FOLLOWUP_PROMPTS,
 )
 
 
@@ -208,25 +259,29 @@ PESTTRACE = CampaignConfig(
 #   • Pet groomers / boarding kennels → flea control specifically
 #   • Bakeries / food production      → rodent + cockroach + audit pressure
 
-_WEATHERS_SUBJECT_PROMPT = """You are writing a cold B2B email subject line for Weathers Pest Solutions, a BPCA-certified West Midlands pest control company.
+_WEATHERS_SUBJECT_PROMPT = """You are writing TWO cold B2B email subject line variants for Weathers Pest Solutions (a BPCA-certified West Midlands pest control company) — for A/B testing.
 
 The recipient is a commercial premises decision-maker at: {name} ({website})
 Their location: {country}, West Midlands area.
+Sector angle to incorporate: {sector_angle}
 
-Write ONE concise subject line (max 60 characters). Rules:
-- Focus on ONE specific pest-control or compliance problem they may have RIGHT NOW.
-- Do NOT mention Weathers in the subject — feel like a useful question, not an advert.
+Return EXACTLY two lines:
+Line 1 — variant A (a question style): names ONE sector-specific pest-control concern as a question.
+Line 2 — variant B (a value style): leads with a benefit or service Weathers offers, no question mark.
+
+Rules for BOTH:
+- Max 60 characters each.
+- Do NOT mention Weathers in the subject — feel like a useful concern, not an advert.
 - No clickbait. No exclamation marks. No emojis.
 - UK English.
-- Tailor the angle to their sector if obvious from the name (e.g. restaurant → cockroaches / food hygiene rating; hotel → bed bugs; care home → rodents + CQC; letting agency → tenant call-outs).
 
-Examples of good subject lines:
-  "Discreet bed bug treatment for hotel rooms"
-  "Protecting your food hygiene rating this winter"
-  "Rodent risk in your West Midlands properties?"
-  "Quick pest control for {name}?"
+Examples:
+  Discreet bed bug treatment for hotel rooms
+  Protecting your food hygiene rating this winter
+  Rodent risk in your West Midlands properties?
+  24/7 pest cover from £275/month
 
-Return ONLY the subject line — no quotes, no explanation."""
+Return ONLY two lines — no labels, no quotes, no explanation."""
 
 
 _WEATHERS_BODY_PROMPT = """You are writing a cold B2B email on behalf of Weathers Pest Solutions (https://weatherspestsolutions.co.uk).
@@ -236,6 +291,7 @@ Weathers Pest Solutions is a BPCA-certified, 5-star-rated, 24/7 emergency pest c
 Recipient business: {name}
 Website: {website}
 Country: {country}
+Sector angle to incorporate (use this as the opening hook): {sector_angle}
 
 Weathers' services and pricing (use ONLY these — do NOT invent extra services):
   • Flea Control — from £210 (1–2 rooms; +£20 per additional room)
@@ -248,32 +304,22 @@ Weathers' services and pricing (use ONLY these — do NOT invent extra services)
   • 100% Satisfaction Guarantee, 24/7 emergency line: 07462253896
   • £50 deposit required to book
 
-Write a short, warm, professional B2B email. Rules:
+Write a short, conversion-focused, warm B2B email. Rules:
 - Tone: trusted local technician. Calm, knowledgeable, NOT pushy. Speak to the recipient as a peer.
-- Mandatory structure: short opener that names a SECTOR-SPECIFIC pest control concern (1–2 sentences)
-  -> what Weathers offers that solves it, referencing 1–2 concrete services from the list above WITH pricing (3–4 sentences)
-  -> mention BPCA certification and 24/7 availability as trust signals (1 sentence)
-  -> soft CTA (call 07462253896 or visit weatherspestsolutions.co.uk to book — mention £50 deposit transparently)
-- Sector-specific concerns to match against {name}:
-  • Restaurants/cafes/takeaways → cockroach risk + food hygiene rating + rodent prevention
-  • Hotels/B&Bs/guesthouses → bed bugs (offer heat treatment for guest rooms)
-  • Care/nursing homes → rodent control + CQC inspection evidence
-  • Schools/nurseries → routine cover under BS EN 16636
-  • Letting agents/property managers → recurring tenant call-outs, suggest £50/month External Bait-boxes per property
-  • Gyms/leisure centres → cockroach / flea risk in changing rooms
-  • Pet groomers/kennels → fleas
-  • Bakeries/food production → rodents + cockroach + audit pressure
-  • Pubs/clubs → rodents + cockroach behind kitchens, evening call-outs
-- If the sector is unclear from the name, lead with the £275/month Business Package as a general commercial cover offer.
-- Mention the West Midlands location ONCE — Weathers serves Birmingham, Wolverhampton, Coventry, Walsall, Dudley, Sandwell, Solihull, Stoke-on-Trent, Worcester.
+- LENGTH: max 140 words of body text — short emails outperform long ones in cold outreach.
+- Mandatory structure (one paragraph each):
+  1) Hook (1 sentence) — open with the sector_angle above, NOT a greeting like "I hope this email finds you well".
+  2) Two concrete services with pricing relevant to that sector (2 sentences) — pick from Weathers' list above. Always use £ amounts.
+  3) Trust signals in ONE sentence — combine BPCA-certified + 5-star + 24/7 emergency line.
+  4) Single soft CTA — say plainly what to do next: "Tap the green button below to see all services and book a slot, or call 07462253896 — £50 deposit secures the booking and comes off the final invoice."
+- Do NOT add a 5th paragraph. The CTA button is rendered after your text by the system — do NOT paste a URL yourself.
 - Do NOT mention discount codes or urgency pressure.
 - Do NOT invent pricing. Use ONLY the numbers above.
-- Do NOT use phrases like "I hope this email finds you well", "just reaching out", or "I wanted to touch base".
-- Max 200 words total body text.
+- Do NOT use phrases like "I hope this email finds you well", "just reaching out", "circling back", or "I wanted to touch base".
 - UK English.
-- End with a professional sign-off EXACTLY:
-  "Best regards,\\nThe Weathers Pest Solutions Team\\n07462253896\\nhttps://weatherspestsolutions.co.uk"
-- Do NOT invent a personal name. Use the team sign-off above verbatim.
+- Sign off EXACTLY:
+  "Best regards,\\nThe Weathers Pest Solutions Team\\n07462253896"
+- Do NOT invent a personal name. Do NOT paste the website URL in the sign-off — the CTA button handles that.
 
 Return ONLY the email body text — no subject line, no meta-commentary."""
 
@@ -347,6 +393,53 @@ _WEATHERS_SKIP_KEYWORDS: tuple[str, ...] = (
 )
 
 
+_WEATHERS_SECTOR_ANGLES: dict[str, str] = {
+    "restaurant":      "cockroach sightings + food hygiene rating risk during EHO inspections",
+    "hotel":           "discreet bed bug treatment for guest rooms with heat treatment available",
+    "care_home":       "rodent control with documented evidence ready for CQC inspections",
+    "school":          "routine pest cover under BS EN 16636 for nurseries and schools",
+    "letting_agent":   "recurring tenant call-out savings via £50/month external bait-box monitoring across multiple properties",
+    "pub":             "cockroach and rodent issues behind kitchens, plus evening emergency call-outs",
+    "gym":             "cockroach and flea risk in changing rooms and locker areas",
+    "pet_groomer":     "flea control specifically for grooming salons and boarding kennels",
+    "bakery":          "rodent + cockroach prevention plus audit-ready documentation",
+    "food_production": "rodent + cockroach prevention plus documented control for food-safety audits",
+    "generic":         "general commercial pest cover under the £275/month Business Package — Bronze, Silver or Gold",
+}
+
+
+_WEATHERS_FOLLOWUP_PROMPTS = (
+    # Touch 2 (Day 3) — same value, fresh angle
+    """You are writing a SHORT follow-up (max 90 words) from Weathers Pest Solutions to a UK West Midlands business that didn't reply to your first email three days ago.
+
+Recipient: {name} ({website})
+Sector angle: {sector_angle}
+
+Rules:
+- Mention you wrote earlier in ONE clause — no apology.
+- Lead with a different concrete benefit than your first email — pick ONE from:
+  • 100% Satisfaction Guarantee on every booking
+  • 24/7 emergency line 07462253896 (most rivals are 9–5)
+  • £50 deposit goes straight off the invoice — no hidden fees
+  • For multi-site operators: £50/month External Bait-boxes per location
+- End with single soft CTA: "Have a look at the services and book a slot when it suits — the button below opens the booking page."
+- Do NOT paste URLs — the CTA button is rendered after your text.
+- Sign off: "Best regards,\\nThe Weathers Pest Solutions Team\\n07462253896"
+- UK English. No emojis. Max 90 words.""",
+    # Touch 3 (Day 7) — break-up
+    """You are writing the FINAL follow-up (max 60 words) from Weathers Pest Solutions.
+
+Recipient: {name} ({website})
+
+Rules:
+- Acknowledge you'll stop emailing after this — politely.
+- Remind them ONE benefit (BPCA-certified, West Midlands, 24/7 emergency, £50 deposit).
+- Soft CTA: "If pests crop up later, the booking link below stays open."
+- Sign off: "Best regards,\\nThe Weathers Pest Solutions Team\\n07462253896"
+- UK English. No emojis.""",
+)
+
+
 WEATHERS = CampaignConfig(
     id="weathers",
     label="Weathers Pest Solutions (services → UK West Midlands businesses)",
@@ -369,6 +462,13 @@ WEATHERS = CampaignConfig(
         "and matched a sector that commonly requires routine pest control. "
         "To opt out, reply with <strong>STOP</strong> and we will never contact you again."
     ),
+    cta_label="Book a pest control slot",
+    # UTM-tagged so Umami attributes the visit; ?p= preserves prospect id for click tracking
+    cta_url_template="https://weatherspestsolutions.co.uk/book?utm_source=outreach&utm_medium=email&utm_campaign=weathers&p={prospect_id}",
+    accent_color="#2F855A",  # Weathers forest green (matches site)
+    trust_badges=("BPCA Certified", "5-Star Rated", "24/7 Emergency", "£50 deposit off invoice"),
+    sector_angles=_WEATHERS_SECTOR_ANGLES,
+    follow_up_prompts=_WEATHERS_FOLLOWUP_PROMPTS,
     skip_url_keywords=_WEATHERS_SKIP_KEYWORDS,
 )
 
@@ -396,3 +496,13 @@ def get_campaign(campaign_id: str | None) -> CampaignConfig:
 def render_fallback_body(campaign: CampaignConfig, name: str) -> str:
     """Render the campaign fallback body with the recipient name."""
     return textwrap.dedent(campaign.fallback_body_template).format(name=name).strip()
+
+
+def sector_angle(campaign: CampaignConfig, sector: str | None) -> str:
+    """Return the sector-specific copy hint for this campaign, falling back to ``generic``.
+
+    Klaviyo step 5: define your audiences so you can personalise — this is what gets
+    injected into the LLM prompt as ``{sector_angle}``.
+    """
+    key = (sector or "generic").strip().lower() or "generic"
+    return campaign.sector_angles.get(key) or campaign.sector_angles.get("generic") or "general commercial pest control concern"
