@@ -4,12 +4,14 @@ import { withSupabaseRoute } from "@/lib/with-supabase-route";
 import { z } from "zod";
 
 const VALID_STATUSES = ["scraped", "draft_ready", "approved", "rejected", "sent", "bounced", "unsubscribed"] as const;
+const VALID_CAMPAIGNS = ["pesttrace", "weathers"] as const;
 
 export async function GET(req: Request) {
   return withSupabaseRoute(async (sb) => {
     const { searchParams } = new URL(req.url);
     const status = searchParams.get("status");
     const country = searchParams.get("country");
+    const campaign = searchParams.get("campaign");
 
     let query = sb
       .from("outreach_prospects")
@@ -19,6 +21,9 @@ export async function GET(req: Request) {
 
     if (status) query = query.eq("status", status);
     if (country) query = query.eq("country", country.toUpperCase());
+    if (campaign && (VALID_CAMPAIGNS as readonly string[]).includes(campaign)) {
+      query = query.eq("campaign", campaign);
+    }
 
     const { data, error } = await query;
     if (error) return supabaseErrorResponse(error);

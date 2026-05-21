@@ -4,30 +4,77 @@ import nodemailer from "nodemailer";
 
 type EmailProvider = "smtp" | "resend" | "auto";
 
+/**
+ * Per-campaign env-var overrides. When a key resolves to a non-empty value via
+ * ``process.env``, it takes precedence over the shared OUTREACH_/SMTP_/RESEND_ defaults.
+ * This is what lets the Weathers campaign send from WeathersPestSolutions@hotmail.com
+ * while PestTrace keeps sending from its own mailbox.
+ */
+const CAMPAIGN_ENV = {
+  pesttrace: {
+    fromName: "OUTREACH_FROM_NAME",
+    fromEmail: "OUTREACH_FROM_EMAIL",
+    smtpHost: "SMTP_HOST",
+    smtpUser: "SMTP_USER",
+    smtpPassword: "SMTP_PASSWORD",
+    smtpPort: "SMTP_PORT",
+    resendApiKey: "RESEND_API_KEY",
+    defaultFromName: "PestTrace Team",
+  },
+  weathers: {
+    fromName: "WEATHERS_OUTREACH_FROM_NAME",
+    fromEmail: "WEATHERS_OUTREACH_FROM_EMAIL",
+    smtpHost: "WEATHERS_SMTP_HOST",
+    smtpUser: "WEATHERS_SMTP_USER",
+    smtpPassword: "WEATHERS_SMTP_PASSWORD",
+    smtpPort: "WEATHERS_SMTP_PORT",
+    resendApiKey: "WEATHERS_RESEND_API_KEY",
+    defaultFromName: "Weathers Pest Solutions",
+  },
+} as const;
+
+type CampaignId = keyof typeof CAMPAIGN_ENV;
+
+function normalizeCampaign(raw: unknown): CampaignId {
+  const v = typeof raw === "string" ? raw.trim().toLowerCase() : "";
+  return v === "weathers" ? "weathers" : "pesttrace";
+}
+
+function envVal(name: string): string | undefined {
+  const v = process.env[name]?.trim();
+  return v ? v : undefined;
+}
+
 function getEmailProvider(): EmailProvider {
   const raw = process.env.OUTREACH_EMAIL_PROVIDER?.trim().toLowerCase();
   if (raw === "smtp" || raw === "resend" || raw === "auto") return raw;
   return "auto";
 }
 
-function getBaseConfig() {
-  const fromName = process.env.OUTREACH_FROM_NAME?.trim() || "PestTrace Team";
-  const fromEmail = process.env.OUTREACH_FROM_EMAIL?.trim() || process.env.SMTP_USER?.trim();
+function getBaseConfig(campaign: CampaignId) {
+  const keys = CAMPAIGN_ENV[campaign];
+  const fromName =
+    envVal(keys.fromName) ?? envVal(CAMPAIGN_ENV.pesttrace.fromName) ?? keys.defaultFromName;
+  const fromEmail =
+    envVal(keys.fromEmail) ?? envVal(CAMPAIGN_ENV.pesttrace.fromEmail) ?? envVal(keys.smtpUser) ?? envVal("SMTP_USER");
   return { fromName, fromEmail };
 }
 
-function getSmtpConfig() {
-  const host = process.env.SMTP_HOST?.trim();
-  const user = process.env.SMTP_USER?.trim();
-  const password = process.env.SMTP_PASSWORD?.trim();
-  const port = parseInt(process.env.SMTP_PORT ?? "587", 10);
-  const { fromName, fromEmail } = getBaseConfig();
+function getSmtpConfig(campaign: CampaignId) {
+  const keys = CAMPAIGN_ENV[campaign];
+  const host = envVal(keys.smtpHost) ?? envVal("SMTP_HOST");
+  const user = envVal(keys.smtpUser) ?? envVal("SMTP_USER");
+  const password = envVal(keys.smtpPassword) ?? envVal("SMTP_PASSWORD");
+  const portRaw = envVal(keys.smtpPort) ?? envVal("SMTP_PORT") ?? "587";
+  const port = parseInt(portRaw, 10);
+  const { fromName, fromEmail } = getBaseConfig(campaign);
   return { host, user, password, port, fromName, fromEmail, configured: !!(host && user && password) };
 }
 
-function getResendConfig() {
-  const apiKey = process.env.RESEND_API_KEY?.trim();
-  const { fromName, fromEmail } = getBaseConfig();
+function getResendConfig(campaign: CampaignId) {
+  const keys = CAMPAIGN_ENV[campaign];
+  const apiKey = envVal(keys.resendApiKey) ?? envVal("RESEND_API_KEY");
+  const { fromName, fromEmail } = getBaseConfig(campaign);
   return { apiKey, fromName, fromEmail, configured: !!(apiKey && fromEmail) };
 }
 
@@ -38,13 +85,14 @@ function getDailyLimit(): number {
 }
 
 async function sendEmailViaSmtp(
+  campaign: CampaignId,
   to: string,
   subject: string,
   html: string,
   plain: string,
 ) {
-  const cfg = getSmtpConfig();
-  if (!cfg.configured) throw new Error("SMTP not configured");
+  const cfg = getSmtpConfig(campaign);
+  if (!cfg.configured) throw new Error(`SMTP not configured for campaign '${campaign}'`);
 
   const transporter = nodemailer.createTransport({
     host: cfg.host,
@@ -64,13 +112,14 @@ async function sendEmailViaSmtp(
 }
 
 async function sendEmailViaResend(
+  campaign: CampaignId,
   to: string,
   subject: string,
   html: string,
   plain: string,
 ) {
-  const cfg = getResendConfig();
-  if (!cfg.configured) throw new Error("Resend not configured");
+  const cfg = getResendConfig(campaign);
+  if (!cfg.configured) throw new Error(`Resend not configured for campaign '${campaign}'`);
 
   const response = await fetch("https://api.resend.com/emails", {
     method: "POST",
@@ -95,29 +144,29 @@ async function sendEmailViaResend(
 }
 
 async function sendEmail(
+  campaign: CampaignId,
   to: string,
   subject: string,
   html: string,
   plain: string,
 ) {
   const provider = getEmailProvider();
-  const smtpConfigured = getSmtpConfig().configured;
-  const resendConfigured = getResendConfig().configured;
+  const smtpConfigured = getSmtpConfig(campaign).configured;
+  const resendConfigured = getResendConfig(campaign).configured;
 
   if (provider === "smtp") {
-    await sendEmailViaSmtp(to, subject, html, plain);
+    await sendEmailViaSmtp(campaign, to, subject, html, plain);
     return;
   }
 
   if (provider === "resend") {
-    await sendEmailViaResend(to, subject, html, plain);
+    await sendEmailViaResend(campaign, to, subject, html, plain);
     return;
   }
 
-  // auto: prefer Resend when configured, then fallback to SMTP
   if (resendConfigured) {
     try {
-      await sendEmailViaResend(to, subject, html, plain);
+      await sendEmailViaResend(campaign, to, subject, html, plain);
       return;
     } catch (firstError) {
       if (!smtpConfigured) throw firstError;
@@ -125,43 +174,45 @@ async function sendEmail(
   }
 
   if (smtpConfigured) {
-    await sendEmailViaSmtp(to, subject, html, plain);
+    await sendEmailViaSmtp(campaign, to, subject, html, plain);
     return;
   }
 
-  throw new Error("No email provider configured");
+  throw new Error(`No email provider configured for campaign '${campaign}'`);
 }
 
 function htmlToPlain(html: string): string {
   return html.replace(/<[^>]+>/g, " ").replace(/\s{2,}/g, " ").trim();
 }
 
-/** POST { id } — send a single approved prospect's email */
+function isConfiguredForCampaign(campaign: CampaignId): { ok: boolean; hint?: string } {
+  const provider = getEmailProvider();
+  const smtpCfg = getSmtpConfig(campaign);
+  const resendCfg = getResendConfig(campaign);
+  const keys = CAMPAIGN_ENV[campaign];
+
+  const ok =
+    provider === "smtp"
+      ? smtpCfg.configured
+      : provider === "resend"
+        ? resendCfg.configured
+        : smtpCfg.configured || resendCfg.configured;
+
+  if (ok) return { ok: true };
+
+  const hint =
+    campaign === "weathers"
+      ? `Set WEATHERS SMTP credentials in web/.env.local: ${keys.smtpHost}=smtp-mail.outlook.com, ${keys.smtpUser}=WeathersPestSolutions@hotmail.com, ${keys.smtpPassword}=<Outlook app password>. (Outlook/Hotmail requires an app password — not the mailbox login password. Generate one at https://account.live.com/proofs/AppPassword.) Then restart npm run dev.`
+      : `Set SMTP_HOST, SMTP_USER, SMTP_PASSWORD (and OUTREACH_FROM_EMAIL) in web/.env.local for the PestTrace campaign. Restart npm run dev after saving.`;
+  return { ok: false, hint };
+}
+
+/** POST { id } or { bulk: true, campaign? } — send a single approved prospect's email or all approved in one campaign. */
 export async function POST(req: Request) {
-  const body = await req.json().catch(() => ({})) as Record<string, unknown>;
+  const body = (await req.json().catch(() => ({}))) as Record<string, unknown>;
   const bulk = body.bulk === true;
 
-  const provider = getEmailProvider();
-  const smtpConfigured = getSmtpConfig().configured;
-  const resendConfigured = getResendConfig().configured;
-  const configuredForRequestedProvider = provider === "smtp"
-    ? smtpConfigured
-    : provider === "resend"
-      ? resendConfigured
-      : (smtpConfigured || resendConfigured);
-
-  if (!configuredForRequestedProvider) {
-    return NextResponse.json(
-      {
-        error: "Email sender is not configured.",
-        hint: "Set OUTREACH_EMAIL_PROVIDER=smtp|resend|auto. For SMTP: SMTP_HOST, SMTP_USER, SMTP_PASSWORD (and SMTP_PORT). For Resend: RESEND_API_KEY and OUTREACH_FROM_EMAIL.",
-      },
-      { status: 400 },
-    );
-  }
-
   return withSupabaseRoute(async (sb) => {
-    // ── Single send ──
     if (!bulk) {
       const id = typeof body.id === "string" ? body.id : null;
       if (!id) return NextResponse.json({ error: "id required" }, { status: 400 });
@@ -180,8 +231,18 @@ export async function POST(req: Request) {
         return NextResponse.json({ error: "Missing email address, subject, or body." }, { status: 400 });
       }
 
+      const campaign = normalizeCampaign(prospect.campaign);
+      const check = isConfiguredForCampaign(campaign);
+      if (!check.ok) {
+        return NextResponse.json(
+          { error: `Email sender is not configured for campaign '${campaign}'.`, hint: check.hint },
+          { status: 400 },
+        );
+      }
+
       try {
         await sendEmail(
+          campaign,
           prospect.email,
           prospect.email_subject,
           prospect.email_body,
@@ -189,7 +250,6 @@ export async function POST(req: Request) {
         );
       } catch (err) {
         const msg = err instanceof Error ? err.message : "SMTP error";
-        // Mark bounced if address rejected
         if (msg.toLowerCase().includes("recipient") || msg.toLowerCase().includes("address")) {
           await sb.from("outreach_prospects").update({ status: "bounced", updated_at: new Date().toISOString() }).eq("id", id);
         }
@@ -202,20 +262,32 @@ export async function POST(req: Request) {
         updated_at: new Date().toISOString(),
       }).eq("id", id);
 
-      return NextResponse.json({ ok: true, sent_to: prospect.email });
+      return NextResponse.json({ ok: true, sent_to: prospect.email, campaign });
     }
 
-    // ── Bulk send — all approved, up to daily limit ──
+    // ── Bulk send — all approved in one campaign, up to daily limit ──
+    const campaign = normalizeCampaign(body.campaign);
+    const check = isConfiguredForCampaign(campaign);
+    if (!check.ok) {
+      return NextResponse.json(
+        { error: `Email sender is not configured for campaign '${campaign}'.`, hint: check.hint },
+        { status: 400 },
+      );
+    }
+
     const limit = getDailyLimit();
     const { data: prospects, error: listErr } = await sb
       .from("outreach_prospects")
       .select("*")
       .eq("status", "approved")
+      .eq("campaign", campaign)
       .order("created_at", { ascending: true })
       .limit(limit);
 
     if (listErr) return NextResponse.json({ error: listErr.message }, { status: 500 });
-    if (!prospects?.length) return NextResponse.json({ ok: true, sent: 0, message: "No approved prospects to send." });
+    if (!prospects?.length) {
+      return NextResponse.json({ ok: true, sent: 0, campaign, message: "No approved prospects to send for this campaign." });
+    }
 
     let sent = 0;
     let failed = 0;
@@ -223,6 +295,7 @@ export async function POST(req: Request) {
       if (!prospect.email || !prospect.email_subject || !prospect.email_body) continue;
       try {
         await sendEmail(
+          campaign,
           prospect.email,
           prospect.email_subject,
           prospect.email_body,
@@ -242,6 +315,6 @@ export async function POST(req: Request) {
       }
     }
 
-    return NextResponse.json({ ok: true, sent, failed, limit });
+    return NextResponse.json({ ok: true, sent, failed, limit, campaign });
   });
 }

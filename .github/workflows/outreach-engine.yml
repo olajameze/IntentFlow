@@ -1,10 +1,25 @@
-name: Outreach Engine (PestTrace)
+name: Outreach Engine
 
 # Generates B2B email drafts only — scrape prospects + LLM email drafting.
 # Triggered manually from the dashboard "Run outreach engine" button.
 # Sending is done from the dashboard after human review.
+#
+# Campaigns:
+#   pesttrace — compliance SaaS → pest control firms (UK/US/CA/AU)
+#   weathers  — Weathers Pest Solutions services → UK West Midlands businesses
+#   all       — run every campaign in sequence
 on:
-  workflow_dispatch: {}
+  workflow_dispatch:
+    inputs:
+      campaign:
+        description: "Outreach campaign to run (pesttrace, weathers, all)"
+        required: false
+        default: "pesttrace"
+        type: choice
+        options:
+          - pesttrace
+          - weathers
+          - all
 
 permissions:
   contents: read
@@ -33,6 +48,15 @@ jobs:
       OUTREACH_FROM_EMAIL: ${{ secrets.OUTREACH_FROM_EMAIL || secrets.SMTP_USER }}
       OUTREACH_SCRAPE_LIMIT: ${{ secrets.OUTREACH_SCRAPE_LIMIT || '30' }}
       OUTREACH_COUNTRIES: ${{ secrets.OUTREACH_COUNTRIES || 'UK,US,CA,AU' }}
+      # Weathers Pest Solutions sender identity (used by the dashboard send route)
+      WEATHERS_OUTREACH_FROM_NAME: ${{ secrets.WEATHERS_OUTREACH_FROM_NAME || 'Weathers Pest Solutions' }}
+      WEATHERS_OUTREACH_FROM_EMAIL: ${{ secrets.WEATHERS_OUTREACH_FROM_EMAIL || 'WeathersPestSolutions@hotmail.com' }}
+      WEATHERS_SMTP_HOST: ${{ secrets.WEATHERS_SMTP_HOST || 'smtp-mail.outlook.com' }}
+      WEATHERS_SMTP_PORT: ${{ secrets.WEATHERS_SMTP_PORT || '587' }}
+      WEATHERS_SMTP_USER: ${{ secrets.WEATHERS_SMTP_USER || secrets.WEATHERS_OUTREACH_FROM_EMAIL }}
+      WEATHERS_SMTP_PASSWORD: ${{ secrets.WEATHERS_SMTP_PASSWORD }}
+      # Campaign id forwarded to python main.py outreach
+      OUTREACH_CAMPAIGN: ${{ inputs.campaign || 'pesttrace' }}
     defaults:
       run:
         working-directory: engine
@@ -84,4 +108,4 @@ jobs:
         run: python -c "import crypto_util, supabase_client, main; print('CLI import graph OK')"
 
       - name: Run outreach pipeline (scrape + draft emails)
-        run: python main.py outreach
+        run: python main.py outreach --campaign "${OUTREACH_CAMPAIGN}"

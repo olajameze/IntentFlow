@@ -24,7 +24,16 @@ def main() -> None:
         nargs="?",
         default="full",
         choices=["full", "traffic", "revenue", "outreach"],
-        help="full crew run, traffic-only, revenue-only, or PestTrace outreach pipeline",
+        help="full crew run, traffic-only, revenue-only, or outreach pipeline",
+    )
+    parser.add_argument(
+        "--campaign",
+        default=None,
+        help=(
+            "Outreach campaign id (only used with mode=outreach). "
+            "Options: 'pesttrace', 'weathers', or 'all' to run every campaign. "
+            "Defaults to 'pesttrace' for backwards compatibility."
+        ),
     )
     args = parser.parse_args()
 
@@ -33,8 +42,12 @@ def main() -> None:
     from tools.persistence import save_revenue_snapshot
 
     if args.mode == "outreach":
-        from agents.outreach import run_outreach
-        run_outreach()
+        from agents.outreach import run_all_campaigns, run_outreach
+        campaign = (args.campaign or "").strip().lower()
+        if campaign == "all":
+            run_all_campaigns()
+        else:
+            run_outreach(campaign or None)
         return
     if args.mode == "full":
         run_all()

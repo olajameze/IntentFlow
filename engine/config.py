@@ -49,6 +49,15 @@ def _apply_web_env_local_overrides() -> None:
         "OUTREACH_DAILY_SEND_LIMIT",
         "OUTREACH_SCRAPE_LIMIT",
         "OUTREACH_COUNTRIES",
+        # Weathers Pest Solutions campaign — its own sender identity + SMTP credentials.
+        # Keep these alongside the shared OUTREACH_* keys so a single .env edit cascades
+        # to both the Next.js dashboard and the engine.
+        "WEATHERS_SMTP_HOST",
+        "WEATHERS_SMTP_PORT",
+        "WEATHERS_SMTP_USER",
+        "WEATHERS_SMTP_PASSWORD",
+        "WEATHERS_OUTREACH_FROM_NAME",
+        "WEATHERS_OUTREACH_FROM_EMAIL",
     ):
         raw = vals.get(key)
         if raw is None:

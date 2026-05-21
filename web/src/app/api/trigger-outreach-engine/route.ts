@@ -1,6 +1,13 @@
 import { NextResponse } from "next/server";
 
 const WORKFLOW_FILE = "outreach-engine.yml";
+const VALID_CAMPAIGNS = ["pesttrace", "weathers", "all"] as const;
+type Campaign = (typeof VALID_CAMPAIGNS)[number];
+
+function normalizeCampaign(raw: unknown): Campaign {
+  const v = typeof raw === "string" ? raw.trim().toLowerCase() : "";
+  return (VALID_CAMPAIGNS as readonly string[]).includes(v) ? (v as Campaign) : "pesttrace";
+}
 
 /** Prefer `GITHUB_REPOSITORY`; allow `NEXT_PUBLIC_GITHUB_REPO` as the slug fallback for dispatch + links. */
 function resolveRepoFull(): string | null {
@@ -77,10 +84,13 @@ export async function GET() {
 
 /**
  * POST — dispatches `.github/workflows/outreach-engine.yml` via GitHub API.
- * Runs the PestTrace outreach pipeline (scrape prospects + draft emails) only.
- * Drafts land in Supabase and appear in the Review tab on /outreach.
+ * Accepts `{ campaign: "pesttrace" | "weathers" | "all" }` in the JSON body
+ * (default: "pesttrace"). Drafts land in Supabase and appear in the Review
+ * tab on /outreach filtered by the selected campaign.
  */
-export async function POST() {
+export async function POST(req: Request) {
+  const body = (await req.json().catch(() => ({}))) as Record<string, unknown>;
+  const campaign = normalizeCampaign(body.campaign);
   const manual = manualWorkflowUrl();
   const token = dispatchToken();
   const repoFull = resolveRepoFull();
@@ -124,14 +134,21 @@ export async function POST() {
       Authorization: `Bearer ${token}`,
       "X-GitHub-Api-Version": "2022-11-28",
     },
-    body: JSON.stringify({ ref }),
+    body: JSON.stringify({ ref, inputs: { campaign } }),
   });
 
   if (gh.status === 204) {
     const logsUrl = manualWorkflowUrl() ?? workflowActionsUrl(repoFull);
+    const friendlyCampaign =
+      campaign === "weathers"
+        ? "Weathers Pest Solutions"
+        : campaign === "all"
+          ? "all campaigns"
+          : "PestTrace";
     return NextResponse.json({
       ok: true,
-      message: `Outreach engine dispatched (ref ${ref}). New email drafts appear in the Review tab after the job finishes (typically 2–4 minutes).`,
+      campaign,
+      message: `Outreach engine dispatched for ${friendlyCampaign} (ref ${ref}). New email drafts appear in the Review tab after the job finishes (typically 2–4 minutes).`,
       logsUrl,
     });
   }

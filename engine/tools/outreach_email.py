@@ -1,25 +1,26 @@
-"""Generate and send professional B2B outreach emails for PestTrace.
+"""Generate and send professional B2B outreach emails (campaign-aware).
 
-Email angle: compliance and operational risk inside pest control businesses.
-PestTrace is positioned as the digital audit/field-documentation solution — not sold
-as a product, introduced as the answer to a compliance problem the reader already has.
+Two campaigns are supported (see ``engine.tools.outreach_campaigns``):
+  • ``pesttrace`` — sells compliance SaaS to UK/US/CA/AU pest control businesses
+  • ``weathers`` — sells pest control services to UK West Midlands commercial premises
 
 Flow:
-  generate_outreach_email(prospect)
-    → Groq/Ollama LLM generates subject + plain HTML body
+  generate_outreach_email(prospect, campaign)
+    → Groq/Ollama LLM generates subject + plain HTML body using campaign prompts
     → Updates outreach_prospects row: email_subject, email_body, status = draft_ready
 
   send_outreach_email(prospect)
+    → Picks SMTP credentials based on the prospect's ``campaign`` column
     → Sends via SMTP (TLS, port 587)
     → Updates row: status = sent, sent_at = now()
 """
 
 from __future__ import annotations
 
+import os
 import re
 import smtplib
 import sys
-import textwrap
 from datetime import datetime, timezone
 from email.mime.multipart import MIMEMultipart
 from email.mime.text import MIMEText
@@ -33,7 +34,6 @@ if str(_ROOT) not in sys.path:
 from config import (
     outreach_from_email,
     outreach_from_name,
-    smtp_configured,
     smtp_host,
     smtp_password,
     smtp_port,
@@ -41,106 +41,66 @@ from config import (
 )
 from supabase_client import get_supabase
 from tools.llm import generate_personalised_copy
-
-
-# ── Prompts ─────────────────────────────────────────────────────────────────
-
-_SUBJECT_PROMPT = """You are writing a cold B2B email subject line for PestTrace.com.
-
-PestTrace is a digital compliance and job-tracking platform built specifically for UK pest control businesses.
-
-The recipient is a pest control business owner or manager at: {name} ({website})
-
-Write ONE concise subject line (max 60 characters). Rules:
-- Focus on ONE specific compliance or audit-readiness problem they may have now.
-- Do NOT mention PestTrace in the subject — the subject should feel like a relevant industry question.
-- No clickbait. No exclamation marks. No emojis.
-- UK English.
-- Keep it aligned to real industry pain points such as: paper logs failing audits, missing treatment documentation, qualification expiry risk, BRCGS/SALSA/Red Tractor/BS EN 16636 pressure, rodenticide stewardship evidence.
-
-Examples of good subject lines:
-  "Are your pest control records audit-ready?"
-  "Field documentation gaps are a growing compliance risk"
-  "Could you evidence 12 months of treatments today?"
-
-Return ONLY the subject line — no quotes, no explanation."""
-
-
-_BODY_PROMPT = """You are writing a cold B2B email on behalf of PestTrace.com.
-
-PestTrace is a compliance and job-tracking platform built specifically for UK pest control businesses.
-It replaces paper/spreadsheet records with digital evidence trails that are audit-ready.
-
-Recipient business: {name}
-Website: {website}
-Country: {country}
-
-Write a professional B2B outreach email. Rules:
-- Tone: calm authority. Never needy, never begging. Read like advice from a peer, not a sales pitch.
-- Mandatory structure: short opener (1 sentence) -> specific compliance/paperwork problem (2-3 sentences) -> how PestTrace solves that exact issue (2-3 sentences) -> soft CTA (visit pesttrace.com or reply)
-- Problem must be concrete and credible. Use one angle such as:
-  - audit pressure under BRCGS/SALSA/Red Tractor/BS EN 16636,
-  - BPCA assessment documentation risk (including potential £5,000 fines),
-  - rodenticide stewardship record-keeping pressure,
-  - qualification/certificate expiry being missed,
-  - office backlog from transcribing field paperwork,
-  - lost/damaged paper logs,
-  - 2027 machine-readable electronic record expectations for PPP workflows.
-- Solution section should frame PestTrace capabilities as practical outcomes: digital logbook, photos/e-signatures/follow-ups, audit-ready reports, expiry tracking, dashboard visibility, and UK pest-control-specific workflows.
-- Do NOT mention pricing, discounts, or urgency pressure.
-- Do NOT use phrases like "I hope this email finds you well", "just reaching out", or "I wanted to touch base".
-- Max 180 words total body text.
-- UK English unless the business is in the US, Canada, or Australia.
-- End with a professional sign-off: "Best regards,\nThe PestTrace Team\nhttps://pesttrace.com"
-- Replace [Your Name] with just "The PestTrace Team" — do not invent a person's name.
-
-Return ONLY the email body text — no subject line, no meta-commentary."""
+from tools.outreach_campaigns import (
+    CampaignConfig,
+    DEFAULT_CAMPAIGN_ID,
+    get_campaign,
+    render_fallback_body,
+)
 
 
 # ── Generation ───────────────────────────────────────────────────────────────
 
-def generate_outreach_email(prospect: dict[str, Any]) -> bool:
+def generate_outreach_email(
+    prospect: dict[str, Any],
+    campaign: CampaignConfig | str | None = None,
+) -> bool:
     """Generate a draft email for a scraped prospect and store it in the DB.
 
-    Returns True if draft was generated and saved successfully.
+    The campaign is resolved in this priority order:
+      1. Explicit ``campaign`` argument (CampaignConfig or id)
+      2. ``prospect["campaign"]`` column
+      3. Default campaign (``pesttrace``) for legacy rows
     """
     pid = prospect.get("id")
     name = (prospect.get("name") or "").strip()
-    website = (prospect.get("website_url") or "pesttrace.com").strip()
     country = (prospect.get("country") or "UK").upper()
 
     if not pid or not name:
         return False
 
-    # Generate subject line
-    subject_prompt = _SUBJECT_PROMPT.format(name=name, website=website)
+    if isinstance(campaign, CampaignConfig):
+        cfg = campaign
+    else:
+        cfg = get_campaign(
+            campaign or str(prospect.get("campaign") or "").strip() or DEFAULT_CAMPAIGN_ID
+        )
+
+    website = (prospect.get("website_url") or cfg.website).strip()
+
+    # Subject
+    subject_prompt = cfg.subject_prompt.format(name=name, website=website, country=country)
     subject = generate_personalised_copy(
         business_context=f'{{"name": "{name}", "website": "{website}", "country": "{country}"}}',
-        lead=f"Pest control business: {name}",
+        lead=f"Prospect: {name}",
         template=subject_prompt,
     ).strip().strip('"').strip("'")
-
-    # Truncate if LLM returned more than one line
     subject = subject.split("\n")[0].strip()[:80]
-
     if not subject or subject.startswith("[Draft"):
-        subject = "Are your pest control records audit-ready?"
+        subject = cfg.fallback_subject
 
-    # Generate body
-    body_prompt = _BODY_PROMPT.format(name=name, website=website, country=country)
+    # Body
+    body_prompt = cfg.body_prompt.format(name=name, website=website, country=country)
     body_text = generate_personalised_copy(
         business_context=f'{{"name": "{name}", "website": "{website}", "country": "{country}"}}',
-        lead=f"Pest control business: {name}",
+        lead=f"Prospect: {name}",
         template=body_prompt,
     ).strip()
-
     if not body_text or body_text.startswith("[Draft"):
-        body_text = _fallback_body(name, website)
+        body_text = render_fallback_body(cfg, name)
 
-    # Render as simple HTML
-    html_body = _render_html(body_text, name)
+    html_body = _render_html(body_text, cfg)
 
-    # Persist to DB
     try:
         sb = get_supabase()
         sb.table("outreach_prospects").update(
@@ -148,34 +108,18 @@ def generate_outreach_email(prospect: dict[str, Any]) -> bool:
                 "email_subject": subject,
                 "email_body": html_body,
                 "status": "draft_ready",
+                "campaign": cfg.id,
                 "updated_at": datetime.now(timezone.utc).isoformat(),
             }
         ).eq("id", pid).execute()
         return True
     except Exception as exc:  # noqa: BLE001
-        print(f"[outreach_email] DB update failed for {name}: {exc}")
+        print(f"[outreach_email] DB update failed for {name} ({cfg.id}): {exc}")
         return False
 
 
-def _fallback_body(name: str, website: str) -> str:
-    return textwrap.dedent(f"""
-        Pest control businesses are under growing pressure to produce clean, verifiable treatment records during audits and customer compliance checks.
-
-        Paper logs and spreadsheets often leave documentation gaps, especially when field notes must be retyped later by office staff.
-
-        PestTrace gives teams like {name} a digital logbook for treatments, photos, signatures, follow-ups, and qualification tracking, so records stay audit-ready.
-
-        If compliance confidence is a priority this quarter, it's worth seeing how pesttrace.com works.
-
-        Best regards,
-        The PestTrace Team
-        https://pesttrace.com
-    """).strip()
-
-
-def _render_html(plain_text: str, recipient_name: str) -> str:
-    """Wrap plain-text email body in minimal, professional HTML."""
-    # Convert double newlines to paragraph breaks
+def _render_html(plain_text: str, cfg: CampaignConfig) -> str:
+    """Wrap plain-text email body in minimal, professional HTML with the campaign's opt-out footer."""
     paragraphs = [p.strip() for p in plain_text.split("\n\n") if p.strip()]
     body_html = "\n".join(f"<p>{p.replace(chr(10), '<br>')}</p>" for p in paragraphs)
 
@@ -184,7 +128,7 @@ def _render_html(plain_text: str, recipient_name: str) -> str:
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>PestTrace</title>
+  <title>{cfg.label}</title>
 </head>
 <body style="margin:0;padding:0;background:#ffffff;font-family:Arial,Helvetica,sans-serif;color:#1a1a1a;">
   <table width="100%" cellpadding="0" cellspacing="0" style="max-width:580px;margin:32px auto;padding:0 16px;">
@@ -193,8 +137,7 @@ def _render_html(plain_text: str, recipient_name: str) -> str:
         {body_html}
         <hr style="border:none;border-top:1px solid #e5e5e5;margin:24px 0;">
         <p style="font-size:11px;color:#999999;margin:0;">
-          You received this email because your pest control business was found in a public directory.
-          To opt out, reply with <strong>STOP</strong> and we will never contact you again.
+          {cfg.opt_out_footer}
         </p>
       </td>
     </tr>
@@ -209,16 +152,42 @@ class SmtpNotConfiguredError(RuntimeError):
     pass
 
 
-def send_outreach_email(prospect: dict[str, Any]) -> bool:
-    """Send the approved email draft to the prospect via SMTP.
+def _campaign_smtp(cfg: CampaignConfig) -> dict[str, Any]:
+    """Resolve SMTP host/port/user/password + from-name/from-email for a campaign.
 
-    Returns True on success. Raises SmtpNotConfiguredError if SMTP is not set up.
+    Falls back to the shared SMTP_* / OUTREACH_* env vars when campaign-specific overrides
+    are absent — this preserves the original PestTrace single-sender flow unchanged.
     """
-    if not smtp_configured():
-        raise SmtpNotConfiguredError(
-            "SMTP is not configured. Set SMTP_HOST, SMTP_USER, and SMTP_PASSWORD in your environment."
-        )
+    def _e(name: str) -> str:
+        return os.getenv(name, "").strip().strip('"').strip("'")
 
+    host = _e(cfg.smtp_host_env) or (smtp_host() or "")
+    user = _e(cfg.smtp_user_env) or (smtp_user() or "")
+    password = _e(cfg.smtp_password_env) or (smtp_password() or "")
+    try:
+        port = int(_e(cfg.smtp_port_env) or smtp_port())
+    except ValueError:
+        port = smtp_port()
+    from_name = _e(cfg.default_from_name_env) or outreach_from_name() or cfg.sender_signature
+    from_email = _e(cfg.default_from_email_env) or outreach_from_email() or user
+    return {
+        "host": host,
+        "port": port,
+        "user": user,
+        "password": password,
+        "from_name": from_name,
+        "from_email": from_email,
+    }
+
+
+def send_outreach_email(
+    prospect: dict[str, Any],
+    campaign: CampaignConfig | str | None = None,
+) -> bool:
+    """Send the approved email draft to the prospect via the campaign's SMTP credentials.
+
+    Raises ``SmtpNotConfiguredError`` if the campaign has no resolvable SMTP credentials.
+    """
     pid = prospect.get("id")
     to_email = (prospect.get("email") or "").strip()
     subject = (prospect.get("email_subject") or "").strip()
@@ -229,8 +198,23 @@ def send_outreach_email(prospect: dict[str, Any]) -> bool:
         print(f"[outreach_email] Missing fields for {name} — skipping send")
         return False
 
-    from_addr = outreach_from_email() or smtp_user() or ""
-    from_name = outreach_from_name()
+    if isinstance(campaign, CampaignConfig):
+        cfg = campaign
+    else:
+        cfg = get_campaign(
+            campaign or str(prospect.get("campaign") or "").strip() or DEFAULT_CAMPAIGN_ID
+        )
+
+    smtp = _campaign_smtp(cfg)
+    if not (smtp["host"] and smtp["user"] and smtp["password"]):
+        raise SmtpNotConfiguredError(
+            f"SMTP is not configured for campaign '{cfg.id}'. Set "
+            f"{cfg.smtp_host_env}, {cfg.smtp_user_env}, {cfg.smtp_password_env} — "
+            f"or the shared SMTP_HOST/SMTP_USER/SMTP_PASSWORD as a fallback."
+        )
+
+    from_addr = smtp["from_email"] or smtp["user"]
+    from_name = smtp["from_name"]
 
     msg = MIMEMultipart("alternative")
     msg["Subject"] = subject
@@ -238,23 +222,17 @@ def send_outreach_email(prospect: dict[str, Any]) -> bool:
     msg["To"] = to_email
     msg["Reply-To"] = from_addr
 
-    # Plain-text fallback stripped from HTML
     plain = re.sub(r"<[^>]+>", "", html_body).strip() if html_body else subject
 
     msg.attach(MIMEText(plain, "plain", "utf-8"))
     msg.attach(MIMEText(html_body, "html", "utf-8"))
 
-    host = smtp_host() or ""
-    port = smtp_port()
-    user = smtp_user() or ""
-    password = smtp_password() or ""
-
     try:
-        with smtplib.SMTP(host, port, timeout=20) as server:
+        with smtplib.SMTP(smtp["host"], smtp["port"], timeout=20) as server:
             server.ehlo()
             server.starttls()
             server.ehlo()
-            server.login(user, password)
+            server.login(smtp["user"], smtp["password"])
             server.sendmail(from_addr, [to_email], msg.as_string())
 
         # Mark sent
@@ -267,7 +245,7 @@ def send_outreach_email(prospect: dict[str, Any]) -> bool:
             }
         ).eq("id", pid).execute()
 
-        print(f"[outreach_email] Sent → {to_email} ({name})")
+        print(f"[outreach_email] Sent → {to_email} ({name}) via {cfg.id}")
         return True
 
     except smtplib.SMTPRecipientsRefused:

@@ -1,10 +1,13 @@
-"""Scrape pest control business websites and extract contact emails.
+"""Scrape business websites and extract contact emails for an outreach campaign.
 
 Strategy (works without being blocked):
-  1. Use DuckDuckGo search to find pest control business websites per city/country.
+  1. Use DuckDuckGo search to find business websites per city/country using the
+     campaign-specific query set from ``engine.tools.outreach_campaigns``.
   2. For each result URL, use requests to visit the site and hunt for a contact email.
-  3. Skip councils, aggregators, Wikipedia, and government sites.
-  4. Insert new prospects into outreach_prospects (unique on email).
+  3. Skip councils, aggregators, Wikipedia, and government sites
+     (plus any campaign-specific skip keywords — e.g. Weathers skips rival pest control
+     companies so it does not email its own competitors).
+  4. Insert new prospects into outreach_prospects (unique on campaign + email).
 
 No Playwright needed — DuckDuckGo + requests is far more reliable.
 """
@@ -23,6 +26,7 @@ if str(_ROOT) not in sys.path:
 
 from config import outreach_scrape_limit
 from supabase_client import get_supabase
+from tools.outreach_campaigns import CampaignConfig, get_campaign
 
 
 # ── Safe print (ASCII-safe for Windows cp1252 terminals) ─────────────────────
@@ -127,67 +131,40 @@ def _find_email_on_site(base_url: str) -> str | None:
     return None
 
 
-# ── Search queries per country ────────────────────────────────────────────────
+# ── URL filtering ──────────────────────────────────────────────────────────────
 
-_QUERIES: dict[str, list[tuple[str, str]]] = {
-    "UK": [
-        ("pest control London site:.co.uk",         "London"),
-        ("pest control Manchester site:.co.uk",     "Manchester"),
-        ("pest control Birmingham site:.co.uk",     "Birmingham"),
-        ("pest control Bristol site:.co.uk",        "Bristol"),
-        ("pest control Leeds site:.co.uk",          "Leeds"),
-        ("pest control Sheffield site:.co.uk",      "Sheffield"),
-        ("pest control Glasgow site:.co.uk",        "Glasgow"),
-        ("pest control Edinburgh site:.co.uk",      "Edinburgh"),
-        ("pest control Liverpool site:.co.uk",      "Liverpool"),
-        ("pest control Nottingham site:.co.uk",     "Nottingham"),
-        ("pest control Leicester site:.co.uk",      "Leicester"),
-        ("pest control Southampton site:.co.uk",    "Southampton"),
-    ],
-    "US": [
-        ("local pest control company New York contact email",     "New York"),
-        ("local pest control company Los Angeles contact email",  "Los Angeles"),
-        ("local pest control company Chicago contact email",      "Chicago"),
-        ("local pest control company Houston contact email",      "Houston"),
-        ("local pest control company Phoenix contact email",      "Phoenix"),
-        ("local pest control company Philadelphia contact email", "Philadelphia"),
-        ("local pest control company San Antonio contact",        "San Antonio"),
-        ("local pest control company Dallas contact email",       "Dallas"),
-    ],
-    "CA": [
-        ("pest control company Toronto site:.ca",   "Toronto"),
-        ("pest control company Vancouver site:.ca", "Vancouver"),
-        ("pest control company Calgary site:.ca",   "Calgary"),
-        ("pest control company Ottawa site:.ca",    "Ottawa"),
-        ("pest control company Montreal site:.ca",  "Montreal"),
-        ("pest control company Edmonton site:.ca",  "Edmonton"),
-    ],
-    "AU": [
-        ("pest control company Sydney site:.com.au",    "Sydney"),
-        ("pest control company Melbourne site:.com.au", "Melbourne"),
-        ("pest control company Brisbane site:.com.au",  "Brisbane"),
-        ("pest control company Perth site:.com.au",     "Perth"),
-        ("pest control company Adelaide site:.com.au",  "Adelaide"),
-        ("pest control company Canberra site:.com.au",  "Canberra"),
-    ],
-}
+# Aggregator/review/lead-gen sites that flood pest-control searches but aren't real prospects.
+_GLOBAL_SKIP_KEYWORDS: tuple[str, ...] = (
+    "finder", "nearme", "directory", "listingsuk", "localservices",
+    "bark.com", "rated.com", "ratedpeople", "trustatrader",
+    "mybuilder", "quotatis", "homeadvisor", "angi.com",
+)
 
 
-def _is_skippable_url(url: str) -> bool:
-    """Return True for government, aggregator, social, or non-business URLs."""
+def _is_skippable_url(url: str, extra_keywords: tuple[str, ...] = ()) -> bool:
+    """Return True for government, aggregator, social, or non-business URLs.
+
+    ``extra_keywords`` lets a campaign disqualify additional URLs — e.g. Weathers'
+    campaign skips rival pest control company sites so it doesn't email competitors.
+    """
     if not url or not url.startswith("http"):
         return True
     if _SKIP_DOMAINS.search(url):
         return True
-    # Skip obvious aggregators / review sites
-    skip_keywords = ("finder", "nearme", "directory", "listingsuk", "localservices",
-                     "bark.com", "rated.com", "ratedpeople", "trustatrader",
-                     "mybuilder", "quotatis", "homeadvisor", "angi.com")
     lower = url.lower()
-    return any(k in lower for k in skip_keywords)
+    if any(k in lower for k in _GLOBAL_SKIP_KEYWORDS):
+        return True
+    if extra_keywords and any(k in lower for k in extra_keywords):
+        return True
+    return False
 
 
-def _ddg_search(query: str, country_code: str, max_results: int = 8) -> list[str]:
+def _ddg_search(
+    query: str,
+    country_code: str,
+    max_results: int = 8,
+    skip_keywords: tuple[str, ...] = (),
+) -> list[str]:
     """Search DuckDuckGo using both backends and return deduplicated result URLs.
 
     Runs the query twice — once with the default backend, once with the 'html'
@@ -208,7 +185,7 @@ def _ddg_search(query: str, country_code: str, max_results: int = 8) -> list[str
                     kwargs["backend"] = backend
                 for r in ddg.text(query, **kwargs):
                     url = r.get("href") or r.get("url") or ""
-                    if not url or _is_skippable_url(url):
+                    if not url or _is_skippable_url(url, skip_keywords):
                         continue
                     parsed = urlparse(url)
                     root = f"{parsed.scheme}://{parsed.netloc}"
@@ -227,12 +204,29 @@ def _ddg_search(query: str, country_code: str, max_results: int = 8) -> list[str
 
 # ── Main entry point ──────────────────────────────────────────────────────────
 
-def scrape_prospects(countries: list[str] | None = None) -> int:
-    """Search DuckDuckGo for pest control businesses and extract contact emails.
+def scrape_prospects(
+    countries: list[str] | None = None,
+    campaign: CampaignConfig | str | None = None,
+) -> int:
+    """Search DuckDuckGo for prospects matching the given campaign and extract contact emails.
 
-    Returns number of newly inserted prospects.
+    Args:
+        countries: Override the campaign's default country list. ``None`` uses the campaign
+            config's ``countries``.
+        campaign: A ``CampaignConfig`` or campaign id. ``None`` falls back to the registry
+            default (``pesttrace``) to preserve backwards compatibility.
+
+    Returns:
+        Number of newly inserted prospects.
     """
-    target_countries = [c.upper() for c in (countries or ["UK", "US", "CA", "AU"])]
+    cfg = campaign if isinstance(campaign, CampaignConfig) else get_campaign(campaign)
+    target_countries = [c.upper() for c in (countries or list(cfg.countries))]
+    # Drop any country we don't have queries for in this campaign
+    target_countries = [c for c in target_countries if cfg.queries.get(c)]
+    if not target_countries:
+        _p(f"[scraper] Campaign '{cfg.id}' has no countries to scrape — exiting.")
+        return 0
+
     limit = outreach_scrape_limit()
     per_country = max(3, limit // max(1, len(target_countries)))
 
@@ -240,8 +234,10 @@ def scrape_prospects(countries: list[str] | None = None) -> int:
     inserted = 0
     total_searched = 0
 
+    _p(f"[scraper] Campaign: {cfg.id} ({cfg.label})")
+
     for country in target_countries:
-        queries = _QUERIES.get(country, [])
+        queries = cfg.queries.get(country, [])
         country_inserted = 0
         _p(f"\n[scraper] ── {country} (target {per_country}) ──")
 
@@ -250,7 +246,9 @@ def scrape_prospects(countries: list[str] | None = None) -> int:
                 break
 
             _p(f"  [ddg] '{query}'")
-            urls = _ddg_search(query, country, max_results=6)
+            urls = _ddg_search(
+                query, country, max_results=6, skip_keywords=cfg.skip_url_keywords
+            )
             _p(f"  [ddg] {len(urls)} candidate URLs")
             time.sleep(1.5)  # be polite to DuckDuckGo
 
@@ -259,7 +257,6 @@ def scrape_prospects(countries: list[str] | None = None) -> int:
                     break
                 total_searched += 1
 
-                # Extract business name from domain
                 try:
                     netloc = urlparse(url).netloc.replace("www.", "")
                     name_guess = netloc.split(".")[0].replace("-", " ").replace("_", " ").title()
@@ -268,7 +265,6 @@ def scrape_prospects(countries: list[str] | None = None) -> int:
 
                 _p(f"    [{total_searched}] {name_guess} ({url})")
 
-                # Hunt for email
                 email = _find_email_on_site(url)
                 if not email:
                     _p(f"      → no email found")
@@ -277,7 +273,6 @@ def scrape_prospects(countries: list[str] | None = None) -> int:
 
                 _p(f"      → email: {email}")
 
-                # Insert into DB
                 try:
                     sb.table("outreach_prospects").insert({
                         "name": name_guess,
@@ -286,9 +281,10 @@ def scrape_prospects(countries: list[str] | None = None) -> int:
                         "phone": "",
                         "city": city,
                         "country": country,
-                        "source": f"ddg_{country.lower()}",
+                        "source": f"ddg_{cfg.id}_{country.lower()}",
                         "status": "scraped",
-                        "raw": {"query": query},
+                        "campaign": cfg.id,
+                        "raw": {"query": query, "campaign": cfg.id},
                     }).execute()
                     inserted += 1
                     country_inserted += 1
@@ -302,5 +298,5 @@ def scrape_prospects(countries: list[str] | None = None) -> int:
 
                 time.sleep(0.5)
 
-    _p(f"\n[scraper] Done — {inserted} new prospects inserted.")
+    _p(f"\n[scraper] Done — {inserted} new prospects inserted for campaign '{cfg.id}'.")
     return inserted

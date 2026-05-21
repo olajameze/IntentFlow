@@ -24,11 +24,13 @@ function EmailPreviewModal({
   subject,
   html,
   recipientEmail,
+  fromLabel,
   onClose,
 }: {
   subject: string;
   html: string;
   recipientEmail: string;
+  fromLabel: string;
   onClose: () => void;
 }) {
   const iframeRef = useRef<HTMLIFrameElement>(null);
@@ -78,7 +80,7 @@ function EmailPreviewModal({
         <div className="mx-auto max-w-xl rounded-xl border bg-white shadow-sm">
           {/* Faux inbox meta */}
           <div className="border-b px-5 py-4">
-            <p className="text-xs font-semibold text-gray-700">PestTrace Team &lt;pesttrace@gmail.com&gt;</p>
+            <p className="text-xs font-semibold text-gray-700">{fromLabel}</p>
             <p className="text-xs text-gray-500">To: {recipientEmail}</p>
             <p className="mt-1 text-[11px] font-semibold text-gray-800">{subject}</p>
           </div>
@@ -96,9 +98,36 @@ function EmailPreviewModal({
 }
 
 type Prospect = Record<string, unknown>;
+type Campaign = "pesttrace" | "weathers";
 
 const COUNTRY_LABELS: Record<string, string> = { UK: "UK", US: "USA", CA: "Canada", AU: "Australia" };
 const PREVIEW_LEN = 140;
+
+const CAMPAIGN_META: Record<
+  Campaign,
+  {
+    label: string;
+    short: string;
+    blurb: string;
+    fromEmail: string;
+    countries: string;
+  }
+> = {
+  pesttrace: {
+    label: "PestTrace",
+    short: "PestTrace",
+    blurb: "Compliance SaaS for UK/US/CA/AU pest control businesses.",
+    fromEmail: "pesttrace@gmail.com",
+    countries: "UK · US · CA · AU",
+  },
+  weathers: {
+    label: "Weathers Pest Solutions",
+    short: "Weathers",
+    blurb: "West Midlands pest control services to UK commercial premises (restaurants, hotels, care homes, letting agents, food sites).",
+    fromEmail: "WeathersPestSolutions@hotmail.com",
+    countries: "UK only (West Midlands)",
+  },
+};
 
 function countryBadgeClass(country: string) {
   if (country === "UK") return "bg-blue-600/15 text-blue-400 border-blue-600/30";
@@ -124,6 +153,8 @@ function ProspectCard({
   const city = String(prospect.city ?? "");
   const website = String(prospect.website_url ?? "");
   const sentAt = prospect.sent_at as string | null | undefined;
+  const campaign: Campaign = prospect.campaign === "weathers" ? "weathers" : "pesttrace";
+  const fromLabel = `${CAMPAIGN_META[campaign].label} <${CAMPAIGN_META[campaign].fromEmail}>`;
 
   const [subject, setSubject] = useState(String(prospect.email_subject ?? ""));
   const [body, setBody] = useState(String(prospect.email_body ?? ""));
@@ -220,6 +251,7 @@ function ProspectCard({
           subject={subject}
           html={body}
           recipientEmail={email}
+          fromLabel={fromLabel}
           onClose={() => setPreviewing(false)}
         />
       )}
@@ -234,6 +266,17 @@ function ProspectCard({
                 <span className="truncate text-sm font-semibold">{name}</span>
                 <Badge variant="outline" className={`shrink-0 text-[10px] ${countryBadgeClass(country)}`}>
                   {COUNTRY_LABELS[country] ?? country}
+                </Badge>
+                <Badge
+                  variant="outline"
+                  className={`shrink-0 text-[10px] ${
+                    campaign === "weathers"
+                      ? "border-amber-600/30 bg-amber-600/15 text-amber-400"
+                      : "border-primary/30 bg-primary/10 text-primary"
+                  }`}
+                  title={`Campaign: ${CAMPAIGN_META[campaign].label}`}
+                >
+                  {CAMPAIGN_META[campaign].short}
                 </Badge>
                 {city && <span className="shrink-0 text-[11px] text-muted-foreground">{city}</span>}
               </div>
@@ -384,6 +427,7 @@ function ProspectCard({
 }
 
 export function OutreachScreen() {
+  const [campaign, setCampaign] = useState<Campaign>("pesttrace");
   const [reviewProspects, setReviewProspects] = useState<Prospect[]>([]);
   const [approvedProspects, setApprovedProspects] = useState<Prospect[]>([]);
   const [sentProspects, setSentProspects] = useState<Prospect[]>([]);
@@ -392,12 +436,13 @@ export function OutreachScreen() {
   const [bulkSending, setBulkSending] = useState(false);
   const [dispatching, setDispatching] = useState(false);
 
-  const load = async () => {
+  const load = async (forCampaign: Campaign = campaign) => {
+    const q = `campaign=${forCampaign}`;
     const [review, approved, sent, rejected] = await Promise.all([
-      fetch("/api/outreach-prospects?status=draft_ready"),
-      fetch("/api/outreach-prospects?status=approved"),
-      fetch("/api/outreach-prospects?status=sent"),
-      fetch("/api/outreach-prospects?status=rejected"),
+      fetch(`/api/outreach-prospects?status=draft_ready&${q}`),
+      fetch(`/api/outreach-prospects?status=approved&${q}`),
+      fetch(`/api/outreach-prospects?status=sent&${q}`),
+      fetch(`/api/outreach-prospects?status=rejected&${q}`),
     ]);
     if (review.ok) setReviewProspects(await review.json());
     if (approved.ok) setApprovedProspects(await approved.json());
@@ -405,7 +450,8 @@ export function OutreachScreen() {
     if (rejected.ok) setRejectedProspects(await rejected.json());
   };
 
-  useEffect(() => { void load(); }, []);
+  // Re-load whenever the operator switches campaign tab
+  useEffect(() => { void load(campaign); }, [campaign]);
 
   const filterByCountry = (prospects: Prospect[]) =>
     country === "all" ? prospects : prospects.filter((p) => String(p.country) === country);
@@ -413,7 +459,11 @@ export function OutreachScreen() {
   const runOutreachEngine = async () => {
     setDispatching(true);
     try {
-      const res = await fetch("/api/trigger-outreach-engine", { method: "POST" });
+      const res = await fetch("/api/trigger-outreach-engine", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ campaign }),
+      });
       const data = (await res.json().catch(() => ({}))) as Record<string, unknown>;
 
       const manualUrl =
@@ -459,19 +509,20 @@ export function OutreachScreen() {
       const res = await fetch("/api/outreach-prospects/send", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ bulk: true }),
+        body: JSON.stringify({ bulk: true, campaign }),
       });
       const data = await res.json().catch(() => ({})) as Record<string, unknown>;
       if (!res.ok) {
         const hint = typeof data.hint === "string" ? `\n${data.hint}` : "";
-        toast.error(`${typeof data.error === "string" ? data.error : "Bulk send failed"}${hint}`, { duration: 12000 });
+        toast.error(`${typeof data.error === "string" ? data.error : "Bulk send failed"}${hint}`, { duration: 15000 });
         return;
       }
       toast.success(`Sent ${data.sent ?? 0} emails${data.failed ? `, ${data.failed} failed` : ""}`);
-      await load();
+      await load(campaign);
     } finally { setBulkSending(false); }
   };
 
+  const meta = CAMPAIGN_META[campaign];
   const reviewList = filterByCountry(reviewProspects);
   const approvedList = filterByCountry(approvedProspects);
   const sentList = filterByCountry(sentProspects);
@@ -483,12 +534,27 @@ export function OutreachScreen() {
 
   return (
     <div className="min-w-0 space-y-3">
-      {/* Run engine — dispatches the dedicated outreach workflow (scrape + draft emails) */}
+      {/* Campaign selector — switches the entire screen between PestTrace and Weathers */}
+      <Tabs value={campaign} onValueChange={(v) => setCampaign(v === "weathers" ? "weathers" : "pesttrace")}>
+        <TabsList className="grid w-full grid-cols-2 md:inline-flex">
+          <TabsTrigger value="pesttrace" className="text-xs sm:text-sm">
+            {CAMPAIGN_META.pesttrace.label}
+          </TabsTrigger>
+          <TabsTrigger value="weathers" className="text-xs sm:text-sm">
+            {CAMPAIGN_META.weathers.label}
+          </TabsTrigger>
+        </TabsList>
+      </Tabs>
+
+      {/* Run engine — dispatches the dedicated outreach workflow for the selected campaign */}
       <div className="flex flex-col gap-2 rounded-lg border bg-muted/30 p-3 sm:flex-row sm:items-center sm:justify-between">
         <div className="min-w-0">
-          <p className="text-sm font-medium">Generate new email drafts</p>
-          <p className="text-xs text-muted-foreground">
-            Scrapes fresh pest control businesses and drafts compliance-focused emails. Drafts appear in the Review tab.
+          <p className="text-sm font-medium">
+            Generate new email drafts — <span className="text-foreground">{meta.label}</span>
+          </p>
+          <p className="text-xs text-muted-foreground">{meta.blurb}</p>
+          <p className="mt-1 text-[11px] text-muted-foreground">
+            Sender: <span className="font-mono">{meta.fromEmail}</span> · Target: {meta.countries}
           </p>
         </div>
         <Button
@@ -503,7 +569,7 @@ export function OutreachScreen() {
           ) : (
             <Sparkles className="mr-2 h-4 w-4" />
           )}
-          {dispatching ? "Dispatching…" : "Run outreach engine"}
+          {dispatching ? "Dispatching…" : `Run ${meta.short} engine`}
         </Button>
       </div>
 
@@ -516,9 +582,13 @@ export function OutreachScreen() {
           <SelectContent>
             <SelectItem value="all">All countries</SelectItem>
             <SelectItem value="UK">UK</SelectItem>
-            <SelectItem value="US">USA</SelectItem>
-            <SelectItem value="CA">Canada</SelectItem>
-            <SelectItem value="AU">Australia</SelectItem>
+            {campaign === "pesttrace" && (
+              <>
+                <SelectItem value="US">USA</SelectItem>
+                <SelectItem value="CA">Canada</SelectItem>
+                <SelectItem value="AU">Australia</SelectItem>
+              </>
+            )}
           </SelectContent>
         </Select>
         <span className="shrink-0 text-xs text-muted-foreground">
@@ -553,8 +623,8 @@ export function OutreachScreen() {
             Review each LLM-generated email. Edit if needed, then Approve to queue for sending.
           </p>
           {reviewList.length
-            ? reviewList.map((p) => <ProspectCard key={String(p.id)} prospect={p} mode="review" onRefresh={load} />)
-            : empty("No emails to review — click \"Run outreach engine\" above to generate new drafts.")}
+            ? reviewList.map((p) => <ProspectCard key={String(p.id)} prospect={p} mode="review" onRefresh={() => load(campaign)} />)
+            : empty(`No ${meta.short} emails to review — click "Run ${meta.short} engine" above to generate new drafts.`)}
         </TabsContent>
 
         <TabsContent value="approved" className="mt-3 space-y-2">
@@ -568,19 +638,19 @@ export function OutreachScreen() {
             </div>
           )}
           {approvedList.length
-            ? approvedList.map((p) => <ProspectCard key={String(p.id)} prospect={p} mode="approved" onRefresh={load} />)
+            ? approvedList.map((p) => <ProspectCard key={String(p.id)} prospect={p} mode="approved" onRefresh={() => load(campaign)} />)
             : empty("No approved emails — approve items from the Review tab.")}
         </TabsContent>
 
         <TabsContent value="sent" className="mt-3 space-y-2">
           {sentList.length
-            ? sentList.map((p) => <ProspectCard key={String(p.id)} prospect={p} mode="sent" onRefresh={load} />)
+            ? sentList.map((p) => <ProspectCard key={String(p.id)} prospect={p} mode="sent" onRefresh={() => load(campaign)} />)
             : empty("No emails sent yet.")}
         </TabsContent>
 
         <TabsContent value="rejected" className="mt-3 space-y-2">
           {rejectedList.length
-            ? rejectedList.map((p) => <ProspectCard key={String(p.id)} prospect={p} mode="rejected" onRefresh={load} />)
+            ? rejectedList.map((p) => <ProspectCard key={String(p.id)} prospect={p} mode="rejected" onRefresh={() => load(campaign)} />)
             : empty("No rejected prospects.")}
         </TabsContent>
       </Tabs>
