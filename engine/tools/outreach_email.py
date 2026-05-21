@@ -52,24 +52,84 @@ from tools.outreach_campaigns import (
 
 # ── Generation ───────────────────────────────────────────────────────────────
 
+# Lines starting with these phrases are LLM meta-commentary, NOT subject lines.
+# Small fallback models (Llama 3.2 1b) often ignore the "no preamble" instruction.
+_META_PREFIXES = (
+    "here are", "here is", "based on", "i'll ", "i will ", "let me ",
+    "sure,", "sure!", "sure.", "okay,", "got it", "understood",
+    "target audience:", "strategy:", "approach:", "context:", "rationale:",
+    "explanation:", "note:", "tone:", "style:", "format:", "example:",
+    "for variant", "line 1", "line 2", "line 1 ", "line 2 ",
+    "below are", "following are", "as requested", "as instructed",
+)
+
+# Words that, if found anywhere in a candidate line, mean it's almost certainly
+# meta-commentary about the task rather than an actual subject line.
+_META_KEYWORDS = (
+    "subject lin", "two variants", "guidelines", "b2b email", "cold email",
+    "industry", "the recipient", "the prospect", "audit-readiness problem",
+    "(question style)", "(statement style)", "(value style)",
+)
+
+
+def _looks_like_subject(line: str) -> bool:
+    """Return True if a line plausibly is a clean email subject (not meta-commentary)."""
+    low = line.lower()
+    if any(low.startswith(p) for p in _META_PREFIXES):
+        return False
+    if any(k in low for k in _META_KEYWORDS):
+        return False
+    # Reject lines that look like JSON (LLM occasionally echoes the input context)
+    if line.startswith("{") or line.startswith("["):
+        return False
+    if '"name":' in line or '"website":' in line or '"country":' in line:
+        return False
+    # Subject prompts cap at 60 chars; allow a little slack for trailing punctuation.
+    # Anything ≥75 chars is almost certainly verbose meta-commentary.
+    if len(line) >= 75:
+        return False
+    # A trailing colon with no other content usually means a label-only line ("Subject A:")
+    if line.rstrip().endswith(":") and len(line) < 20:
+        return False
+    # Reject lines containing URLs — they're usually part of an echoed context blob
+    if "http://" in low or "https://" in low or "www." in low:
+        return False
+    return True
+
+
 def _parse_subject_variants(raw: str, fallback: str) -> tuple[str, str]:
     """Split LLM output into two subject variants for A/B testing (Klaviyo step 8).
 
-    Accepts either two clean lines or a single line (in which case variant B falls back
-    to the campaign's default subject). Both variants are sanitised and length-capped.
+    Robust against chatty LLMs (Llama 3.2 1b often emits preamble like
+    "Target Audience: ..." / "Here are two subject lines:" / "Line 1 — variant A:"
+    despite the prompt explicitly forbidding it). Strategy:
+
+      1. Walk every line, strip whitespace + outer quotes
+      2. Strip common prefixes the LLM still emits ("Subject A:", "1.", "Variant B —")
+      3. Reject lines that look like meta-commentary (see ``_looks_like_subject``)
+      4. Cap each accepted line at 80 chars
+      5. Return the first two survivors; pad with ``fallback`` if fewer than two
     """
     cleaned: list[str] = []
     for line in (raw or "").splitlines():
         s = line.strip()
+        if not s or s.startswith("[Draft"):
+            continue
+        # Strip markdown bullets / dashes / numbering the LLM may add
+        s = re.sub(r"^\s*[-*•]\s+", "", s)
+        s = re.sub(r"^\d+[\.\)]\s*", "", s)
+        # Strip "Line N — variant X:" / "Variant A:" / "Subject A:" / "A:" style prefixes
+        s = re.sub(r"^line\s*\d+\s*[—\-:]?\s*(variant\s*[ab]\s*[:\-]?)?\s*", "", s, flags=re.IGNORECASE)
+        s = re.sub(r"^(variant|subject|option)\s*[ab]\s*[:\-]\s*", "", s, flags=re.IGNORECASE)
+        s = re.sub(r"^[ab]\s*[:\-]\s*", "", s, flags=re.IGNORECASE)
+        # Strip wrapping quotes / asterisks (markdown bold)
+        s = s.strip(' "\'`*_').strip()
         if not s:
             continue
-        if s.startswith("[Draft"):
+        if not _looks_like_subject(s):
             continue
-        # Strip leading "Line N — variant X:" / "A:" / "1." style prefixes the LLM may emit
-        s = re.sub(r"^(line\s*\d+\s*[—\-:]?\s*(variant\s*[ab]\s*[:\-]?)?\s*)", "", s, flags=re.IGNORECASE)
-        s = re.sub(r"^(variant\s*[ab]\s*[:\-]\s*)", "", s, flags=re.IGNORECASE)
-        s = re.sub(r"^\d+[\.\)]\s*", "", s)
-        s = s.strip(' "\'')
+        # Strip trailing terminal punctuation that's awkward in inboxes
+        s = s.rstrip(' .')
         if s:
             cleaned.append(s[:80])
         if len(cleaned) == 2:
