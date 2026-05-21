@@ -2,7 +2,7 @@
 
 import { useEffect, useRef, useState } from "react";
 import { toast } from "sonner";
-import { Check, ChevronDown, ChevronUp, Copy, Eye, Globe, Mail, Send, Trash2, X } from "lucide-react";
+import { Check, ChevronDown, ChevronUp, Copy, Eye, Globe, Loader2, Mail, Send, Sparkles, Trash2, X } from "lucide-react";
 import { Card, CardContent, CardHeader } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -11,6 +11,13 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Textarea } from "@/components/ui/textarea";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+
+/** Client-side Actions URL when `NEXT_PUBLIC_GITHUB_REPO` is set (token may still be missing). */
+function githubOutreachWorkflowUrl(): string | null {
+  const slug = process.env.NEXT_PUBLIC_GITHUB_REPO?.trim();
+  if (!slug?.includes("/")) return null;
+  return `https://github.com/${slug}/actions/workflows/outreach-engine.yml`;
+}
 
 /** Full-screen email preview modal — renders HTML in a sandboxed iframe. */
 function EmailPreviewModal({
@@ -383,6 +390,7 @@ export function OutreachScreen() {
   const [rejectedProspects, setRejectedProspects] = useState<Prospect[]>([]);
   const [country, setCountry] = useState<string>("all");
   const [bulkSending, setBulkSending] = useState(false);
+  const [dispatching, setDispatching] = useState(false);
 
   const load = async () => {
     const [review, approved, sent, rejected] = await Promise.all([
@@ -401,6 +409,49 @@ export function OutreachScreen() {
 
   const filterByCountry = (prospects: Prospect[]) =>
     country === "all" ? prospects : prospects.filter((p) => String(p.country) === country);
+
+  const runOutreachEngine = async () => {
+    setDispatching(true);
+    try {
+      const res = await fetch("/api/trigger-outreach-engine", { method: "POST" });
+      const data = (await res.json().catch(() => ({}))) as Record<string, unknown>;
+
+      const manualUrl =
+        typeof data.manualUrl === "string" ? data.manualUrl : githubOutreachWorkflowUrl();
+      const logsUrl = typeof data.logsUrl === "string" ? data.logsUrl : manualUrl;
+
+      if (res.ok && data.ok) {
+        toast.success(String(data.message ?? "Outreach engine dispatched."), {
+          duration: 10_000,
+          action: logsUrl
+            ? {
+                label: "Open Actions",
+                onClick: () => window.open(logsUrl, "_blank", "noopener,noreferrer"),
+              }
+            : undefined,
+        });
+        return;
+      }
+
+      const msg = typeof data.error === "string" ? data.error : `HTTP ${res.status}`;
+      const hint = typeof data.hint === "string" ? data.hint : "";
+      toast.error(hint ? `${msg}\n\n${hint.slice(0, 280)}` : msg, {
+        duration: 20_000,
+        ...(manualUrl
+          ? {
+              action: {
+                label: "Open workflow",
+                onClick: () => window.open(manualUrl, "_blank", "noopener,noreferrer"),
+              },
+            }
+          : {}),
+      });
+    } catch {
+      toast.error("Could not reach /api/trigger-outreach-engine");
+    } finally {
+      setDispatching(false);
+    }
+  };
 
   const bulkSend = async () => {
     setBulkSending(true);
@@ -432,6 +483,30 @@ export function OutreachScreen() {
 
   return (
     <div className="min-w-0 space-y-3">
+      {/* Run engine — dispatches the dedicated outreach workflow (scrape + draft emails) */}
+      <div className="flex flex-col gap-2 rounded-lg border bg-muted/30 p-3 sm:flex-row sm:items-center sm:justify-between">
+        <div className="min-w-0">
+          <p className="text-sm font-medium">Generate new email drafts</p>
+          <p className="text-xs text-muted-foreground">
+            Scrapes fresh pest control businesses and drafts compliance-focused emails. Drafts appear in the Review tab.
+          </p>
+        </div>
+        <Button
+          size="lg"
+          className="h-11 shrink-0 px-5 text-sm sm:h-12 sm:text-base"
+          onClick={runOutreachEngine}
+          type="button"
+          disabled={dispatching}
+        >
+          {dispatching ? (
+            <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+          ) : (
+            <Sparkles className="mr-2 h-4 w-4" />
+          )}
+          {dispatching ? "Dispatching…" : "Run outreach engine"}
+        </Button>
+      </div>
+
       {/* Toolbar */}
       <div className="flex flex-wrap items-center gap-3">
         <Select value={country} onValueChange={(v) => setCountry(typeof v === "string" ? v : "all")}>
@@ -479,7 +554,7 @@ export function OutreachScreen() {
           </p>
           {reviewList.length
             ? reviewList.map((p) => <ProspectCard key={String(p.id)} prospect={p} mode="review" onRefresh={load} />)
-            : empty("No emails to review — run the engine: python main.py outreach")}
+            : empty("No emails to review — click \"Run outreach engine\" above to generate new drafts.")}
         </TabsContent>
 
         <TabsContent value="approved" className="mt-3 space-y-2">
