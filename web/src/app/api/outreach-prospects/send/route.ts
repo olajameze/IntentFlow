@@ -391,6 +391,9 @@ export async function POST(req: Request) {
 
     let sent = 0;
     let failed = 0;
+    // Capture the first SMTP error so the dashboard can surface a real reason ("Invalid login:
+    // 525 5.7.1 Unauthorized IP address" tells the operator far more than just "0 sent, 8 failed").
+    let firstError: string | null = null;
     for (const prospect of prospects) {
       if (!prospect.email || (!prospect.email_subject && !prospect.email_subject_b) || !prospect.email_body) continue;
       const { subject, variant } = pickSubjectVariant(prospect.email_subject, prospect.email_subject_b);
@@ -413,14 +416,26 @@ export async function POST(req: Request) {
           updated_at: now.toISOString(),
         }).eq("id", prospect.id);
         sent++;
-      } catch {
+      } catch (err) {
         failed++;
+        if (!firstError) {
+          firstError = err instanceof Error ? err.message : String(err);
+        }
         await sb.from("outreach_prospects").update({
           updated_at: new Date().toISOString(),
         }).eq("id", prospect.id);
       }
     }
 
-    return NextResponse.json({ ok: true, sent, failed, limit, campaign });
+    // If every send failed we treat the whole call as a 502 so the dashboard's success/error
+    // colouring is correct. Partial success still returns 200 with both counts so the operator
+    // can act on what worked without forcing them to retry the successful ones.
+    if (sent === 0 && failed > 0) {
+      return NextResponse.json(
+        { ok: false, sent, failed, limit, campaign, error: `All ${failed} sends failed`, firstError },
+        { status: 502 },
+      );
+    }
+    return NextResponse.json({ ok: true, sent, failed, limit, campaign, firstError });
   });
 }
