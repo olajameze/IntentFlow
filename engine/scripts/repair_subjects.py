@@ -42,26 +42,18 @@ if str(_ROOT) not in sys.path:
 from supabase_client import get_supabase
 from tools.llm import generate_personalised_copy
 from tools.outreach_campaigns import DEFAULT_CAMPAIGN_ID, get_campaign, sector_angle
-from tools.outreach_email import _parse_subject_variants
+from tools.outreach_email import _looks_like_subject, _parse_subject_variants
 
 
 def _looks_broken(subject: str | None) -> bool:
-    """Heuristic: a previous-run broken subject we want to regenerate."""
-    if not subject:
+    """A subject is 'broken' when it would fail the parser's subject-line sniffer.
+
+    By sharing ``_looks_like_subject`` with the runtime parser we guarantee the repair
+    script catches every junk subject the latest parser would reject — no drift.
+    """
+    if not subject or not subject.strip():
         return True
-    s = subject.strip()
-    low = s.lower()
-    if s.startswith("{") or s.startswith("["):
-        return True
-    if any(k in s for k in ('"name":', '"website":', '"country":')):
-        return True
-    if low.startswith(("target audience", "strategy:", "based on", "i'll ", "i will ", "here are", "here is")):
-        return True
-    if "subject lin" in low or "guidelines" in low:
-        return True
-    if len(s) >= 80:
-        return True
-    return False
+    return not _looks_like_subject(subject.strip())
 
 
 def repair(campaign_id: str | None, dry_run: bool) -> None:

@@ -61,6 +61,10 @@ _META_PREFIXES = (
     "explanation:", "note:", "tone:", "style:", "format:", "example:",
     "for variant", "line 1", "line 2", "line 1 ", "line 2 ",
     "below are", "following are", "as requested", "as instructed",
+    # Refusal patterns — over-cautious small models sometimes refuse the task.
+    "i don't", "i do not", "i can't", "i cannot", "i won't", "i will not",
+    "i'm sorry", "i'm not able", "i am not able", "i apologize", "i refuse",
+    "unfortunately,", "regrettably,", "sorry,", "sorry ",
 )
 
 # Words that, if found anywhere in a candidate line, mean it's almost certainly
@@ -69,6 +73,8 @@ _META_KEYWORDS = (
     "subject lin", "two variants", "guidelines", "b2b email", "cold email",
     "industry", "the recipient", "the prospect", "audit-readiness problem",
     "(question style)", "(statement style)", "(value style)",
+    # Refusal vocabulary that wasn't caught by prefix matching
+    "deceive", "perceived as spam", "marketing strategies", "harmful",
 )
 
 
