@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { toast } from "sonner";
 import { Check, CheckCircle2, ChevronDown, ChevronUp, Copy, Eye, Globe, Loader2, Mail, MailOpen, MousePointerClick, Reply, Send, Sparkles, Trash2, X } from "lucide-react";
 import { Card, CardContent, CardHeader } from "@/components/ui/card";
@@ -631,25 +631,28 @@ export function OutreachScreen() {
   const [bulkSending, setBulkSending] = useState(false);
   const [dispatching, setDispatching] = useState(false);
 
-  const load = async (forCampaign: Campaign = campaign) => {
-    const q = `campaign=${forCampaign}`;
-    const [review, approved, sent, rejected, statsRes] = await Promise.all([
-      fetch(`/api/outreach-prospects?status=draft_ready&${q}`),
-      fetch(`/api/outreach-prospects?status=approved&${q}`),
-      fetch(`/api/outreach-prospects?status=sent&${q}`),
-      fetch(`/api/outreach-prospects?status=rejected&${q}`),
-      fetch(`/api/outreach-prospects/stats?${q}`),
-    ]);
-    if (review.ok) setReviewProspects(await review.json());
-    if (approved.ok) setApprovedProspects(await approved.json());
-    if (sent.ok) setSentProspects(await sent.json());
-    if (rejected.ok) setRejectedProspects(await rejected.json());
-    if (statsRes.ok) setStats(await statsRes.json());
-    else setStats(null);
-  };
+  const load = useCallback(
+    async (forCampaign: Campaign = campaign) => {
+      const q = `campaign=${forCampaign}`;
+      const [review, approved, sent, rejected, statsRes] = await Promise.all([
+        fetch(`/api/outreach-prospects?status=draft_ready&${q}`),
+        fetch(`/api/outreach-prospects?status=approved&${q}`),
+        fetch(`/api/outreach-prospects?status=sent&${q}`),
+        fetch(`/api/outreach-prospects?status=rejected&${q}`),
+        fetch(`/api/outreach-prospects/stats?${q}`),
+      ]);
+      if (review.ok) setReviewProspects(await review.json());
+      if (approved.ok) setApprovedProspects(await approved.json());
+      if (sent.ok) setSentProspects(await sent.json());
+      if (rejected.ok) setRejectedProspects(await rejected.json());
+      if (statsRes.ok) setStats(await statsRes.json());
+      else setStats(null);
+    },
+    [campaign],
+  );
 
   // Re-load whenever the operator switches campaign tab
-  useEffect(() => { void load(campaign); }, [campaign]);
+  useEffect(() => { void load(campaign); }, [campaign, load]);
 
   const filterByCountry = (prospects: Prospect[]) =>
     country === "all" ? prospects : prospects.filter((p) => String(p.country) === country);
