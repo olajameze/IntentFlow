@@ -3,7 +3,6 @@ import {
   getDailyLimit,
   isConfiguredForCampaign,
   pickSubjectVariant,
-  resolveCampaignEnvKey,
 } from "@/lib/outreach/campaign-env";
 import { getPublicBaseUrl } from "@/lib/outreach/public-base-url";
 import { sendOutreachEmail } from "@/lib/outreach/send-mail";
@@ -171,6 +170,3 @@ export async function POST(req: Request) {
     return NextResponse.json({ ok: true, sent, failed, limit, campaign, firstError });
   });
 }
-
-// re-export for tests
-export { resolveCampaignEnvKey };

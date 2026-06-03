@@ -438,7 +438,7 @@ function ProspectCard({
                 {mode === "sent" && engagementTier === "hot" && !bookedAt && (
                   <Badge className="shrink-0 border-orange-600/30 bg-orange-600/15 text-[10px] text-orange-400">
                     <Flame className="mr-0.5 h-3 w-3" />
-                    Hot
+                    Hot{clickCount > 0 ? ` · ${clickCount} click${clickCount === 1 ? "" : "s"}` : ""}
                   </Badge>
                 )}
                 {city && <span className="shrink-0 text-[11px] text-muted-foreground">{city}</span>}
