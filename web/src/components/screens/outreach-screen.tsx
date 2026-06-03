@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import { toast } from "sonner";
-import { Check, CheckCircle2, ChevronDown, ChevronUp, Copy, Eye, Globe, Loader2, Mail, MailOpen, MousePointerClick, Reply, Send, Sparkles, Trash2, X } from "lucide-react";
+import { Check, CheckCircle2, ChevronDown, ChevronUp, Copy, Eye, Flame, Globe, Loader2, Mail, MailOpen, MousePointerClick, Reply, Send, Sparkles, Trash2, X } from "lucide-react";
 import { Card, CardContent, CardHeader } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -108,6 +108,9 @@ type CampaignStats = {
   replied: number;
   booked: number;
   bounced: number;
+  hot_leads?: number;
+  revenue_attributed?: number;
+  engagement?: { hot: number; warm: number; cold: number };
   open_rate: number;
   click_rate: number;
   reply_rate: number;
@@ -180,6 +183,13 @@ function StatsPanel({ stats }: { stats: CampaignStats | null }) {
       icon: <CheckCircle2 className="h-3.5 w-3.5" />,
       accent: "text-emerald-500",
     },
+    {
+      label: "Hot leads",
+      value: String(stats.hot_leads ?? 0),
+      sub: `${stats.revenue_attributed ?? 0} paid via webhook`,
+      icon: <Flame className="h-3.5 w-3.5" />,
+      accent: "text-orange-500",
+    },
   ];
 
   const ab = stats.ab_test;
@@ -197,7 +207,7 @@ function StatsPanel({ stats }: { stats: CampaignStats | null }) {
 
   return (
     <div className="space-y-2 rounded-lg border bg-card p-3">
-      <div className="grid grid-cols-2 gap-2 md:grid-cols-5">
+      <div className="grid grid-cols-2 gap-2 md:grid-cols-3 lg:grid-cols-6">
         {tiles.map((t) => (
           <div key={t.label} className="rounded-md border bg-background/50 p-2">
             <p className="flex items-center gap-1 text-[10px] uppercase tracking-wide text-muted-foreground">
@@ -276,6 +286,8 @@ function ProspectCard({
   const clickedAt = prospect.clicked_at as string | null | undefined;
   const repliedAt = prospect.replied_at as string | null | undefined;
   const bookedAt = prospect.booked_at as string | null | undefined;
+  const engagementTier = (prospect.engagement_tier as string | null | undefined) || "cold";
+  const clickCount = Number(prospect.click_count ?? 0);
   const subjectVariant = (prospect.subject_variant as string | null | undefined) || "";
   const campaign: Campaign = prospect.campaign === "weathers" ? "weathers" : "pesttrace";
   const fromLabel = `${CAMPAIGN_META[campaign].label} <${CAMPAIGN_META[campaign].fromEmail}>`;
@@ -421,6 +433,12 @@ function ProspectCard({
                 {sector && (
                   <Badge variant="outline" className="shrink-0 text-[10px] capitalize" title="Detected sector">
                     {sector.replace(/_/g, " ")}
+                  </Badge>
+                )}
+                {mode === "sent" && engagementTier === "hot" && !bookedAt && (
+                  <Badge className="shrink-0 border-orange-600/30 bg-orange-600/15 text-[10px] text-orange-400">
+                    <Flame className="mr-0.5 h-3 w-3" />
+                    Hot
                   </Badge>
                 )}
                 {city && <span className="shrink-0 text-[11px] text-muted-foreground">{city}</span>}
@@ -626,6 +644,7 @@ export function OutreachScreen() {
   const [approvedProspects, setApprovedProspects] = useState<Prospect[]>([]);
   const [sentProspects, setSentProspects] = useState<Prospect[]>([]);
   const [rejectedProspects, setRejectedProspects] = useState<Prospect[]>([]);
+  const [hotProspects, setHotProspects] = useState<Prospect[]>([]);
   const [stats, setStats] = useState<CampaignStats | null>(null);
   const [country, setCountry] = useState<string>("all");
   const [bulkSending, setBulkSending] = useState(false);
@@ -634,17 +653,19 @@ export function OutreachScreen() {
   const load = useCallback(
     async (forCampaign: Campaign = campaign) => {
       const q = `campaign=${forCampaign}`;
-      const [review, approved, sent, rejected, statsRes] = await Promise.all([
+      const [review, approved, sent, rejected, hot, statsRes] = await Promise.all([
         fetch(`/api/outreach-prospects?status=draft_ready&${q}`),
         fetch(`/api/outreach-prospects?status=approved&${q}`),
         fetch(`/api/outreach-prospects?status=sent&${q}`),
         fetch(`/api/outreach-prospects?status=rejected&${q}`),
+        fetch(`/api/outreach-prospects?hot=1&${q}`),
         fetch(`/api/outreach-prospects/stats?${q}`),
       ]);
       if (review.ok) setReviewProspects(await review.json());
       if (approved.ok) setApprovedProspects(await approved.json());
       if (sent.ok) setSentProspects(await sent.json());
       if (rejected.ok) setRejectedProspects(await rejected.json());
+      if (hot.ok) setHotProspects(await hot.json());
       if (statsRes.ok) setStats(await statsRes.json());
       else setStats(null);
     },
@@ -792,8 +813,14 @@ export function OutreachScreen() {
         </Button>
       </div>
 
-      {/* KPI panel — Klaviyo step 9: track open / click / reply / booking conversion */}
+      {/* KPI panel — conversion funnel + hot leads + webhook revenue */}
       <StatsPanel stats={stats} />
+      {(stats?.hot_leads ?? 0) > 0 && (
+        <div className="rounded-lg border border-orange-500/30 bg-orange-500/10 px-3 py-2 text-xs text-orange-200">
+          <span className="font-medium text-orange-100">{stats?.hot_leads} hot lead(s)</span>
+          {" — clicked your CTA recently. Prioritize the Hot leads tab and follow up while intent is high."}
+        </div>
+      )}
 
       {/* Toolbar */}
       <div className="flex flex-wrap items-center gap-3">
@@ -819,7 +846,15 @@ export function OutreachScreen() {
       </div>
 
       <Tabs defaultValue="review" className="min-w-0">
-        <TabsList className="grid w-full grid-cols-4 md:inline-flex">
+        <TabsList className="grid w-full grid-cols-5 md:inline-flex">
+          <TabsTrigger value="hot" className="text-xs sm:text-sm">
+            Hot leads
+            {hotProspects.length > 0 && (
+              <span className="ml-1 hidden rounded-full bg-orange-600/30 px-1 text-[10px] sm:inline-block">
+                {hotProspects.length}
+              </span>
+            )}
+          </TabsTrigger>
           <TabsTrigger value="review" className="text-xs sm:text-sm">
             Review
             {reviewProspects.length > 0 && (
@@ -839,6 +874,17 @@ export function OutreachScreen() {
           <TabsTrigger value="sent" className="text-xs sm:text-sm">Sent</TabsTrigger>
           <TabsTrigger value="rejected" className="text-xs sm:text-sm">Rejected</TabsTrigger>
         </TabsList>
+
+        <TabsContent value="hot" className="mt-3 space-y-2">
+          <p className="text-xs text-muted-foreground">
+            Prospects who clicked your CTA (high intent). Call or email while they are warm — webhook may auto-mark paying customers when they book.
+          </p>
+          {filterByCountry(hotProspects).length
+            ? filterByCountry(hotProspects).map((p) => (
+                <ProspectCard key={String(p.id)} prospect={p} mode="sent" onRefresh={() => load(campaign)} />
+              ))
+            : empty("No hot leads for this campaign yet — clicks on your booking/signup link appear here.")}
+        </TabsContent>
 
         <TabsContent value="review" className="mt-3 space-y-2">
           <p className="text-xs text-muted-foreground">

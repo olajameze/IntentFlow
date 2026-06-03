@@ -4,25 +4,34 @@ import { withSupabaseRoute } from "@/lib/with-supabase-route";
 import { z } from "zod";
 
 const VALID_STATUSES = ["scraped", "draft_ready", "approved", "rejected", "sent", "bounced", "unsubscribed"] as const;
-const VALID_CAMPAIGNS = ["pesttrace", "weathers"] as const;
-
 export async function GET(req: Request) {
   return withSupabaseRoute(async (sb) => {
     const { searchParams } = new URL(req.url);
     const status = searchParams.get("status");
     const country = searchParams.get("country");
     const campaign = searchParams.get("campaign");
+    const hotOnly = searchParams.get("hot") === "1";
+    const engagementTier = searchParams.get("engagement_tier");
 
-    let query = sb
-      .from("outreach_prospects")
-      .select("*")
-      .order("created_at", { ascending: false })
-      .limit(200);
+    let query = sb.from("outreach_prospects").select("*");
+
+    if (hotOnly) {
+      query = query
+        .eq("engagement_tier", "hot")
+        .eq("status", "sent")
+        .is("booked_at", null)
+        .order("click_count", { ascending: false });
+    } else {
+      query = query.order("created_at", { ascending: false });
+    }
+
+    query = query.limit(200);
 
     if (status) query = query.eq("status", status);
     if (country) query = query.eq("country", country.toUpperCase());
-    if (campaign && (VALID_CAMPAIGNS as readonly string[]).includes(campaign)) {
-      query = query.eq("campaign", campaign);
+    if (campaign) query = query.eq("campaign", campaign.trim().toLowerCase());
+    if (engagementTier && ["cold", "warm", "hot"].includes(engagementTier)) {
+      query = query.eq("engagement_tier", engagementTier);
     }
 
     const { data, error } = await query;

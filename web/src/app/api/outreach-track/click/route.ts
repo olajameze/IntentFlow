@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { engagementUpdateFields } from "@/lib/outreach/engagement";
 import { getSupabaseAdmin } from "@/lib/supabase-admin";
 
 /**
@@ -55,7 +56,7 @@ export async function GET(req: Request) {
 
     const { data: prospect } = await sb
       .from("outreach_prospects")
-      .select("id, campaign, clicked_at, click_count")
+      .select("id, campaign, clicked_at, click_count, opened_at, open_count, booked_at")
       .eq("id", prospectId)
       .maybeSingle();
 
@@ -69,12 +70,20 @@ export async function GET(req: Request) {
         ip: ip.slice(0, 64),
       });
 
+      const now = new Date();
+      const updated = {
+        ...prospect,
+        clicked_at: prospect.clicked_at ?? now.toISOString(),
+        click_count: (prospect.click_count ?? 0) + 1,
+      };
+      const tierFields = engagementUpdateFields(updated, now);
       await sb
         .from("outreach_prospects")
         .update({
-          clicked_at: prospect.clicked_at ?? new Date().toISOString(),
-          click_count: (prospect.click_count ?? 0) + 1,
-          updated_at: new Date().toISOString(),
+          clicked_at: updated.clicked_at,
+          click_count: updated.click_count,
+          ...tierFields,
+          updated_at: now.toISOString(),
         })
         .eq("id", prospect.id);
     }

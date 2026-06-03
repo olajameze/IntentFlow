@@ -14,7 +14,7 @@ on:
       campaign:
         description: "Outreach campaign to run (pesttrace, weathers, all)"
         required: false
-        default: "pesttrace"
+        default: "all"
         type: choice
         options:
           - pesttrace

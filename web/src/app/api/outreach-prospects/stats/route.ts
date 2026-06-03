@@ -2,28 +2,17 @@ import { NextResponse } from "next/server";
 import { supabaseErrorResponse } from "@/lib/supabase-error-response";
 import { withSupabaseRoute } from "@/lib/with-supabase-route";
 
-const VALID_CAMPAIGNS = ["pesttrace", "weathers"] as const;
-
-/**
- * GET /api/outreach-prospects/stats?campaign=pesttrace
- *
- * Aggregates the Klaviyo step-9 conversion funnel for a campaign:
- *   sent → opened → clicked → replied → booked
- *
- * Plus subject A/B reply rates so the operator can pick winners on the dashboard.
- */
+/** GET /api/outreach-prospects/stats?campaign=pesttrace */
 export async function GET(req: Request) {
   return withSupabaseRoute(async (sb) => {
     const { searchParams } = new URL(req.url);
-    const raw = (searchParams.get("campaign") || "pesttrace").toLowerCase();
-    const campaign = (VALID_CAMPAIGNS as readonly string[]).includes(raw)
-      ? raw
-      : "pesttrace";
+    const campaign = (searchParams.get("campaign") || "pesttrace").trim().toLowerCase();
 
-    // One query, many counts — keeps the panel snappy even with thousands of prospects.
     const { data: prospects, error } = await sb
       .from("outreach_prospects")
-      .select("status, opened_at, clicked_at, replied_at, booked_at, subject_variant")
+      .select(
+        "id, status, opened_at, clicked_at, replied_at, booked_at, subject_variant, engagement_tier",
+      )
       .eq("campaign", campaign);
 
     if (error) return supabaseErrorResponse(error);
@@ -35,12 +24,25 @@ export async function GET(req: Request) {
     const replied = rows.filter((r) => r.replied_at).length;
     const booked = rows.filter((r) => r.booked_at).length;
     const bounced = rows.filter((r) => r.status === "bounced").length;
+    const hotLeads = rows.filter(
+      (r) => r.engagement_tier === "hot" && !r.booked_at && r.status === "sent",
+    ).length;
 
-    // A/B subject reply rate — only meaningful once we have a few sends per arm.
     const variantA = rows.filter((r) => r.subject_variant === "A");
     const variantB = rows.filter((r) => r.subject_variant === "B");
     const variantAReplies = variantA.filter((r) => r.replied_at).length;
     const variantBReplies = variantB.filter((r) => r.replied_at).length;
+
+    const ids = rows.map((r) => r.id);
+    let revenueCount = 0;
+    if (ids.length) {
+      const { count } = await sb
+        .from("outreach_conversion_receipts")
+        .select("id", { count: "exact", head: true })
+        .in("prospect_id", ids)
+        .in("event_type", ["payment_completed", "trial_started", "deposit_paid"]);
+      revenueCount = count ?? 0;
+    }
 
     return NextResponse.json({
       campaign,
@@ -50,15 +52,19 @@ export async function GET(req: Request) {
       replied,
       booked,
       bounced,
-      // Rates as fractions (UI multiplies by 100 for display)
+      hot_leads: hotLeads,
+      revenue_attributed: revenueCount,
+      engagement: {
+        hot: rows.filter((r) => r.engagement_tier === "hot").length,
+        warm: rows.filter((r) => r.engagement_tier === "warm").length,
+        cold: rows.filter((r) => r.engagement_tier === "cold").length,
+      },
       open_rate: sent > 0 ? opened / sent : 0,
       click_rate: sent > 0 ? clicked / sent : 0,
       reply_rate: sent > 0 ? replied / sent : 0,
       booking_rate: sent > 0 ? booked / sent : 0,
       bounce_rate: sent > 0 ? bounced / sent : 0,
-      // Click-to-reply funnel — diagnostic
       ctr_to_reply: clicked > 0 ? replied / clicked : 0,
-      // A/B subject test
       ab_test: {
         variant_a_sent: variantA.length,
         variant_a_replies: variantAReplies,

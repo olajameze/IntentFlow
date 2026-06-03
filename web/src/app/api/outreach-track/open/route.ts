@@ -1,3 +1,4 @@
+import { engagementUpdateFields } from "@/lib/outreach/engagement";
 import { getSupabaseAdmin } from "@/lib/supabase-admin";
 
 /**
@@ -48,7 +49,7 @@ export async function GET(req: Request) {
 
     const { data: prospect } = await sb
       .from("outreach_prospects")
-      .select("id, campaign, opened_at, open_count")
+      .select("id, campaign, opened_at, open_count, clicked_at, click_count, booked_at")
       .eq("id", prospectId)
       .maybeSingle();
 
@@ -63,12 +64,20 @@ export async function GET(req: Request) {
     });
 
     if (!isApplePrefetch) {
+      const now = new Date();
+      const updated = {
+        ...prospect,
+        opened_at: prospect.opened_at ?? now.toISOString(),
+        open_count: (prospect.open_count ?? 0) + 1,
+      };
+      const tierFields = engagementUpdateFields(updated, now);
       await sb
         .from("outreach_prospects")
         .update({
-          opened_at: prospect.opened_at ?? new Date().toISOString(),
-          open_count: (prospect.open_count ?? 0) + 1,
-          updated_at: new Date().toISOString(),
+          opened_at: updated.opened_at,
+          open_count: updated.open_count,
+          ...tierFields,
+          updated_at: now.toISOString(),
         })
         .eq("id", prospect.id);
     }

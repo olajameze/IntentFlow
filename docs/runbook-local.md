@@ -5,7 +5,7 @@ Use this checklist the first time (or after a clean clone) before reporting “n
 ## 1. Supabase
 
 1. Create/open your Supabase project.
-2. Run SQL from `supabase/migrations/` in order (at minimum `20260512000000_init_marketing_engine.sql` plus any newer files).
+2. Run SQL from `supabase/migrations/` in order (including `20260604000000_business_outreach.sql` for conversion webhooks and per-business campaigns).
 3. Confirm `businesses` exists and optionally seed rows.
 
 ## 2. Environment
@@ -80,7 +80,22 @@ Groq sanity (no Gemini):
 cd engine && python -c "import config; print('Groq:', 'yes' if config.groq_api_key() else 'no')"
 ```
 
-## 5. E2E tests (optional)
+## 5. Outreach conversion loop
+
+1. Apply migration `20260604000000_business_outreach.sql`.
+2. In **Settings → Outreach & conversion webhooks**, enable outreach per business and copy the webhook secret.
+3. Wire your brand site (`/book`, Stripe, signup) using [`docs/outreach-conversion-webhook.md`](outreach-conversion-webhook.md) — pass `p` from the URL through to the webhook `prospect_id`.
+4. Optional env: `OUTREACH_CONVERSION_SECRET` (global fallback), `OUTREACH_PUBLIC_BASE_URL` (tracking pixels), `GROQ_API_KEY` (LLM follow-ups).
+5. Daily follow-ups: GitHub workflow `outreach-followups.yml` → `POST /api/outreach-prospects/send-followups` with `Authorization: Bearer $CRON_SECRET`.
+6. Monitor **Outreach → Hot leads** for clickers; `booked_at` fills automatically when webhooks fire.
+
+Run all enabled campaigns:
+
+```bash
+cd engine && python main.py outreach --campaign all
+```
+
+## 6. E2E tests (optional)
 
 ### Tier A + C + D (default CI / local smoke)
 

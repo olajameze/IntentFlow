@@ -32,6 +32,15 @@ SOCIAL_POST_GENERATION_TOOL_TEMPLATE = (
 ).strip()
 
 # Ethical B2B framing: “laws of power” read as positioning discipline, not manipulation or deceit.
+OUTREACH_CONVERSION_DOCTRINE = """
+Outreach email conversion playbook (cold B2B):
+- Structure: one-line hook → concrete problem with consequences → proof (certification, pricing, guarantee) → single soft CTA.
+- After a click: short follow-up acknowledging they viewed booking/signup; remove friction (deposit off invoice, trial, satisfaction guarantee).
+- UK English unless recipient country is US/CA/AU. No fake urgency, no "hope this finds you well", no invented pricing.
+- Max 180 words first touch; follow-ups max 90 words (break-up max 60).
+- Never paste URLs in body — the system renders the CTA button.
+""".strip()
+
 GLOBAL_COPY_DOCTRINE = """
 Global voice (all brands):
 - Be unique to this business: use only facts implied by the JSON context (name, audience, industry, goals, website). Do not invent awards, clients, or metrics.

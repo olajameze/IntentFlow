@@ -275,8 +275,21 @@ def scrape_prospects(
                 _p(f"      → email: {email}")
 
                 sector = classify_sector(name_guess, query, url)
+                business_id = None
                 try:
-                    sb.table("outreach_prospects").insert({
+                    settings_row = (
+                        sb.table("business_outreach_settings")
+                        .select("business_id")
+                        .eq("campaign_slug", cfg.id)
+                        .limit(1)
+                        .execute()
+                    )
+                    if settings_row.data:
+                        business_id = settings_row.data[0].get("business_id")
+                except Exception:
+                    pass
+                try:
+                    row: dict = {
                         "name": name_guess,
                         "email": email,
                         "website_url": url,
@@ -288,7 +301,10 @@ def scrape_prospects(
                         "campaign": cfg.id,
                         "sector": sector,
                         "raw": {"query": query, "campaign": cfg.id, "sector": sector},
-                    }).execute()
+                    }
+                    if business_id:
+                        row["business_id"] = business_id
+                    sb.table("outreach_prospects").insert(row).execute()
                     inserted += 1
                     country_inserted += 1
                     _p(f"      + Saved: {name_guess} <{email}>")

@@ -24,6 +24,137 @@ type Biz = {
   has_stripe?: boolean;
 };
 
+type OutreachSettings = {
+  business_id: string;
+  enabled: boolean;
+  campaign_slug: string;
+  cta_url_template: string;
+  conversion_webhook_secret: string | null;
+};
+
+function OutreachPortfolioCard({ businesses }: { businesses: Biz[] }) {
+  const [settings, setSettings] = useState<OutreachSettings[]>([]);
+  const [loading, setLoading] = useState(true);
+  const siteBase =
+    typeof window !== "undefined"
+      ? window.location.origin
+      : process.env.NEXT_PUBLIC_SITE_URL || "";
+
+  const loadOutreach = async () => {
+    const res = await fetch("/api/business-outreach");
+    if (res.ok) setSettings(await res.json());
+    setLoading(false);
+  };
+
+  useEffect(() => {
+    void loadOutreach();
+  }, [businesses.length]);
+
+  const ensureSettings = async (businessId: string) => {
+    const res = await fetch("/api/business-outreach", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ business_id: businessId, enable: true }),
+    });
+    if (!res.ok) {
+      toast.error("Could not init outreach settings");
+      return null;
+    }
+    return (await res.json()) as OutreachSettings;
+  };
+
+  const toggleOutreach = async (biz: Biz, enabled: boolean) => {
+    let row = settings.find((s) => s.business_id === biz.id);
+    if (!row) row = (await ensureSettings(biz.id)) ?? undefined;
+    if (!row) return;
+    const res = await fetch("/api/business-outreach", {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ business_id: biz.id, enabled }),
+    });
+    if (!res.ok) {
+      toast.error("Update failed");
+      return;
+    }
+    toast.success(enabled ? "Outreach enabled" : "Outreach disabled");
+    void loadOutreach();
+  };
+
+  const bootstrapCopy = async (businessId: string) => {
+    toast.message("Generating campaign copy…");
+    const res = await fetch("/api/business-outreach/bootstrap", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ business_id: businessId }),
+    });
+    if (!res.ok) {
+      const d = await res.json().catch(() => ({}));
+      toast.error(typeof d.error === "string" ? d.error : "Bootstrap failed");
+      return;
+    }
+    toast.success("Campaign prompts generated — run outreach engine next");
+    void loadOutreach();
+  };
+
+  return (
+    <Card>
+      <CardHeader>
+        <CardTitle className="text-base">Outreach & conversion webhooks</CardTitle>
+      </CardHeader>
+      <CardContent className="space-y-4 text-sm">
+        <p className="text-muted-foreground">
+          Enable cold email outreach per business. Add the webhook snippet on your book/payment page so paying customers are tracked automatically.
+        </p>
+        {loading ? (
+          <p className="text-muted-foreground">Loading…</p>
+        ) : (
+          businesses.map((biz) => {
+            const row = settings.find((s) => s.business_id === biz.id);
+            const webhookUrl = siteBase ? `${siteBase}/api/outreach-conversion` : "/api/outreach-conversion";
+            return (
+              <div key={biz.id} className="rounded-lg border p-3 space-y-2">
+                <div className="flex flex-wrap items-center justify-between gap-2">
+                  <span className="font-medium">{biz.name}</span>
+                  <div className="flex items-center gap-2">
+                    <Label className="text-xs text-muted-foreground">Outreach</Label>
+                    <Switch
+                      checked={row?.enabled ?? false}
+                      onCheckedChange={(v) => void toggleOutreach(biz, v)}
+                      aria-label={`Outreach for ${biz.name}`}
+                    />
+                  </div>
+                </div>
+                {row && (
+                  <>
+                    <p className="text-xs text-muted-foreground">
+                      Campaign slug: <span className="font-mono">{row.campaign_slug}</span>
+                    </p>
+                    <p className="text-[11px] font-mono break-all text-muted-foreground">
+                      Webhook: {webhookUrl}
+                      <br />
+                      Secret: {row.conversion_webhook_secret ? "••••••" : "—"}
+                    </p>
+                    <div className="flex flex-wrap gap-2">
+                      <Button type="button" size="sm" variant="secondary" onClick={() => void bootstrapCopy(biz.id)}>
+                        Generate campaign copy
+                      </Button>
+                    </div>
+                  </>
+                )}
+                {!row && (
+                  <Button type="button" size="sm" variant="outline" onClick={() => void toggleOutreach(biz, true)}>
+                    Set up outreach
+                  </Button>
+                )}
+              </div>
+            );
+          })
+        )}
+      </CardContent>
+    </Card>
+  );
+}
+
 export function SettingsScreen() {
   const [businesses, setBusinesses] = useState<Biz[]>([]);
   /** Per-business draft for Umami id (portfolio table edits). */
@@ -271,6 +402,8 @@ export function SettingsScreen() {
           </Table>
         </CardContent>
       </Card>
+
+      <OutreachPortfolioCard businesses={businesses} />
 
       <Card>
         <CardHeader>

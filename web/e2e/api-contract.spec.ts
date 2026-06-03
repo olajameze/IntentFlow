@@ -63,6 +63,31 @@ test.describe("Tier D — Route Handlers", () => {
     } else expect(json.tokenShape).toBeNull();
   });
 
+  test("POST /api/outreach-conversion rejects invalid prospect_id", async ({ request }) => {
+    const res = await request.post("/api/outreach-conversion", {
+      data: { prospect_id: "not-a-uuid", event: "payment_completed" },
+      headers: { "Content-Type": "application/json" },
+    });
+    expect(res.status()).toBe(400);
+  });
+
+  test("GET /api/outreach-prospects/stats includes hot_leads field", async ({ request }) => {
+    const res = await request.get("/api/outreach-prospects/stats?campaign=pesttrace");
+    expect([200, 503]).toContain(res.status());
+    if (res.ok()) {
+      const json = await res.json();
+      expect(json).toMatchObject({
+        hot_leads: expect.any(Number),
+        revenue_attributed: expect.any(Number),
+        engagement: expect.objectContaining({
+          hot: expect.any(Number),
+          warm: expect.any(Number),
+          cold: expect.any(Number),
+        }),
+      });
+    }
+  });
+
   test("GET /api/trigger-traffic-sync exposes workflow + PAT + repo booleans safely", async ({ request }) => {
     const res = await request.get("/api/trigger-traffic-sync");
     expect(res.ok()).toBeTruthy();

@@ -24,7 +24,8 @@ if str(_ROOT) not in sys.path:
 
 from config import active_llm_summary, outreach_scrape_limit
 from supabase_client import get_supabase
-from tools.outreach_campaigns import CampaignConfig, DEFAULT_CAMPAIGN_ID, get_campaign
+from tools.outreach_campaign_db import get_campaign, load_enabled_campaigns
+from tools.outreach_campaigns import CampaignConfig, DEFAULT_CAMPAIGN_ID
 from tools.outreach_email import generate_outreach_email
 from tools.prospect_scraper import scrape_prospects
 
@@ -93,10 +94,9 @@ def run_outreach(campaign: CampaignConfig | str | None = None) -> None:
 
 
 def run_all_campaigns() -> None:
-    """Run every registered campaign in sequence (used by GitHub Actions when no campaign is passed)."""
-    from tools.outreach_campaigns import CAMPAIGNS
-    for cid, cfg in CAMPAIGNS.items():
-        print(f"\n##### Campaign: {cid} ({cfg.label}) #####")
+    """Run every enabled portfolio outreach campaign (DB + static fallback)."""
+    for cfg in load_enabled_campaigns():
+        print(f"\n##### Campaign: {cfg.id} ({cfg.label}) #####")
         run_outreach(cfg)
 
 

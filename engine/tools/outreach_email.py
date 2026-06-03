@@ -40,11 +40,12 @@ from config import (
     smtp_user,
 )
 from supabase_client import get_supabase
+from tools.copy_doctrine import OUTREACH_CONVERSION_DOCTRINE
 from tools.llm import generate_personalised_copy
+from tools.outreach_campaign_db import get_campaign
 from tools.outreach_campaigns import (
     CampaignConfig,
     DEFAULT_CAMPAIGN_ID,
-    get_campaign,
     render_fallback_body,
     sector_angle,
 )
@@ -184,6 +185,7 @@ def generate_outreach_email(
         business_context=f'{{"name": "{name}", "website": "{website}", "country": "{country}", "sector": "{sector}"}}',
         lead=f"Prospect: {name}",
         template=subject_prompt,
+        extra_doctrine=OUTREACH_CONVERSION_DOCTRINE,
     )
     subject_a, subject_b = _parse_subject_variants(subject_raw, cfg.fallback_subject)
 
@@ -195,6 +197,7 @@ def generate_outreach_email(
         business_context=f'{{"name": "{name}", "website": "{website}", "country": "{country}", "sector": "{sector}"}}',
         lead=f"Prospect: {name}",
         template=body_prompt,
+        extra_doctrine=OUTREACH_CONVERSION_DOCTRINE,
     ).strip()
     if not body_text or body_text.startswith("[Draft"):
         body_text = render_fallback_body(cfg, name)
