@@ -46,6 +46,7 @@ export async function POST(req: Request) {
         name: prospect.name || "there",
         website_url: prospect.website_url,
         sector: prospect.sector,
+        country: prospect.country,
       },
       touchIndex,
       tier,

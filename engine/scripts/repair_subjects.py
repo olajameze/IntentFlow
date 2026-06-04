@@ -43,6 +43,7 @@ from supabase_client import get_supabase
 from tools.llm import generate_personalised_copy
 from tools.outreach_campaigns import DEFAULT_CAMPAIGN_ID, get_campaign, sector_angle
 from tools.outreach_email import _looks_like_subject, _parse_subject_variants
+from tools.outreach_locale import normalize_outreach_country
 
 
 def _looks_broken(subject: str | None) -> bool:
@@ -92,7 +93,7 @@ def repair(campaign_id: str | None, dry_run: bool) -> None:
 
         name = (p.get("name") or "").strip()
         website = (p.get("website_url") or cfg.website).strip()
-        country = (p.get("country") or "UK").upper()
+        country = normalize_outreach_country(p.get("country"))
         sector = str(p.get("sector") or "generic").strip().lower() or "generic"
         angle = sector_angle(cfg, sector)
 

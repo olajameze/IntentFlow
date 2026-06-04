@@ -36,7 +36,7 @@ OUTREACH_CONVERSION_DOCTRINE = """
 Outreach email conversion playbook (cold B2B):
 - Structure: one-line hook → concrete problem with consequences → proof (certification, pricing, guarantee) → single soft CTA.
 - After a click: short follow-up acknowledging they viewed booking/signup; remove friction (deposit off invoice, trial, satisfaction guarantee).
-- UK English unless recipient country is US/CA/AU. No fake urgency, no "hope this finds you well", no invented pricing.
+- Match English to recipient country (see locale rules). Do not mention UK unless country is UK. No fake urgency, no "hope this finds you well", no invented pricing.
 - Max 180 words first touch; follow-ups max 90 words (break-up max 60).
 - Never paste URLs in body — the system renders the CTA button.
 """.strip()
@@ -92,9 +92,9 @@ JGDevs-specific (only when this block is included):
 
 PESTTRACE_B2B_FOCUS = """
 PestTrace-specific (only when this block is included):
-- Sole focus: compliance, audit readiness, and operational control for UK pest-control businesses.
+- Sole focus: compliance, audit readiness, and operational control for pest-control businesses (Europe, UK, India, Americas).
 - Mandatory post logic: specific compliance/paperwork/audit pain point first -> PestTrace as the practical digital solution.
-- Positioning: built specifically for UK pest control, not generic field service software.
+- Positioning: built for pest control operators globally, not generic field service software. Do not frame PestTrace as UK-only.
 - Feature anchors you may reference when relevant: digital logbook (treatments/photos/e-signatures/follow-ups/site notes), qualification expiry tracking, audit-ready reports, operational dashboard, customer analytics, CRRU-minded workflows.
 - Commercial anchors when suitable: Pro £248/mo, Business £496/mo, Enterprise £992/mo, plus a 7-day free trial.
 - Compliance pain points to rotate through:

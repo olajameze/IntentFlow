@@ -82,11 +82,11 @@ export const LEGACY_FOLLOWUP_BRANDING: Record<
     ctaUrl:
       "https://pesttrace.com/?utm_source=outreach&utm_medium=email&utm_campaign=pesttrace",
     accent: "#0F766E",
-    trustBadges: ["UK-built", "Audit-ready records", "BPCA-aligned workflows"],
+    trustBadges: ["Audit-ready records", "EU & global compliance", "7-day free trial"],
     optOut:
       "You're on this list because your business was found in a public directory. Reply STOP to be removed.",
     touchBodies: [
-      "I wrote a few days ago — wanted to leave one more useful note in case it's relevant.\n\nMost UK pest control firms we talk to lose hours every week re-typing field paperwork before audits. PestTrace replaces that with a digital logbook your technicians fill in on the job — photos, signatures, follow-ups, expiry tracking, all audit-ready.\n\nIf that sounds familiar, the link below shows a short walkthrough.",
+      "I wrote a few days ago — wanted to leave one more useful note in case it's relevant.\n\nMany pest control teams we talk to lose hours every week re-typing field paperwork before audits. PestTrace replaces that with a digital logbook your technicians fill in on the job — photos, signatures, follow-ups, expiry tracking, all audit-ready.\n\nIf that sounds familiar, the link below shows a short walkthrough.",
       "I'll leave it here — no more emails after this one.\n\nIf you ever want to make audit prep painless, PestTrace stays right there at pesttrace.com. Door's always open.",
     ],
     touchSubjects: [

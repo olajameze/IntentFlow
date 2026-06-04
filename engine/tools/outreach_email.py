@@ -1,7 +1,7 @@
 """Generate and send professional B2B outreach emails (campaign-aware).
 
 Two campaigns are supported (see ``engine.tools.outreach_campaigns``):
-  • ``pesttrace`` — sells compliance SaaS to UK/US/CA/AU pest control businesses
+  • ``pesttrace`` — sells compliance SaaS to pest control businesses (EU, India, UK, Americas)
   • ``weathers`` — sells pest control services to UK West Midlands commercial premises
 
 Flow:
@@ -41,6 +41,7 @@ from config import (
 )
 from supabase_client import get_supabase
 from tools.copy_doctrine import OUTREACH_CONVERSION_DOCTRINE
+from tools.outreach_locale import locale_rules_for_country, normalize_outreach_country
 from tools.llm import generate_personalised_copy
 from tools.outreach_campaign_db import get_campaign
 from tools.outreach_campaigns import (
@@ -161,7 +162,8 @@ def generate_outreach_email(
     """
     pid = prospect.get("id")
     name = (prospect.get("name") or "").strip()
-    country = (prospect.get("country") or "UK").upper()
+    country = normalize_outreach_country(prospect.get("country"))
+    outreach_doctrine = f"{OUTREACH_CONVERSION_DOCTRINE}\n\n{locale_rules_for_country(country)}"
 
     if not pid or not name:
         return False
@@ -185,7 +187,7 @@ def generate_outreach_email(
         business_context=f'{{"name": "{name}", "website": "{website}", "country": "{country}", "sector": "{sector}"}}',
         lead=f"Prospect: {name}",
         template=subject_prompt,
-        extra_doctrine=OUTREACH_CONVERSION_DOCTRINE,
+        extra_doctrine=outreach_doctrine,
     )
     subject_a, subject_b = _parse_subject_variants(subject_raw, cfg.fallback_subject)
 
@@ -197,7 +199,7 @@ def generate_outreach_email(
         business_context=f'{{"name": "{name}", "website": "{website}", "country": "{country}", "sector": "{sector}"}}',
         lead=f"Prospect: {name}",
         template=body_prompt,
-        extra_doctrine=OUTREACH_CONVERSION_DOCTRINE,
+        extra_doctrine=outreach_doctrine,
     ).strip()
     if not body_text or body_text.startswith("[Draft"):
         body_text = render_fallback_body(cfg, name)

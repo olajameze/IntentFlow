@@ -38,18 +38,22 @@ export async function POST(req: Request) {
     const prompt = `Generate cold B2B outreach campaign JSON for this business:
 Name: ${business.name}
 Type: ${business.type}
-Audience: ${business.target_audience || "B2B decision makers"}
+Audience: ${business.target_audience || "B2B decision makers — pest control firms across Europe, India, and selected other markets"}
 Industry: ${business.industry || "general"}
 Goals: ${business.goals || "grow revenue"}
 Website: ${business.website_url || ""}
+
+Locale rules for all email prompts:
+- Do NOT mention United Kingdom or "UK" unless recipient country is UK.
+- Pest control / compliance SaaS: target DE, FR, ES, IT, NL, IN, IE, UK, US, CA, AU — not UK-only framing.
 
 Return JSON only:
 {
   "subject_prompt": "LLM instructions for two A/B subject lines...",
   "body_prompt": "LLM instructions for email body max 180 words...",
-  "follow_up_prompts": ["touch 2 prompt with {name} {website} {sector_angle}", "touch 3 break-up prompt"],
+  "follow_up_prompts": ["touch 2 with {name} {website} {country} {sector_angle}", "touch 3 break-up with {country}"],
   "sector_angles": {"generic": "angle text", "restaurant": "..."},
-  "scrape_queries": {"UK": [["search query", "City"], ...]}
+  "scrape_queries": {"DE": [["query", "City"]], "FR": [...], "IN": [...], "UK": [...], "US": [...]}
 }`;
 
     const { body: raw } = await generateFollowUpCopy({

@@ -6,7 +6,7 @@ how to find the targets, and what to write to them.
 Campaigns
 ─────────
   pesttrace
-    Targets pest control businesses across UK/US/CA/AU to sell PestTrace compliance SaaS.
+    Targets pest control businesses across Europe, India, UK, and Americas to sell PestTrace compliance SaaS.
     Sender: PestTrace Team. Tone: peer-to-peer compliance advice.
 
   weathers
@@ -65,9 +65,10 @@ class CampaignConfig:
 
 _PESTTRACE_SUBJECT_PROMPT = """You are writing TWO cold B2B email subject line variants for PestTrace.com (for A/B testing).
 
-PestTrace is a digital compliance and job-tracking platform built specifically for UK pest control businesses.
+PestTrace is a digital compliance and job-tracking platform for pest control operators worldwide.
 
 The recipient is a pest control business owner or manager at: {name} ({website})
+Recipient country code: {country}
 Sector angle to incorporate: {sector_angle}
 
 Return EXACTLY two lines:
@@ -77,9 +78,9 @@ Line 2 — variant B (a statement style): names a concrete operational risk with
 Rules for BOTH:
 - Max 60 characters each.
 - Do NOT mention PestTrace in the subject — feel like a relevant industry question/observation.
+- Do NOT mention UK unless country is UK.
 - No clickbait. No exclamation marks. No emojis.
-- UK English.
-- Keep aligned to real pain points: paper logs failing audits, missing treatment documentation, qualification expiry risk, BRCGS/SALSA/Red Tractor/BS EN 16636 pressure, rodenticide stewardship evidence.
+- Keep aligned to real pain points: paper logs failing audits, missing treatment documentation, qualification expiry risk, audit/food-safety programme pressure (BRCGS/SALSA/Red Tractor/BS EN 16636 for UK; EU biocide/PPP records for EU; FSSAI/state audits for IN), rodenticide stewardship evidence.
 
 Examples:
   Are your pest control records audit-ready?
@@ -90,30 +91,31 @@ Return ONLY two lines — no labels, no quotes, no explanation."""
 
 _PESTTRACE_BODY_PROMPT = """You are writing a cold B2B email on behalf of PestTrace.com.
 
-PestTrace is a compliance and job-tracking platform built specifically for UK pest control businesses.
+PestTrace is a compliance and job-tracking platform for pest control operators globally.
 It replaces paper/spreadsheet records with digital evidence trails that are audit-ready.
 
 Recipient business: {name}
 Website: {website}
-Country: {country}
+Recipient country code: {country}
 Sector angle to incorporate: {sector_angle}
 
 Write a professional B2B outreach email. Rules:
 - Tone: calm authority. Never needy, never begging. Read like advice from a peer, not a sales pitch.
+- Do NOT mention the United Kingdom or "UK" unless country is UK.
 - Mandatory structure: short opener (1 sentence) -> specific compliance/paperwork problem (2-3 sentences) -> how PestTrace solves that exact issue (2-3 sentences) -> soft CTA (visit pesttrace.com or reply)
-- Problem must be concrete and credible. Use one angle such as:
-  - audit pressure under BRCGS/SALSA/Red Tractor/BS EN 16636,
-  - BPCA assessment documentation risk (including potential £5,000 fines),
+- Problem must be concrete and credible for the recipient's market. Use one angle such as:
+  - audit pressure under BRCGS/SALSA/Red Tractor/BS EN 16636 (UK/IE only),
+  - EU biocide/PPP and machine-readable electronic record expectations (DE/FR/ES/IT/NL),
+  - FSSAI or customer audit documentation gaps (IN),
+  - BPCA-style assessment documentation risk (UK),
   - rodenticide stewardship record-keeping pressure,
   - qualification/certificate expiry being missed,
   - office backlog from transcribing field paperwork,
-  - lost/damaged paper logs,
-  - 2027 machine-readable electronic record expectations for PPP workflows.
-- Solution section should frame PestTrace capabilities as practical outcomes: digital logbook, photos/e-signatures/follow-ups, audit-ready reports, expiry tracking, dashboard visibility, and UK pest-control-specific workflows.
+  - lost/damaged paper logs.
+- Solution section: digital logbook, photos/e-signatures/follow-ups, audit-ready reports, expiry tracking, dashboard visibility — workflows built for pest control teams, not generic field service.
 - Do NOT mention pricing, discounts, or urgency pressure.
 - Do NOT use phrases like "I hope this email finds you well", "just reaching out", or "I wanted to touch base".
 - Max 180 words total body text.
-- UK English unless the business is in the US, Canada, or Australia.
 - End with a professional sign-off: "Best regards,\\nThe PestTrace Team\\nhttps://pesttrace.com"
 - Replace [Your Name] with just "The PestTrace Team" — do not invent a person's name.
 
@@ -175,34 +177,82 @@ _PESTTRACE_QUERIES: dict[str, list[SearchQuery]] = {
         ("pest control company Adelaide site:.com.au",  "Adelaide"),
         ("pest control company Canberra site:.com.au",  "Canberra"),
     ],
+    "DE": [
+        ("Schädlingsbekämpfung Unternehmen Berlin",     "Berlin"),
+        ("Kammerjäger München Firma",                   "Munich"),
+        ("Schädlingsbekämpfung Hamburg Unternehmen",    "Hamburg"),
+        ("Kammerjäger Köln",                            "Cologne"),
+        ("Schädlingsbekämpfung Frankfurt",              "Frankfurt"),
+    ],
+    "FR": [
+        ("entreprise dératisation Paris",               "Paris"),
+        ("entreprise désinsectisation Lyon",            "Lyon"),
+        ("lutte antiparasitaire Marseille entreprise",    "Marseille"),
+        ("dératisation Toulouse professionnel",           "Toulouse"),
+    ],
+    "ES": [
+        ("empresa control de plagas Madrid",              "Madrid"),
+        ("empresa control de plagas Barcelona",           "Barcelona"),
+        ("empresa control de plagas Valencia",            "Valencia"),
+        ("empresa fumigación Sevilla",                    "Seville"),
+    ],
+    "IT": [
+        ("azienda disinfestazione Milano",                "Milan"),
+        ("azienda disinfestazione Roma",                  "Rome"),
+        ("azienda disinfestazione Torino",                "Turin"),
+        ("disinfestazione Napoli azienda",                "Naples"),
+    ],
+    "NL": [
+        ("ongediertebestrijding bedrijf Amsterdam",       "Amsterdam"),
+        ("ongediertebestrijding bedrijf Rotterdam",       "Rotterdam"),
+        ("ongediertebestrijding bedrijf Utrecht",         "Utrecht"),
+    ],
+    "IE": [
+        ("pest control company Dublin site:.ie",          "Dublin"),
+        ("pest control company Cork site:.ie",          "Cork"),
+        ("pest control company Galway site:.ie",          "Galway"),
+    ],
+    "IN": [
+        ("pest control company Mumbai contact email",     "Mumbai"),
+        ("pest control company Delhi NCR pest control",   "Delhi"),
+        ("pest control company Bangalore",                "Bangalore"),
+        ("pest control company Hyderabad",                "Hyderabad"),
+        ("pest control company Chennai",                  "Chennai"),
+        ("pest control company Pune pest control",         "Pune"),
+        ("pest control company Kolkata",                  "Kolkata"),
+    ],
 }
 
 
 _PESTTRACE_FOLLOWUP_PROMPTS = (
     # Touch 2 (Day 3)
-    """You are writing a SHORT follow-up email (max 90 words) from PestTrace.com to a UK pest control business that didn't reply to your first email three days ago.
+    """You are writing a SHORT follow-up email (max 90 words) from PestTrace.com to a pest control business that didn't reply to your first email three days ago.
 
 Recipient: {name} ({website})
+Recipient country code: {country}
 Sector angle: {sector_angle}
 
 Rules:
+- Do NOT mention UK unless country is UK.
 - Reference (gently) that you wrote a few days ago — no apology, no guilt-tripping.
-- Open with a different angle from the first email — pick ONE: lost paperwork story, an upcoming audit risk, qualification expiry, or 2027 electronic record expectations.
+- Open with a different angle from the first email — pick ONE: lost paperwork story, an upcoming audit risk, qualification expiry, or electronic record expectations for their market.
 - Frame PestTrace as the obvious fix in one sentence.
 - End with a single CTA: "Worth a 10-minute look at pesttrace.com?"
 - Sign off: "Best regards,\\nThe PestTrace Team\\nhttps://pesttrace.com"
-- UK English. No clickbait. No emojis. No quotes around the email.""",
+- No clickbait. No emojis. No quotes around the email.""",
     # Touch 3 (Day 7) — break-up email
     """You are writing a final, brief 'breakup' follow-up email (max 60 words) from PestTrace.com.
 
 Recipient: {name} ({website})
+Recipient country code: {country}
 
 Rules:
+- Do NOT mention UK unless country is UK.
 - Acknowledge silence is fine — say you'll stop emailing after this.
 - Reaffirm in one sentence what PestTrace would do for them.
 - Single CTA: "If you ever want to come back to this, the door's open at pesttrace.com."
 - Sign off: "Best regards,\\nThe PestTrace Team"
-- UK English. No emojis. Return only the email body.""",
+- No emojis. Return only the email body.""",
 )
 
 
@@ -217,7 +267,7 @@ PESTTRACE = CampaignConfig(
     smtp_user_env="SMTP_USER",
     smtp_password_env="SMTP_PASSWORD",
     smtp_port_env="SMTP_PORT",
-    countries=("UK", "US", "CA", "AU"),
+    countries=("DE", "FR", "ES", "IT", "NL", "IN", "IE", "UK", "US", "CA", "AU"),
     queries=_PESTTRACE_QUERIES,
     subject_prompt=_PESTTRACE_SUBJECT_PROMPT,
     body_prompt=_PESTTRACE_BODY_PROMPT,
@@ -231,7 +281,7 @@ PESTTRACE = CampaignConfig(
     # UTM tracking + per-prospect attribution so Umami can attribute landing visits to outreach
     cta_url_template="https://pesttrace.com/?utm_source=outreach&utm_medium=email&utm_campaign=pesttrace&p={prospect_id}",
     accent_color="#0F766E",  # teal — distinct from Weathers green
-    trust_badges=("UK-built", "Audit-ready records", "BPCA-aligned workflows"),
+    trust_badges=("Audit-ready records", "EU & global compliance", "7-day free trial"),
     sector_angles={
         "pest_control_firm": "audit pressure, missing field documentation, and qualification expiry that's silently building risk",
         "generic":           "audit pressure, missing field documentation, and qualification expiry that's silently building risk",

@@ -173,7 +173,19 @@ def _ddg_search(
     """
     from ddgs import DDGS
 
-    region_map = {"UK": "uk-en", "US": "us-en", "CA": "ca-en", "AU": "au-en"}
+    region_map = {
+        "UK": "uk-en",
+        "US": "us-en",
+        "CA": "ca-en",
+        "AU": "au-en",
+        "DE": "de-de",
+        "FR": "fr-fr",
+        "ES": "es-es",
+        "IT": "it-it",
+        "NL": "nl-nl",
+        "IN": "in-en",
+        "IE": "ie-en",
+    }
     region = region_map.get(country_code, "wt-wt")
     seen: set[str] = set()
     results: list[str] = []

@@ -228,7 +228,20 @@ function StatsPanel({ stats }: { stats: CampaignStats | null }) {
   );
 }
 
-const COUNTRY_LABELS: Record<string, string> = { UK: "UK", US: "USA", CA: "Canada", AU: "Australia" };
+const COUNTRY_LABELS: Record<string, string> = {
+  DE: "Germany",
+  FR: "France",
+  ES: "Spain",
+  IT: "Italy",
+  NL: "Netherlands",
+  IN: "India",
+  IE: "Ireland",
+  UK: "UK",
+  US: "USA",
+  CA: "Canada",
+  AU: "Australia",
+  INT: "International",
+};
 const PREVIEW_LEN = 140;
 
 const CAMPAIGN_META: Record<
@@ -244,9 +257,9 @@ const CAMPAIGN_META: Record<
   pesttrace: {
     label: "PestTrace",
     short: "PestTrace",
-    blurb: "Compliance SaaS for UK/US/CA/AU pest control businesses.",
+    blurb: "Compliance SaaS for pest control businesses across Europe, India, and the Americas.",
     fromEmail: "pesttrace@gmail.com",
-    countries: "UK · US · CA · AU",
+    countries: "EU · IN · UK · US · CA · AU",
   },
   weathers: {
     label: "Weathers Pest Solutions",
@@ -258,10 +271,14 @@ const CAMPAIGN_META: Record<
 };
 
 function countryBadgeClass(country: string) {
-  if (country === "UK") return "bg-blue-600/15 text-blue-400 border-blue-600/30";
+  if (country === "UK" || country === "IE") return "bg-blue-600/15 text-blue-400 border-blue-600/30";
   if (country === "US") return "bg-red-600/15 text-red-400 border-red-600/30";
   if (country === "CA") return "bg-orange-600/15 text-orange-400 border-orange-600/30";
   if (country === "AU") return "bg-emerald-600/15 text-emerald-400 border-emerald-600/30";
+  if (country === "IN") return "bg-amber-600/15 text-amber-400 border-amber-600/30";
+  if (["DE", "FR", "ES", "IT", "NL"].includes(country)) {
+    return "bg-violet-600/15 text-violet-400 border-violet-600/30";
+  }
   return "";
 }
 
@@ -830,13 +847,22 @@ export function OutreachScreen() {
           </SelectTrigger>
           <SelectContent>
             <SelectItem value="all">All countries</SelectItem>
-            <SelectItem value="UK">UK</SelectItem>
-            {campaign === "pesttrace" && (
+            {campaign === "pesttrace" ? (
               <>
+                <SelectItem value="DE">Germany</SelectItem>
+                <SelectItem value="FR">France</SelectItem>
+                <SelectItem value="ES">Spain</SelectItem>
+                <SelectItem value="IT">Italy</SelectItem>
+                <SelectItem value="NL">Netherlands</SelectItem>
+                <SelectItem value="IN">India</SelectItem>
+                <SelectItem value="IE">Ireland</SelectItem>
+                <SelectItem value="UK">UK</SelectItem>
                 <SelectItem value="US">USA</SelectItem>
                 <SelectItem value="CA">Canada</SelectItem>
                 <SelectItem value="AU">Australia</SelectItem>
               </>
+            ) : (
+              <SelectItem value="UK">UK</SelectItem>
             )}
           </SelectContent>
         </Select>
