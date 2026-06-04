@@ -2,14 +2,16 @@ import { NextResponse } from "next/server";
 import { z } from "zod";
 import { generateFollowUpCopy } from "@/lib/outreach/llm-followup";
 import { withSupabaseRoute } from "@/lib/with-supabase-route";
+import { uuidLike } from "@/lib/zod-schemas";
 
-const schema = z.object({ business_id: z.string().uuid() });
+const schema = z.object({ business_id: uuidLike });
 
 /** POST — LLM-generate outreach prompts for a business (marketing expert bootstrap). */
 export async function POST(req: Request) {
   const parsed = schema.safeParse(await req.json().catch(() => ({})));
   if (!parsed.success) {
-    return NextResponse.json({ error: "business_id required" }, { status: 400 });
+    const msg = parsed.error.issues[0]?.message ?? "business_id required";
+    return NextResponse.json({ error: msg }, { status: 400 });
   }
 
   return withSupabaseRoute(async (sb) => {

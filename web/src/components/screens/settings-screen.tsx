@@ -73,7 +73,8 @@ function OutreachPortfolioCard({ businesses }: { businesses: Biz[] }) {
       body: JSON.stringify({ business_id: biz.id, enabled }),
     });
     if (!res.ok) {
-      toast.error("Update failed");
+      const d = await res.json().catch(() => ({}));
+      toast.error(typeof d.error === "string" ? d.error : "Update failed");
       return;
     }
     toast.success(enabled ? "Outreach enabled" : "Outreach disabled");

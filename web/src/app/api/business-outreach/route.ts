@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
 import { withSupabaseRoute } from "@/lib/with-supabase-route";
+import { uuidLike } from "@/lib/zod-schemas";
 import { randomBytes } from "crypto";
 
 function slugify(name: string, businessId: string): string {
@@ -14,7 +15,7 @@ function slugify(name: string, businessId: string): string {
 }
 
 const patchSchema = z.object({
-  business_id: z.string().uuid(),
+  business_id: uuidLike,
   enabled: z.boolean().optional(),
   cta_url_template: z.string().min(8).max(2000).optional(),
   cta_label: z.string().min(1).max(80).optional(),
@@ -46,11 +47,12 @@ export async function GET(req: Request) {
 
 export async function POST(req: Request) {
   const body = z
-    .object({ business_id: z.string().uuid(), enable: z.boolean().optional() })
+    .object({ business_id: uuidLike, enable: z.boolean().optional() })
     .safeParse(await req.json().catch(() => ({})));
 
   if (!body.success) {
-    return NextResponse.json({ error: "business_id required" }, { status: 400 });
+    const msg = body.error.issues[0]?.message ?? "business_id required";
+    return NextResponse.json({ error: msg }, { status: 400 });
   }
 
   return withSupabaseRoute(async (sb) => {
