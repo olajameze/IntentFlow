@@ -21,6 +21,8 @@ export async function GET(req: Request) {
         .eq("status", "sent")
         .is("booked_at", null)
         .order("click_count", { ascending: false });
+    } else if (status === "draft_ready" || status === "approved") {
+      query = query.order("lead_score", { ascending: false }).order("created_at", { ascending: false });
     } else {
       query = query.order("created_at", { ascending: false });
     }

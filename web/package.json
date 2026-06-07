@@ -13,6 +13,7 @@
     "build": "next build",
     "start": "next start",
     "lint": "next lint",
+    "test": "npx --yes tsx --test src/lib/outreach/email-validator.test.ts src/lib/outreach/engagement.test.ts",
     "postinstall": "patch-package",
     "test:e2e": "playwright test",
     "test:e2e:integration": "cross-env PLAYWRIGHT_INTEGRATION=true playwright test",

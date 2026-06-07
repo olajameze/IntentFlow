@@ -26,6 +26,7 @@ if str(_ROOT) not in sys.path:
 
 from config import outreach_scrape_limit
 from supabase_client import get_supabase
+from tools.outreach_campaign_db import get_scrape_queries
 from tools.outreach_campaigns import CampaignConfig, get_campaign
 from tools.outreach_sector import classify_sector
 
@@ -92,13 +93,23 @@ _HEADERS = {
 }
 
 
-def _fetch(url: str, timeout: int = 10) -> str:
-    try:
-        import requests
-        r = requests.get(url, headers=_HEADERS, timeout=timeout, allow_redirects=True)
-        return r.text
-    except Exception:  # noqa: BLE001
-        return ""
+def _fetch(url: str, timeout: int = 10, retries: int = 2) -> str:
+    import time
+
+    import requests
+
+    last_err: Exception | None = None
+    for attempt in range(retries + 1):
+        try:
+            r = requests.get(url, headers=_HEADERS, timeout=timeout, allow_redirects=True)
+            return r.text
+        except Exception as exc:  # noqa: BLE001
+            last_err = exc
+            if attempt < retries:
+                time.sleep(0.5 * (attempt + 1))
+    if last_err:
+        _p(f"      fetch failed: {last_err}")
+    return ""
 
 
 def _find_email_on_site(base_url: str) -> str | None:
@@ -233,9 +244,11 @@ def scrape_prospects(
         Number of newly inserted prospects.
     """
     cfg = campaign if isinstance(campaign, CampaignConfig) else get_campaign(campaign)
+    db_queries = get_scrape_queries(cfg.id)
+    query_map = db_queries if db_queries else cfg.queries
     target_countries = [c.upper() for c in (countries or list(cfg.countries))]
     # Drop any country we don't have queries for in this campaign
-    target_countries = [c for c in target_countries if cfg.queries.get(c)]
+    target_countries = [c for c in target_countries if query_map.get(c)]
     if not target_countries:
         _p(f"[scraper] Campaign '{cfg.id}' has no countries to scrape — exiting.")
         return 0
@@ -250,7 +263,7 @@ def scrape_prospects(
     _p(f"[scraper] Campaign: {cfg.id} ({cfg.label})")
 
     for country in target_countries:
-        queries = cfg.queries.get(country, [])
+        queries = query_map.get(country, [])
         country_inserted = 0
         _p(f"\n[scraper] ── {country} (target {per_country}) ──")
 

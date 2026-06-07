@@ -40,9 +40,12 @@ from config import (
     smtp_user,
 )
 from supabase_client import get_supabase
+from html import escape as html_escape
+
 from tools.copy_doctrine import OUTREACH_CONVERSION_DOCTRINE
+from tools.email_validator import normalize_outreach_body, validate_outreach_copy
 from tools.outreach_locale import locale_rules_for_country, normalize_outreach_country
-from tools.llm import generate_personalised_copy
+from tools.llm import generate_outreach_copy
 from tools.outreach_campaign_db import get_campaign
 from tools.outreach_campaigns import (
     CampaignConfig,
@@ -149,6 +152,104 @@ def _parse_subject_variants(raw: str, fallback: str) -> tuple[str, str]:
     return cleaned[0], cleaned[1]
 
 
+def _research_prompt_vars(prospect: dict[str, Any], angle: str) -> dict[str, str]:
+    """Build template variables from prospect research (raw.research) with fallbacks."""
+    raw = prospect.get("raw") or {}
+    research = raw.get("research") if isinstance(raw, dict) else {}
+    if not isinstance(research, dict):
+        research = {}
+
+    services_list = research.get("services") or []
+    if isinstance(services_list, list) and services_list:
+        services = ", ".join(str(s) for s in services_list[:4])
+    else:
+        services = angle
+
+    location = str(research.get("location") or prospect.get("city") or prospect.get("country") or "")
+    industry = str(research.get("industry") or prospect.get("sector") or "commercial")
+
+    weaknesses = research.get("weaknesses") or []
+    weakness = (
+        str(weaknesses[0])
+        if isinstance(weaknesses, list) and weaknesses
+        else "operational documentation gaps"
+    )
+
+    opportunities = research.get("opportunities") or []
+    opportunity = (
+        str(opportunities[0])
+        if isinstance(opportunities, list) and opportunities
+        else angle
+    )
+
+    return {
+        "services": services,
+        "location": location,
+        "industry": industry.replace("_", " "),
+        "weakness": weakness,
+        "opportunity": opportunity,
+    }
+
+
+def _generate_validated_copy(
+    *,
+    business_context: str,
+    lead: str,
+    template: str,
+    outreach_doctrine: str,
+    fallback: str,
+    kind: str,
+    max_attempts: int = 3,
+) -> str:
+    """Generate outreach copy with validation and auto-regeneration."""
+    for attempt in range(1, max_attempts + 1):
+        strict = attempt > 1
+        raw = generate_outreach_copy(
+            business_context=business_context,
+            lead=lead,
+            template=template,
+            extra_doctrine=outreach_doctrine,
+            strict=strict,
+        ).strip()
+        body = normalize_outreach_body(raw)
+        ok_body, body_issues = validate_outreach_copy("Subject line", body, kind)  # type: ignore[arg-type]
+        if ok_body and body and not body.startswith("[Draft"):
+            return body
+        print(f"[outreach_email] Body validation failed (attempt {attempt}): {body_issues}")
+
+    return fallback
+
+
+def _generate_validated_subjects(
+    *,
+    business_context: str,
+    lead: str,
+    subject_prompt: str,
+    outreach_doctrine: str,
+    fallback: str,
+    max_attempts: int = 3,
+) -> tuple[str, str]:
+    for attempt in range(1, max_attempts + 1):
+        strict = attempt > 1
+        subject_raw = generate_outreach_copy(
+            business_context=business_context,
+            lead=lead,
+            template=subject_prompt,
+            extra_doctrine=outreach_doctrine,
+            strict=strict,
+        )
+        subject_a, subject_b = _parse_subject_variants(subject_raw, fallback)
+        ok_a, issues_a = validate_outreach_copy(
+            subject_a, "Professional note regarding your operations.", "initial"
+        )
+        if ok_a and _looks_like_subject(subject_a) and subject_a != fallback:
+            return subject_a, subject_b
+        print(f"[outreach_email] Subject issues (attempt {attempt}): {issues_a}")
+        print(f"[outreach_email] Subject validation failed (attempt {attempt})")
+
+    return fallback, fallback
+
+
 def generate_outreach_email(
     prospect: dict[str, Any],
     campaign: CampaignConfig | str | None = None,
@@ -178,31 +279,44 @@ def generate_outreach_email(
     website = (prospect.get("website_url") or cfg.website).strip()
     sector = str(prospect.get("sector") or "generic").strip().lower() or "generic"
     angle = sector_angle(cfg, sector)
+    research_vars = _research_prompt_vars(prospect, angle)
+    fmt = {
+        "name": name,
+        "website": website,
+        "country": country,
+        "sector_angle": angle,
+        **research_vars,
+    }
+    business_context = (
+        f'{{"name": "{name}", "website": "{website}", "country": "{country}", '
+        f'"sector": "{sector}", "services": "{research_vars["services"]}", '
+        f'"location": "{research_vars["location"]}", "industry": "{research_vars["industry"]}"}}'
+    )
+    lead = f"Prospect: {name}"
 
     # ── Subject (A + B for Klaviyo-style A/B testing) ───────────────────────
-    subject_prompt = cfg.subject_prompt.format(
-        name=name, website=website, country=country, sector_angle=angle
+    subject_prompt = cfg.subject_prompt.format(**fmt)
+    subject_a, subject_b = _generate_validated_subjects(
+        business_context=business_context,
+        lead=lead,
+        subject_prompt=subject_prompt,
+        outreach_doctrine=outreach_doctrine,
+        fallback=cfg.fallback_subject,
     )
-    subject_raw = generate_personalised_copy(
-        business_context=f'{{"name": "{name}", "website": "{website}", "country": "{country}", "sector": "{sector}"}}',
-        lead=f"Prospect: {name}",
-        template=subject_prompt,
-        extra_doctrine=outreach_doctrine,
-    )
-    subject_a, subject_b = _parse_subject_variants(subject_raw, cfg.fallback_subject)
 
     # ── Body ─────────────────────────────────────────────────────────────────
-    body_prompt = cfg.body_prompt.format(
-        name=name, website=website, country=country, sector_angle=angle
-    )
-    body_text = generate_personalised_copy(
-        business_context=f'{{"name": "{name}", "website": "{website}", "country": "{country}", "sector": "{sector}"}}',
-        lead=f"Prospect: {name}",
+    body_prompt = cfg.body_prompt.format(**fmt)
+    fallback_body = render_fallback_body(cfg, name)
+    body_text = _generate_validated_copy(
+        business_context=business_context,
+        lead=lead,
         template=body_prompt,
-        extra_doctrine=outreach_doctrine,
-    ).strip()
+        outreach_doctrine=outreach_doctrine,
+        fallback=fallback_body,
+        kind="initial",
+    )
     if not body_text or body_text.startswith("[Draft"):
-        body_text = render_fallback_body(cfg, name)
+        body_text = fallback_body
 
     # NOTE: the CTA URL and tracking pixel are injected at *send time* by the
     # Next.js send route, because they need the absolute base URL of the app
@@ -245,7 +359,7 @@ def _render_html(plain_text: str, cfg: CampaignConfig, prospect_id: str = "") ->
     paragraphs = [p.strip() for p in plain_text.split("\n\n") if p.strip()]
     body_html = "\n".join(
         f'<p style="margin:0 0 16px 0;font-size:15px;line-height:1.55;color:#1a1a1a;">'
-        f"{p.replace(chr(10), '<br>')}</p>"
+        f"{html_escape(p).replace(chr(10), '<br>')}</p>"
         for p in paragraphs
     )
 

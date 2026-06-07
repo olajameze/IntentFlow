@@ -87,10 +87,12 @@ export const LEGACY_FOLLOWUP_BRANDING: Record<
       "You're on this list because your business was found in a public directory. Reply STOP to be removed.",
     touchBodies: [
       "I wrote a few days ago — wanted to leave one more useful note in case it's relevant.\n\nMany pest control teams we talk to lose hours every week re-typing field paperwork before audits. PestTrace replaces that with a digital logbook your technicians fill in on the job — photos, signatures, follow-ups, expiry tracking, all audit-ready.\n\nIf that sounds familiar, the link below shows a short walkthrough.",
+      "A pest control operator we work with cut audit prep from days to hours by moving treatment logs into one digital system — photos, signatures, and expiry tracking included.\n\nIf documentation pressure is building in your operation, the walkthrough below shows how teams like yours use PestTrace day to day.",
       "I'll leave it here — no more emails after this one.\n\nIf you ever want to make audit prep painless, PestTrace stays right there at pesttrace.com. Door's always open.",
     ],
     touchSubjects: [
       "Quick follow-up on audit-ready records",
+      "How teams cut audit prep time",
       "Closing the loop — last note from PestTrace",
     ],
   },
@@ -106,10 +108,12 @@ export const LEGACY_FOLLOWUP_BRANDING: Record<
       "You're on this list because your business matched a sector that commonly requires pest control. Reply STOP to opt out.",
     touchBodies: [
       "Wanted to leave one more useful note in case it's helpful.\n\nWe cover the whole West Midlands — Birmingham, Wolverhampton, Coventry, Walsall, Dudley, Sandwell, Solihull, Stoke-on-Trent, Worcester — and the £50 deposit comes straight off the final invoice, so there are no hidden fees. Every booking carries a 100% Satisfaction Guarantee.\n\nIf any pest issues crop up, the booking link below lets you pick a slot in under a minute.",
+      "A West Midlands site we support resolved a recurring pest issue with documented treatment, BPCA-certified technicians, and a clear guarantee — no hidden fees.\n\nIf prevention or a one-off visit would help your premises, the booking link below is the fastest way to secure a slot.",
       "I'll stop emailing after this — promise.\n\nIf pests crop up later, Weathers Pest Solutions is here 24/7 on 07462253896, with transparent pricing and a 100% Satisfaction Guarantee. The booking link below stays open.",
     ],
     touchSubjects: [
       "Quick follow-up about West Midlands pest cover",
+      "Documented treatment that sticks",
       "Closing the loop — last note from Weathers",
     ],
   },

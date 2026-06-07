@@ -97,7 +97,12 @@ It replaces paper/spreadsheet records with digital evidence trails that are audi
 Recipient business: {name}
 Website: {website}
 Recipient country code: {country}
+Location: {location}
+Industry: {industry}
+Services: {services}
 Sector angle to incorporate: {sector_angle}
+Relevant weakness to reference naturally: {weakness}
+Business opportunity to mention: {opportunity}
 
 Write a professional B2B outreach email. Rules:
 - Tone: calm authority. Never needy, never begging. Read like advice from a peer, not a sales pitch.
@@ -225,12 +230,17 @@ _PESTTRACE_QUERIES: dict[str, list[SearchQuery]] = {
 
 
 _PESTTRACE_FOLLOWUP_PROMPTS = (
-    # Touch 2 (Day 3)
+    # Touch 1 (Day 3) — value follow-up
     """You are writing a SHORT follow-up email (max 90 words) from PestTrace.com to a pest control business that didn't reply to your first email three days ago.
 
 Recipient: {name} ({website})
 Recipient country code: {country}
+Location: {location}
+Industry: {industry}
+Services: {services}
 Sector angle: {sector_angle}
+Weakness to reference: {weakness}
+Opportunity: {opportunity}
 
 Rules:
 - Do NOT mention UK unless country is UK.
@@ -240,11 +250,28 @@ Rules:
 - End with a single CTA: "Worth a 10-minute look at pesttrace.com?"
 - Sign off: "Best regards,\\nThe PestTrace Team\\nhttps://pesttrace.com"
 - No clickbait. No emojis. No quotes around the email.""",
-    # Touch 3 (Day 7) — break-up email
+    # Touch 2 (Day 7) — case study angle
+    """You are writing a case-study style follow-up (max 90 words) from PestTrace.com.
+
+Recipient: {name} ({website})
+Location: {location}
+Industry: {industry}
+Services: {services}
+Sector angle: {sector_angle}
+
+Rules:
+- Do NOT mention UK unless country is UK.
+- Share a brief, credible outcome story (no invented client names): a pest control team cut audit prep time using digital treatment logs.
+- Tie the story to their sector ({industry}) and services ({services}).
+- One soft CTA to pesttrace.com.
+- Sign off: "Best regards,\\nThe PestTrace Team"
+- No emojis. Max 90 words.""",
+    # Touch 3 (Day 14) — final follow-up
     """You are writing a final, brief 'breakup' follow-up email (max 60 words) from PestTrace.com.
 
 Recipient: {name} ({website})
 Recipient country code: {country}
+Industry: {industry}
 
 Rules:
 - Do NOT mention UK unless country is UK.
@@ -341,7 +368,12 @@ Weathers Pest Solutions is a BPCA-certified, 5-star-rated, 24/7 emergency pest c
 Recipient business: {name}
 Website: {website}
 Country: {country}
+Location: {location}
+Industry: {industry}
+Their services: {services}
 Sector angle to incorporate (use this as the opening hook): {sector_angle}
+Relevant weakness: {weakness}
+Opportunity: {opportunity}
 
 Weathers' services and pricing (use ONLY these — do NOT invent extra services):
   • Flea Control — from £210 (1–2 rooms; +£20 per additional room)
@@ -459,11 +491,16 @@ _WEATHERS_SECTOR_ANGLES: dict[str, str] = {
 
 
 _WEATHERS_FOLLOWUP_PROMPTS = (
-    # Touch 2 (Day 3) — same value, fresh angle
+    # Touch 1 (Day 3) — value follow-up
     """You are writing a SHORT follow-up (max 90 words) from Weathers Pest Solutions to a UK West Midlands business that didn't reply to your first email three days ago.
 
 Recipient: {name} ({website})
+Location: {location}
+Industry: {industry}
+Services: {services}
 Sector angle: {sector_angle}
+Weakness: {weakness}
+Opportunity: {opportunity}
 
 Rules:
 - Mention you wrote earlier in ONE clause — no apology.
@@ -476,10 +513,26 @@ Rules:
 - Do NOT paste URLs — the CTA button is rendered after your text.
 - Sign off: "Best regards,\\nThe Weathers Pest Solutions Team\\n07462253896"
 - UK English. No emojis. Max 90 words.""",
-    # Touch 3 (Day 7) — break-up
+    # Touch 2 (Day 7) — case study
+    """You are writing a case-study style follow-up (max 90 words) from Weathers Pest Solutions.
+
+Recipient: {name} ({website})
+Location: {location}
+Industry: {industry}
+Services: {services}
+
+Rules:
+- Brief credible outcome: a West Midlands {industry} site resolved a recurring pest issue with documented treatment and guarantee.
+- Reference their services context ({services}) without inventing client names.
+- One benefit: BPCA-certified, 24/7 emergency, £50 deposit off invoice.
+- Soft CTA to book via the button below (do not paste URLs).
+- Sign off: "Best regards,\\nThe Weathers Pest Solutions Team\\n07462253896"
+- UK English. Max 90 words.""",
+    # Touch 3 (Day 14) — final follow-up
     """You are writing the FINAL follow-up (max 60 words) from Weathers Pest Solutions.
 
 Recipient: {name} ({website})
+Industry: {industry}
 
 Rules:
 - Acknowledge you'll stop emailing after this — politely.

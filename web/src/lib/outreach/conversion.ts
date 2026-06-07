@@ -7,6 +7,13 @@ export type ConversionEventType =
   | "trial_started"
   | "deposit_paid";
 
+const INTERESTED_EVENTS: ConversionEventType[] = ["trial_started"];
+
+const CONVERTED_EVENTS: ConversionEventType[] = [
+  "payment_completed",
+  "deposit_paid",
+];
+
 const BOOKING_EVENTS: ConversionEventType[] = [
   "payment_completed",
   "trial_started",
@@ -29,6 +36,9 @@ type ProspectRow = {
   name: string | null;
   email: string | null;
   booked_at: string | null;
+  interested_at?: string | null;
+  meeting_booked_at?: string | null;
+  converted_at?: string | null;
   opened_at?: string | null;
   clicked_at?: string | null;
   open_count?: number | null;
@@ -71,6 +81,35 @@ export async function recordOutreachConversion(
 
   const countsAsBooked = eventCountsAsBooked(params.event, params.deposit_paid);
   const now = new Date().toISOString();
+  const eventType = params.event as ConversionEventType;
+  const updates: Record<string, unknown> = { updated_at: now };
+
+  if (eventType === "booking_started" && !prospect.meeting_booked_at) {
+    updates.meeting_booked_at = now;
+    await sb.from("outreach_email_events").insert({
+      prospect_id: prospect.id,
+      campaign: prospect.campaign,
+      event_type: "meeting_booked",
+    });
+  }
+
+  if (INTERESTED_EVENTS.includes(eventType) && !prospect.interested_at) {
+    updates.interested_at = now;
+    await sb.from("outreach_email_events").insert({
+      prospect_id: prospect.id,
+      campaign: prospect.campaign,
+      event_type: "interested",
+    });
+  }
+
+  if (CONVERTED_EVENTS.includes(eventType) && !prospect.converted_at) {
+    updates.converted_at = now;
+    await sb.from("outreach_email_events").insert({
+      prospect_id: prospect.id,
+      campaign: prospect.campaign,
+      event_type: "converted",
+    });
+  }
 
   if (countsAsBooked && !prospect.booked_at) {
     const tierFields = engagementUpdateFields({
@@ -82,8 +121,8 @@ export async function recordOutreachConversion(
       .from("outreach_prospects")
       .update({
         booked_at: now,
+        ...updates,
         ...tierFields,
-        updated_at: now,
       })
       .eq("id", prospect.id);
 
@@ -119,10 +158,17 @@ export async function recordOutreachConversion(
   }
 
   const tierFields = engagementUpdateFields(prospect);
-  await sb
-    .from("outreach_prospects")
-    .update({ ...tierFields, updated_at: now })
-    .eq("id", prospect.id);
+  if (Object.keys(updates).length > 1) {
+    await sb
+      .from("outreach_prospects")
+      .update({ ...updates, ...tierFields })
+      .eq("id", prospect.id);
+  } else {
+    await sb
+      .from("outreach_prospects")
+      .update({ ...tierFields, updated_at: now })
+      .eq("id", prospect.id);
+  }
 
   return { booked: !!prospect.booked_at, duplicate: false };
 }

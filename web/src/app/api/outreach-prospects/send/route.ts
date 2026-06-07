@@ -4,12 +4,12 @@ import {
   isConfiguredForCampaign,
   pickSubjectVariant,
 } from "@/lib/outreach/campaign-env";
+import { nextFollowUpAt } from "@/lib/outreach/followup-schedule";
 import { getPublicBaseUrl } from "@/lib/outreach/public-base-url";
+import { validateEmailForSend } from "@/lib/outreach/send-validation";
 import { sendOutreachEmail } from "@/lib/outreach/send-mail";
-import { htmlToPlain, injectTracking } from "@/lib/outreach/tracking";
+import { injectTracking } from "@/lib/outreach/tracking";
 import { withSupabaseRoute } from "@/lib/with-supabase-route";
-
-const FOLLOW_UP_DAYS = 3;
 
 function normalizeCampaign(raw: unknown): string {
   return typeof raw === "string" && raw.trim() ? raw.trim().toLowerCase() : "pesttrace";
@@ -22,6 +22,75 @@ export async function POST(req: Request) {
   const baseUrl = getPublicBaseUrl(req);
 
   return withSupabaseRoute(async (sb) => {
+    const sendOne = async (prospect: {
+      id: string;
+      email: string;
+      email_subject: string | null;
+      email_subject_b: string | null;
+      email_body: string;
+      campaign: string | null;
+    }) => {
+      const campaign = normalizeCampaign(prospect.campaign);
+      const { subject, variant } = pickSubjectVariant(prospect.email_subject, prospect.email_subject_b);
+      const trackedHtml = injectTracking(prospect.email_body, prospect.id, baseUrl);
+      const validation = validateEmailForSend(subject, trackedHtml, "initial");
+      if (!validation.ok) {
+        return {
+          ok: false as const,
+          status: 422,
+          error: "Email failed validation before send.",
+          issues: validation.issues,
+        };
+      }
+
+      try {
+        await sendOutreachEmail(
+          campaign,
+          prospect.email,
+          validation.subject,
+          trackedHtml,
+          validation.plainBody,
+          { prospectId: prospect.id },
+        );
+      } catch (err) {
+        const msg = err instanceof Error ? err.message : "SMTP error";
+        if (msg.toLowerCase().includes("recipient") || msg.toLowerCase().includes("address")) {
+          await sb
+            .from("outreach_prospects")
+            .update({ status: "bounced", updated_at: new Date().toISOString() })
+            .eq("id", prospect.id);
+        }
+        return { ok: false as const, status: 502, error: `Send failed: ${msg}` };
+      }
+
+      const now = new Date();
+      const nowIso = now.toISOString();
+      const nextSendAt = nextFollowUpAt(nowIso, 0);
+
+      await sb
+        .from("outreach_prospects")
+        .update({
+          status: "sent",
+          sent_at: nowIso,
+          delivered_at: nowIso,
+          subject_variant: variant,
+          next_send_at: nextSendAt,
+          sequence_step: 0,
+          followup_count: 0,
+          engagement_tier: "cold",
+          updated_at: nowIso,
+        })
+        .eq("id", prospect.id);
+
+      await sb.from("outreach_email_events").insert({
+        prospect_id: prospect.id,
+        campaign,
+        event_type: "sent",
+      });
+
+      return { ok: true as const, campaign, variant };
+    };
+
     if (!bulk) {
       const id = typeof body.id === "string" ? body.id : null;
       if (!id) return NextResponse.json({ error: "id required" }, { status: 400 });
@@ -49,47 +118,19 @@ export async function POST(req: Request) {
         );
       }
 
-      const { subject, variant } = pickSubjectVariant(prospect.email_subject, prospect.email_subject_b);
-      const trackedHtml = injectTracking(prospect.email_body, prospect.id, baseUrl);
-
-      try {
-        await sendOutreachEmail(
-          campaign,
-          prospect.email,
-          subject,
-          trackedHtml,
-          htmlToPlain(trackedHtml),
+      const result = await sendOne(prospect);
+      if (!result.ok) {
+        return NextResponse.json(
+          { error: result.error, issues: "issues" in result ? result.issues : undefined },
+          { status: result.status },
         );
-      } catch (err) {
-        const msg = err instanceof Error ? err.message : "SMTP error";
-        if (msg.toLowerCase().includes("recipient") || msg.toLowerCase().includes("address")) {
-          await sb
-            .from("outreach_prospects")
-            .update({ status: "bounced", updated_at: new Date().toISOString() })
-            .eq("id", id);
-        }
-        return NextResponse.json({ error: `Send failed: ${msg}` }, { status: 502 });
       }
-
-      const now = new Date();
-      const nextSendAt = new Date(now.getTime() + FOLLOW_UP_DAYS * 24 * 60 * 60 * 1000).toISOString();
-      await sb
-        .from("outreach_prospects")
-        .update({
-          status: "sent",
-          sent_at: now.toISOString(),
-          subject_variant: variant,
-          next_send_at: nextSendAt,
-          engagement_tier: "cold",
-          updated_at: now.toISOString(),
-        })
-        .eq("id", id);
 
       return NextResponse.json({
         ok: true,
         sent_to: prospect.email,
-        campaign,
-        subject_variant: variant,
+        campaign: result.campaign,
+        subject_variant: result.variant,
       });
     }
 
@@ -108,6 +149,7 @@ export async function POST(req: Request) {
       .select("*")
       .eq("status", "approved")
       .eq("campaign", campaign)
+      .order("lead_score", { ascending: false })
       .order("created_at", { ascending: true })
       .limit(limit);
 
@@ -127,37 +169,12 @@ export async function POST(req: Request) {
     for (const prospect of prospects) {
       if (!prospect.email || (!prospect.email_subject && !prospect.email_subject_b) || !prospect.email_body)
         continue;
-      const { subject, variant } = pickSubjectVariant(prospect.email_subject, prospect.email_subject_b);
-      const trackedHtml = injectTracking(prospect.email_body, prospect.id, baseUrl);
-      try {
-        await sendOutreachEmail(
-          campaign,
-          prospect.email,
-          subject,
-          trackedHtml,
-          htmlToPlain(trackedHtml),
-        );
-        const now = new Date();
-        const nextSendAt = new Date(now.getTime() + FOLLOW_UP_DAYS * 24 * 60 * 60 * 1000).toISOString();
-        await sb
-          .from("outreach_prospects")
-          .update({
-            status: "sent",
-            sent_at: now.toISOString(),
-            subject_variant: variant,
-            next_send_at: nextSendAt,
-            engagement_tier: "cold",
-            updated_at: now.toISOString(),
-          })
-          .eq("id", prospect.id);
+      const result = await sendOne(prospect);
+      if (result.ok) {
         sent++;
-      } catch (err) {
+      } else {
         failed++;
-        if (!firstError) firstError = err instanceof Error ? err.message : String(err);
-        await sb
-          .from("outreach_prospects")
-          .update({ updated_at: new Date().toISOString() })
-          .eq("id", prospect.id);
+        if (!firstError) firstError = result.error;
       }
     }
 

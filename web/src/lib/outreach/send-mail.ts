@@ -39,9 +39,25 @@ async function sendEmailViaResend(
   subject: string,
   html: string,
   plain: string,
+  meta?: { prospectId?: string },
 ) {
   const cfg = getResendConfig(campaign);
   if (!cfg.configured) throw new Error(`Resend not configured for campaign '${campaign}'`);
+
+  const payload: Record<string, unknown> = {
+    from: `${cfg.fromName} <${cfg.fromEmail}>`,
+    to: [to],
+    subject,
+    html,
+    text: plain,
+    reply_to: cfg.replyTo ?? cfg.fromEmail,
+  };
+  if (meta?.prospectId) {
+    payload.tags = [
+      { name: "prospect_id", value: meta.prospectId },
+      { name: "campaign", value: campaign },
+    ];
+  }
 
   const response = await fetch("https://api.resend.com/emails", {
     method: "POST",
@@ -49,14 +65,7 @@ async function sendEmailViaResend(
       "Content-Type": "application/json",
       Authorization: `Bearer ${cfg.apiKey}`,
     },
-    body: JSON.stringify({
-      from: `${cfg.fromName} <${cfg.fromEmail}>`,
-      to: [to],
-      subject,
-      html,
-      text: plain,
-      reply_to: cfg.replyTo ?? cfg.fromEmail,
-    }),
+    body: JSON.stringify(payload),
   });
 
   if (!response.ok) {
@@ -72,6 +81,7 @@ export async function sendOutreachEmail(
   subject: string,
   html: string,
   plain: string,
+  meta?: { prospectId?: string },
 ) {
   const provider = getEmailProvider();
   const smtpConfigured = getSmtpConfig(campaign).configured;
@@ -83,13 +93,13 @@ export async function sendOutreachEmail(
   }
 
   if (provider === "resend") {
-    await sendEmailViaResend(campaign, to, subject, html, plain);
+    await sendEmailViaResend(campaign, to, subject, html, plain, meta);
     return;
   }
 
   if (resendConfigured) {
     try {
-      await sendEmailViaResend(campaign, to, subject, html, plain);
+      await sendEmailViaResend(campaign, to, subject, html, plain, meta);
       return;
     } catch (firstError) {
       if (!smtpConfigured) throw firstError;

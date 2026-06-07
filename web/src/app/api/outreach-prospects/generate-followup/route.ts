@@ -12,7 +12,7 @@ import { withSupabaseRoute } from "@/lib/with-supabase-route";
 
 const schema = z.object({
   prospect_id: z.string().uuid(),
-  touch_index: z.number().int().min(0).max(1).optional(),
+  touch_index: z.number().int().min(0).max(2).optional(),
 });
 
 /** POST — generate personalized follow-up subject + HTML for a prospect. */
@@ -36,7 +36,7 @@ export async function POST(req: Request) {
     const campaign = String(prospect.campaign || "pesttrace");
     const settings = await loadOutreachSettings(sb, campaign);
     const touchIndex =
-      body.data.touch_index ?? Math.min(prospect.followup_count ?? 0, 1);
+      body.data.touch_index ?? Math.min(prospect.followup_count ?? 0, 2);
     const tier = computeEngagementTier(prospect);
 
     const { prompt, fallbackSubject, fallbackBody } = buildFollowUpPrompt(
@@ -47,6 +47,8 @@ export async function POST(req: Request) {
         website_url: prospect.website_url,
         sector: prospect.sector,
         country: prospect.country,
+        city: prospect.city,
+        raw: prospect.raw as { research?: Record<string, unknown> } | null,
       },
       touchIndex,
       tier,
@@ -56,6 +58,8 @@ export async function POST(req: Request) {
       prompt,
       fallbackSubject,
       fallbackBody,
+      prospectId: prospect.id,
+      campaign,
     });
 
     const branding = brandingFromSettings(settings, campaign);

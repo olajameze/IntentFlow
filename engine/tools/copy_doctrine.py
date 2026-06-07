@@ -39,6 +39,9 @@ Outreach email conversion playbook (cold B2B):
 - Match English to recipient country (see locale rules). Do not mention UK unless country is UK. No fake urgency, no "hope this finds you well", no invented pricing.
 - Max 180 words first touch; follow-ups max 90 words (break-up max 60).
 - Never paste URLs in body — the system renders the CTA button.
+- Short paragraphs only (max 3 sentences each). No exclamation marks in subject lines.
+- Never use spam triggers: FREE, ACT NOW, limited time, click here now.
+- Output ONLY email copy. Never write "Here is", "Below is", "Certainly", or "I can help".
 """.strip()
 
 GLOBAL_COPY_DOCTRINE = """

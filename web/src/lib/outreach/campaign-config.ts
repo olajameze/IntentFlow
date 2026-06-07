@@ -74,6 +74,36 @@ export function sectorAngleForProspect(
   return "general commercial concern";
 }
 
+function researchVarsFromProspect(prospect: {
+  name: string;
+  website_url?: string | null;
+  sector?: string | null;
+  country?: string | null;
+  city?: string | null;
+  raw?: { research?: Record<string, unknown> } | null;
+}): Record<string, string> {
+  const research = prospect.raw?.research ?? {};
+  const servicesList = research.services;
+  const services = Array.isArray(servicesList)
+    ? servicesList.slice(0, 4).join(", ")
+    : String(research.industry || prospect.sector || "commercial services").replace(/_/g, " ");
+  const location =
+    String(research.location || "") ||
+    [prospect.city, prospect.country].filter(Boolean).join(", ");
+  const weaknesses = research.weaknesses;
+  const opportunities = research.opportunities;
+  return {
+    services,
+    location,
+    industry: String(research.industry || prospect.sector || "commercial").replace(/_/g, " "),
+    weakness: Array.isArray(weaknesses) && weaknesses[0] ? String(weaknesses[0]) : "operational gaps",
+    opportunity:
+      Array.isArray(opportunities) && opportunities[0]
+        ? String(opportunities[0])
+        : "efficiency improvement",
+  };
+}
+
 export function buildFollowUpPrompt(
   settings: BusinessOutreachSettings | null,
   campaign: string,
@@ -82,6 +112,8 @@ export function buildFollowUpPrompt(
     website_url?: string | null;
     sector?: string | null;
     country?: string | null;
+    city?: string | null;
+    raw?: { research?: Record<string, unknown> } | null;
   },
   touchIndex: number,
   tier: string,
@@ -99,13 +131,19 @@ export function buildFollowUpPrompt(
   const fallbackSubject = legacy.touchSubjects[touchIndex] ?? legacy.touchSubjects[0];
   const fallbackBody = legacy.touchBodies[touchIndex] ?? legacy.touchBodies[0];
 
+  const rv = researchVarsFromProspect(prospect);
+
   if (templatePrompt) {
-    const prompt = `${localeBlock}\n\n${templatePrompt
+    let filled = templatePrompt
       .replace(/\{name\}/g, prospect.name || "there")
       .replace(/\{website\}/g, prospect.website_url || "")
       .replace(/\{sector_angle\}/g, angle)
       .replace(/\{tier\}/g, tier)
-      .replace(/\{country\}/g, country)}`;
+      .replace(/\{country\}/g, country);
+    for (const [key, val] of Object.entries(rv)) {
+      filled = filled.replace(new RegExp(`\\{${key}\\}`, "g"), val);
+    }
+    const prompt = `${localeBlock}\n\n${filled}`;
     return { prompt, fallbackSubject, fallbackBody };
   }
 

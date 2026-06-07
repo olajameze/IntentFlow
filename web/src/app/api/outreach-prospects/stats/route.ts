@@ -11,7 +11,7 @@ export async function GET(req: Request) {
     const { data: prospects, error } = await sb
       .from("outreach_prospects")
       .select(
-        "id, status, opened_at, clicked_at, replied_at, booked_at, subject_variant, engagement_tier",
+        "id, status, opened_at, clicked_at, replied_at, booked_at, delivered_at, interested_at, meeting_booked_at, converted_at, subject_variant, engagement_tier",
       )
       .eq("campaign", campaign);
 
@@ -23,6 +23,10 @@ export async function GET(req: Request) {
     const clicked = rows.filter((r) => r.clicked_at).length;
     const replied = rows.filter((r) => r.replied_at).length;
     const booked = rows.filter((r) => r.booked_at).length;
+    const delivered = rows.filter((r) => r.delivered_at).length;
+    const interested = rows.filter((r) => r.interested_at).length;
+    const meeting_booked = rows.filter((r) => r.meeting_booked_at).length;
+    const converted = rows.filter((r) => r.converted_at).length;
     const bounced = rows.filter((r) => r.status === "bounced").length;
     const hotLeads = rows.filter(
       (r) => r.engagement_tier === "hot" && !r.booked_at && r.status === "sent",
@@ -51,6 +55,10 @@ export async function GET(req: Request) {
       clicked,
       replied,
       booked,
+      delivered,
+      interested,
+      meeting_booked,
+      converted,
       bounced,
       hot_leads: hotLeads,
       revenue_attributed: revenueCount,

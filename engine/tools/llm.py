@@ -43,7 +43,7 @@ from config import (
     ollama_fallback_enabled,
     ollama_text_model,
 )
-from .copy_doctrine import GLOBAL_COPY_DOCTRINE
+from .copy_doctrine import GLOBAL_COPY_DOCTRINE, OUTREACH_CONVERSION_DOCTRINE
 
 # Set True after Gemini auth/permission fails once and Groq returns copy — avoids hammering Gemini for every draft in the same process.
 _groq_only_after_gemini_auth_failure = False
@@ -324,3 +324,81 @@ Return concise, compliant copy only (no meta-commentary). UK English."""
         print("IntentFlow: Groq returned empty — used Ollama fallback successfully.")
         return ollama_result
     return "Set GROQ_API_KEY in engine/.env or web/.env.local, or enable ENGINE_USE_OLLAMA_FALLBACK=1 (no GOOGLE_API_KEY — Groq-only)."
+
+
+def _run_outreach_prompt(prompt: str) -> str:
+    """Execute an outreach-only prompt through the same provider chain as social copy."""
+    global _groq_only_after_gemini_auth_failure
+
+    if llm_skip_google() or _groq_only_after_gemini_auth_failure:
+        result = _groq_generate(prompt)
+        if result:
+            return result
+        ollama_result = _ollama_generate(prompt)
+        if ollama_result:
+            return ollama_result
+        return ""
+
+    gkey = google_api_key()
+    if gkey:
+        import google.generativeai as genai
+
+        try:
+            os.environ["GOOGLE_API_KEY"] = gkey
+            genai.configure(api_key=gkey)
+            model = genai.GenerativeModel(_gemini_model_name())
+            resp = model.generate_content(prompt)
+            return (resp.text or "").strip()
+        except Exception as exc:  # noqa: BLE001
+            if _google_error_try_groq(exc):
+                try:
+                    fb = _groq_generate(prompt)
+                except Exception:  # noqa: BLE001
+                    fb = ""
+                if fb:
+                    if _gemini_auth_like_failure(exc):
+                        _groq_only_after_gemini_auth_failure = True
+                    return fb
+            return ""
+
+    result = _groq_generate(prompt)
+    if result:
+        return result
+    ollama_result = _ollama_generate(prompt)
+    return ollama_result or ""
+
+
+def generate_outreach_copy(
+    business_context: str,
+    lead: str,
+    template: str,
+    extra_doctrine: str | None = None,
+    strict: bool = False,
+) -> str:
+    """Generate B2B outreach copy without social-post GLOBAL_COPY_DOCTRINE."""
+    doctrine = OUTREACH_CONVERSION_DOCTRINE
+    if extra_doctrine:
+        doctrine = f"{doctrine}\n\n{extra_doctrine.strip()}"
+
+    strict_block = ""
+    if strict:
+        strict_block = (
+            "\n\nCRITICAL: Output ONLY the requested email text. "
+            "No preamble, no assistant phrases, no labels, no JSON."
+        )
+
+    prompt = f"""You are a professional B2B sales consultant writing cold outreach email copy.
+
+{doctrine}
+
+Business context (JSON — treat as source of truth, do not contradict):
+{business_context}
+
+Lead: {lead}
+
+Template / task:
+{template}
+
+Return only the email copy requested (subject lines or body text). No meta-commentary, no markdown, no JSON.{strict_block}"""
+
+    return _run_outreach_prompt(prompt)

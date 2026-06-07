@@ -1,0 +1,32 @@
+{
+  "phrases": [
+    "here is",
+    "here are",
+    "below is",
+    "below are",
+    "i'd be happy to",
+    "i would be happy to",
+    "certainly",
+    "i can help",
+    "professional outreach email",
+    "draft email",
+    "as requested",
+    "let me know if",
+    "as instructed",
+    "following are",
+    "target audience:",
+    "strategy:",
+    "return json",
+    "uk english",
+    "i hope this email finds you well",
+    "just reaching out",
+    "i wanted to touch base",
+    "circling back"
+  ],
+  "spam_triggers": [
+    "act now",
+    "limited time",
+    "free trial",
+    "click here now"
+  ]
+}

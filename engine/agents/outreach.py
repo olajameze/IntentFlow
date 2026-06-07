@@ -26,7 +26,9 @@ from config import active_llm_summary, outreach_scrape_limit
 from supabase_client import get_supabase
 from tools.outreach_campaign_db import get_campaign, load_enabled_campaigns
 from tools.outreach_campaigns import CampaignConfig, DEFAULT_CAMPAIGN_ID
+from tools.lead_scoring import compute_lead_score, persist_lead_score
 from tools.outreach_email import generate_outreach_email
+from tools.prospect_research import research_and_persist
 from tools.prospect_scraper import scrape_prospects
 
 
@@ -54,7 +56,7 @@ def run_outreach(campaign: CampaignConfig | str | None = None) -> None:
         print(f"[outreach] Scraping failed: {exc}")
         new_prospects = 0
 
-    print("\n[outreach] Step 2 — generating email drafts for unprocessed prospects…")
+    print("\n[outreach] Step 2 — research, scoring, and email drafts…")
     sb = get_supabase()
     try:
         result = (
@@ -62,6 +64,7 @@ def run_outreach(campaign: CampaignConfig | str | None = None) -> None:
             .select("*")
             .eq("status", "scraped")
             .eq("campaign", cfg.id)
+            .order("lead_score", desc=True)
             .order("created_at", desc=False)
             .limit(100)
             .execute()
@@ -75,6 +78,14 @@ def run_outreach(campaign: CampaignConfig | str | None = None) -> None:
     errors = 0
     for prospect in pending:
         try:
+            research = research_and_persist(prospect)
+            score, breakdown = compute_lead_score(prospect, research)
+            if prospect.get("id"):
+                persist_lead_score(str(prospect["id"]), score, breakdown)
+                raw = prospect.get("raw") or {}
+                if not isinstance(raw, dict):
+                    raw = {}
+                prospect = {**prospect, "raw": {**raw, "research": research, "score": breakdown}, "lead_score": score}
             if generate_outreach_email(prospect, campaign=cfg):
                 drafted += 1
             else:

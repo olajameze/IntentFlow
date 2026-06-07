@@ -5,18 +5,24 @@ import {
   loadOutreachSettings,
   renderFollowUpHtmlForProspect,
 } from "@/lib/outreach/campaign-config";
-import { followUpGapDays, computeEngagementTier } from "@/lib/outreach/engagement";
+import { computeEngagementTier } from "@/lib/outreach/engagement";
+import {
+  isFollowUpDue,
+  MAX_FOLLOWUPS,
+  nextFollowUpAt,
+} from "@/lib/outreach/followup-schedule";
 import { generateFollowUpCopy } from "@/lib/outreach/llm-followup";
 import { getPublicBaseUrl } from "@/lib/outreach/public-base-url";
 import { isConfiguredForCampaign } from "@/lib/outreach/campaign-env";
+import { validateEmailForSend } from "@/lib/outreach/send-validation";
 import { sendOutreachEmail } from "@/lib/outreach/send-mail";
-import { htmlToPlain, injectTracking } from "@/lib/outreach/tracking";
+import { injectTracking } from "@/lib/outreach/tracking";
 import { withSupabaseRoute } from "@/lib/with-supabase-route";
 
 const FOLLOWUP_BATCH = 25;
 const HOT_DAILY_CAP = 10;
 
-/** POST — behavior-aware follow-up sequence (cron / GitHub Actions). */
+/** POST — 4-touch sequence follow-ups (Day 3 / 7 / 14 from initial send). */
 export async function POST(req: Request) {
   const expected = process.env.CRON_SECRET?.trim();
   if (expected) {
@@ -37,23 +43,33 @@ export async function POST(req: Request) {
       .eq("status", "sent")
       .is("replied_at", null)
       .is("booked_at", null)
-      .lt("followup_count", 2)
-      .lte("next_send_at", nowIso)
+      .lt("followup_count", MAX_FOLLOWUPS)
+      .not("sent_at", "is", null)
       .order("next_send_at", { ascending: true })
-      .limit(FOLLOWUP_BATCH * 2);
+      .limit(FOLLOWUP_BATCH * 3);
 
     if (error) return NextResponse.json({ error: error.message }, { status: 500 });
-    if (!due?.length) {
+
+    const eligible = (due ?? []).filter((p) => {
+      const sentAt = String(p.sent_at || "");
+      const count = p.followup_count ?? 0;
+      if (!sentAt || count >= MAX_FOLLOWUPS) return false;
+      return isFollowUpDue(sentAt, count, now);
+    });
+
+    if (!eligible.length) {
       return NextResponse.json({ ok: true, sent: 0, message: "No follow-ups due." });
     }
 
     const tierRank: Record<string, number> = { hot: 0, warm: 1, cold: 2 };
-    const sorted = [...due].sort((a, b) => {
-      const ta = tierRank[computeEngagementTier(a)] ?? 2;
-      const tb = tierRank[computeEngagementTier(b)] ?? 2;
-      if (ta !== tb) return ta - tb;
-      return String(a.next_send_at).localeCompare(String(b.next_send_at));
-    }).slice(0, FOLLOWUP_BATCH);
+    const sorted = [...eligible]
+      .sort((a, b) => {
+        const ta = tierRank[computeEngagementTier(a)] ?? 2;
+        const tb = tierRank[computeEngagementTier(b)] ?? 2;
+        if (ta !== tb) return ta - tb;
+        return String(a.next_send_at).localeCompare(String(b.next_send_at));
+      })
+      .slice(0, FOLLOWUP_BATCH);
 
     let sent = 0;
     let failed = 0;
@@ -72,7 +88,7 @@ export async function POST(req: Request) {
       const tier = computeEngagementTier(p);
       if (tier === "hot" && hotSentToday >= HOT_DAILY_CAP) continue;
 
-      const touchIndex = Math.min(p.followup_count ?? 0, 1);
+      const touchIndex = Math.min(p.followup_count ?? 0, MAX_FOLLOWUPS - 1);
       const settings = await loadOutreachSettings(sb, campaign);
       const { prompt, fallbackSubject, fallbackBody } = buildFollowUpPrompt(
         settings,
@@ -82,6 +98,8 @@ export async function POST(req: Request) {
           website_url: p.website_url,
           sector: p.sector,
           country: p.country,
+          city: p.city,
+          raw: p.raw as { research?: Record<string, unknown> } | null,
         },
         touchIndex,
         tier,
@@ -91,6 +109,8 @@ export async function POST(req: Request) {
         prompt,
         fallbackSubject,
         fallbackBody,
+        prospectId: p.id,
+        campaign,
       });
 
       const branding = brandingFromSettings(settings, campaign);
@@ -102,31 +122,44 @@ export async function POST(req: Request) {
         baseUrl,
       );
 
+      const validation = validateEmailForSend(subject, html, "followup");
+      if (!validation.ok) {
+        failed++;
+        errors.push(`${p.email}: validation failed — ${validation.issues.join("; ")}`);
+        continue;
+      }
+
       try {
         await sendOutreachEmail(
           campaign,
           p.email,
-          subject,
+          validation.subject,
           html,
-          htmlToPlain(html),
+          validation.plainBody,
+          { prospectId: p.id },
         );
 
         const newCount = (p.followup_count ?? 0) + 1;
-        const gapDays = followUpGapDays(tier, newCount);
-        const nextSendAt =
-          newCount < 2 && gapDays > 0
-            ? new Date(now.getTime() + gapDays * 24 * 60 * 60 * 1000).toISOString()
-            : null;
+        const sentAtIso = String(p.sent_at);
+        const nextSend = nextFollowUpAt(sentAtIso, newCount);
 
         await sb
           .from("outreach_prospects")
           .update({
             followup_count: newCount,
-            next_send_at: nextSendAt,
+            sequence_step: newCount,
+            next_send_at: nextSend,
+            delivered_at: nowIso,
             engagement_tier: tier,
             updated_at: nowIso,
           })
           .eq("id", p.id);
+
+        await sb.from("outreach_email_events").insert({
+          prospect_id: p.id,
+          campaign,
+          event_type: "sent",
+        });
 
         if (tier === "hot") hotSentToday++;
         sent++;

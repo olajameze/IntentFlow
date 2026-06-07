@@ -91,6 +91,49 @@ def get_campaign(campaign_id: str | None) -> CampaignConfig:
     return get_static_campaign(key)
 
 
+def get_scrape_queries(campaign_id: str | None) -> dict[str, list[tuple[str, str]]] | None:
+    """Load custom scrape queries from business_outreach_settings if present."""
+    key = (campaign_id or DEFAULT_CAMPAIGN_ID).strip().lower()
+    try:
+        sb = get_supabase()
+        result = (
+            sb.table("business_outreach_settings")
+            .select("scrape_queries")
+            .eq("campaign_slug", key)
+            .eq("enabled", True)
+            .limit(1)
+            .execute()
+        )
+        rows = result.data or []
+        if not rows:
+            return None
+        raw = rows[0].get("scrape_queries")
+        if not raw:
+            return None
+        if isinstance(raw, str):
+            raw = json.loads(raw)
+        if not isinstance(raw, dict):
+            return None
+        parsed: dict[str, list[tuple[str, str]]] = {}
+        for country, items in raw.items():
+            if not isinstance(items, list):
+                continue
+            pairs: list[tuple[str, str]] = []
+            for item in items:
+                if isinstance(item, (list, tuple)) and len(item) >= 2:
+                    pairs.append((str(item[0]), str(item[1])))
+                elif isinstance(item, dict):
+                    q = item.get("query") or item.get("q")
+                    city = item.get("city") or ""
+                    if q:
+                        pairs.append((str(q), str(city)))
+            if pairs:
+                parsed[str(country).upper()] = pairs
+        return parsed or None
+    except Exception:
+        return None
+
+
 def load_enabled_campaigns() -> list[CampaignConfig]:
     """All enabled outreach campaigns for portfolio-wide runs."""
     configs: list[CampaignConfig] = []
