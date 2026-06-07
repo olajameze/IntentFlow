@@ -19,14 +19,25 @@ export async function GET(req: Request) {
       });
     } catch (err) {
       const message = err instanceof Error ? err.message : "Stats query failed";
-      if (message.includes("outreach_campaign_stats")) {
-        return NextResponse.json(
-          {
-            error: "Stats function not installed — run outreach migrations",
-            hint: "POST /api/setup/apply-outreach-migration or node scripts/setup-marketing-conversion.mjs",
-          },
-          { status: 503 },
-        );
+      const { fetchCampaignStatsFallback, isStatsRpcMissingError } = await import(
+        "@/lib/outreach/campaign-stats-fallback"
+      );
+      if (isStatsRpcMissingError(err)) {
+        try {
+          const stats = await fetchCampaignStatsFallback(sb, campaign);
+          return NextResponse.json(
+            { ...stats, degraded: true, hint: "Apply outreach migrations for faster stats RPC" },
+            {
+              headers: {
+                "Cache-Control": "private, max-age=15, stale-while-revalidate=30",
+              },
+            },
+          );
+        } catch (fallbackErr) {
+          return supabaseErrorResponse(
+            fallbackErr instanceof Error ? fallbackErr : new Error(String(fallbackErr)),
+          );
+        }
       }
       return supabaseErrorResponse(err instanceof Error ? err : new Error(message));
     }

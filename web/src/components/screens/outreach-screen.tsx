@@ -515,12 +515,18 @@ function ProspectCard({
     setDeleting(true);
     try {
       const res = await fetch(`/api/outreach-prospects?id=${encodeURIComponent(id)}`, { method: "DELETE" });
+      const data = await res.json().catch(() => ({}));
       if (!res.ok) {
-        const data = await res.json().catch(() => ({}));
         toast.error(typeof data.error === "string" ? data.error : "Could not delete");
         return;
       }
-      toast.success(isSentOrHot ? "Prospect and tracking data removed" : "Deleted");
+      toast.success(
+        data.alreadyDeleted
+          ? "Already removed"
+          : isSentOrHot
+            ? "Prospect and tracking data removed"
+            : "Deleted",
+      );
       await onRefresh();
     } finally { setDeleting(false); }
   };

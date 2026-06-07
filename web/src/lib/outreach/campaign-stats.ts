@@ -125,7 +125,15 @@ export function enrichStats(raw: RpcRow, campaign: string): CampaignStatsPayload
 async function fetchCampaignStatsFromDb(campaign: string): Promise<CampaignStatsPayload> {
   const sb = getSupabaseAdmin();
   const { data, error } = await sb.rpc("outreach_campaign_stats", { p_campaign: campaign });
-  if (error) throw error;
+  if (error) {
+    const { fetchCampaignStatsFallback, isStatsRpcMissingError } = await import(
+      "@/lib/outreach/campaign-stats-fallback"
+    );
+    if (isStatsRpcMissingError(error)) {
+      return fetchCampaignStatsFallback(sb, campaign);
+    }
+    throw error;
+  }
   return enrichStats((data ?? {}) as RpcRow, campaign);
 }
 
