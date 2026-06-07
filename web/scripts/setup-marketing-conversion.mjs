@@ -82,24 +82,26 @@ async function main() {
 
   const sb = createClient(url, key);
 
-  if (!(await tableExists(sb))) {
-    console.log("business_outreach_settings not found — applying migration…");
+  const hasDbUrl = Boolean(process.env.SUPABASE_DB_URL?.trim() || process.env.DATABASE_URL?.trim());
+  if (hasDbUrl) {
+    console.log("Applying outreach migrations (idempotent)…");
     const applied = await applyMigrationWithPg();
     if (!applied) {
-      console.error(`
-Could not apply migration automatically.
-
-Option A — add SUPABASE_DB_URL to web/.env.local (Database → Connection string → URI), then re-run:
-  node scripts/setup-marketing-conversion.mjs
-
-Option B — Supabase SQL Editor:
-  https://supabase.com/dashboard/project/tajdfxphgeddfcswsham/sql/new
-  Paste all files in supabase/migrations/20260604*.sql through 202606081*.sql
-`);
+      console.error("Migration via Postgres failed — check SUPABASE_DB_URL and pg package.");
       process.exit(1);
     }
+  } else if (!(await tableExists(sb))) {
+    console.error(`
+business_outreach_settings not found and SUPABASE_DB_URL is not set.
+
+Add SUPABASE_DB_URL to web/.env.local (Database → Connection string → URI), then re-run:
+  node scripts/setup-marketing-conversion.mjs
+`);
+    process.exit(1);
   } else {
-    console.log("Migration tables already present.");
+    console.log(
+      "Migration tables present — skipped SQL (add SUPABASE_DB_URL to apply latest migrations including stats RPC).",
+    );
   }
 
   if (!process.env.CRON_SECRET?.trim()) {
