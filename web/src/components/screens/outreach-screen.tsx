@@ -759,30 +759,37 @@ export function OutreachScreen() {
   const [bulkSending, setBulkSending] = useState(false);
   const [dispatching, setDispatching] = useState(false);
 
+  const loadStats = useCallback(async (forCampaign: Campaign) => {
+    const res = await fetch(`/api/outreach-prospects/stats?campaign=${forCampaign}`);
+    if (res.ok) setStats(await res.json());
+    else setStats(null);
+  }, []);
+
   const load = useCallback(
     async (forCampaign: Campaign = campaign) => {
       const q = `campaign=${forCampaign}`;
-      const [review, approved, sent, rejected, hot, statsRes] = await Promise.all([
+      void loadStats(forCampaign);
+      const [review, approved, sent, rejected, hot] = await Promise.all([
         fetch(`/api/outreach-prospects?status=draft_ready&${q}`),
         fetch(`/api/outreach-prospects?status=approved&${q}`),
         fetch(`/api/outreach-prospects?status=sent&${q}`),
         fetch(`/api/outreach-prospects?status=rejected&${q}`),
         fetch(`/api/outreach-prospects?hot=1&${q}`),
-        fetch(`/api/outreach-prospects/stats?${q}`),
       ]);
       if (review.ok) setReviewProspects(await review.json());
       if (approved.ok) setApprovedProspects(await approved.json());
       if (sent.ok) setSentProspects(await sent.json());
       if (rejected.ok) setRejectedProspects(await rejected.json());
       if (hot.ok) setHotProspects(await hot.json());
-      if (statsRes.ok) setStats(await statsRes.json());
-      else setStats(null);
     },
-    [campaign],
+    [campaign, loadStats],
   );
 
   // Re-load whenever the operator switches campaign tab
-  useEffect(() => { void load(campaign); }, [campaign, load]);
+  useEffect(() => {
+    setStats(null);
+    void load(campaign);
+  }, [campaign, load]);
 
   const filterByCountry = (prospects: Prospect[]) =>
     country === "all" ? prospects : prospects.filter((p) => String(p.country) === country);
