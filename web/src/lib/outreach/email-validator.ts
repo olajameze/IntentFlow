@@ -146,7 +146,7 @@ function isMetaPreambleLine(line: string): boolean {
 
 /** Remove LLM meta preamble lines (e.g. "Here is the professional B2B outreach email:"). */
 export function stripAiMetaPreamble(text: string): string {
-  let lines = text.replace(/\r\n/g, "\n").split("\n");
+  const lines = text.replace(/\r\n/g, "\n").split("\n");
   while (lines.length > 0 && isMetaPreambleLine(lines[0] ?? "")) {
     lines.shift();
   }

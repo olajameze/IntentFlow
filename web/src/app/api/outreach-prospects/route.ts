@@ -145,8 +145,8 @@ export async function DELETE(req: Request) {
       return NextResponse.json({ ok: true, deleted: 0, alreadyDeleted: true });
     }
 
-    const campaigns = new Set(rows.map((r) => String(r.campaign ?? "pesttrace")));
-    for (const campaign of campaigns) invalidateOutreachStats(campaign);
+    const campaigns = Array.from(new Set(rows.map((r) => String(r.campaign ?? "pesttrace"))));
+    campaigns.forEach((campaign) => invalidateOutreachStats(campaign));
     return NextResponse.json({ ok: true, deleted: rows.length });
   });
 }
