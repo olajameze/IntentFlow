@@ -13,7 +13,8 @@ export const AI_PHRASE_BLOCKLIST: readonly string[] = blocklistData.phrases;
 const SPAM_TRIGGERS: readonly string[] = blocklistData.spam_triggers;
 
 const WORD_LIMITS: Record<OutreachCopyKind, number> = {
-  initial: 180,
+  /** HTML templates add footer/unsubscribe copy; plain-text extract runs slightly over LLM word count. */
+  initial: 220,
   followup: 90,
 };
 
@@ -41,8 +42,9 @@ function countUrls(text: string): number {
   return matches?.length ?? 0;
 }
 
+/** Flag shouty words (5+ letters); allow short acronyms e.g. BPCA, STOP in footers. */
 function hasAllCapsWords(text: string): boolean {
-  return /\b[A-Z]{4,}\b/.test(text);
+  return /\b[A-Z]{5,}\b/.test(text);
 }
 
 function hasDuplicateSentence(text: string): boolean {

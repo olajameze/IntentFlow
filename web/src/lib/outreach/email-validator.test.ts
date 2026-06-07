@@ -56,6 +56,13 @@ describe("validateOutreachCopy", () => {
     assert.equal(result.ok, false);
     assert.ok(result.issues.some((i) => i.includes("word limit")));
   });
+
+  it("allows short acronyms and unsubscribe STOP in HTML email footers", () => {
+    const body =
+      "Hi team,\n\nBPCA members often need audit-ready records. PestTrace helps.\n\nReply STOP to opt out.";
+    const result = validateOutreachCopy(cleanSubject, body, "initial");
+    assert.equal(result.ok, true);
+  });
 });
 
 describe("plainTextFromHtml", () => {

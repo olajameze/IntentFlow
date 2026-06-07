@@ -529,7 +529,15 @@ function ProspectCard({
       const data = await res.json().catch(() => ({})) as Record<string, unknown>;
       if (!res.ok) {
         const hint = typeof data.hint === "string" ? `\n${data.hint}` : "";
-        toast.error(`${typeof data.error === "string" ? data.error : "Send failed"}${hint}`, { duration: 12000 });
+        const issues = Array.isArray(data.issues)
+          ? `\n${(data.issues as string[]).join("\n")}`
+          : Array.isArray(data.firstIssues)
+            ? `\n${(data.firstIssues as string[]).join("\n")}`
+            : "";
+        toast.error(
+          `${typeof data.error === "string" ? data.error : "Send failed"}${issues}${hint}`,
+          { duration: 15000 },
+        );
         return;
       }
       toast.success(`Email sent to ${email}`);
@@ -1023,7 +1031,13 @@ export function OutreachScreen() {
       const data = await res.json().catch(() => ({})) as Record<string, unknown>;
       if (!res.ok) {
         const hint = typeof data.hint === "string" ? `\n${data.hint}` : "";
-        toast.error(`${typeof data.error === "string" ? data.error : "Bulk send failed"}${hint}`, { duration: 15000 });
+        const issues = Array.isArray(data.firstIssues)
+          ? `\n${(data.firstIssues as string[]).join("\n")}`
+          : "";
+        toast.error(
+          `${typeof data.error === "string" ? data.error : "Bulk send failed"}${issues}${hint}`,
+          { duration: 15000 },
+        );
         return;
       }
       const sent = typeof data.sent === "number" ? data.sent : 0;

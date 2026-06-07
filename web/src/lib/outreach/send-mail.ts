@@ -4,8 +4,41 @@ import {
   getResendConfig,
   getSmtpConfig,
 } from "@/lib/outreach/campaign-env";
+import { formatMailError } from "@/lib/outreach/smtp-errors";
 
 export type SendResult = { messageId?: string; provider: "smtp" | "resend" };
+
+function createSmtpTransporter(campaign: string) {
+  const cfg = getSmtpConfig(campaign);
+  if (!cfg.configured) throw new Error(`SMTP not configured for campaign '${campaign}'`);
+
+  return {
+    cfg,
+    transporter: nodemailer.createTransport({
+      host: cfg.host,
+      port: cfg.port,
+      secure: cfg.port === 465,
+      requireTLS: cfg.port === 587,
+      connectionTimeout: 15_000,
+      greetingTimeout: 15_000,
+      socketTimeout: 20_000,
+      auth: { user: cfg.user, pass: cfg.password },
+    }),
+  };
+}
+
+/** Verify SMTP credentials for a campaign (auth + TLS handshake only). */
+export async function verifySmtpForCampaign(
+  campaign: string,
+): Promise<{ ok: true } | { ok: false; error: string }> {
+  try {
+    const { transporter } = createSmtpTransporter(campaign);
+    await transporter.verify();
+    return { ok: true };
+  } catch (err) {
+    return { ok: false, error: formatMailError(err) };
+  }
+}
 
 async function sendEmailViaSmtp(
   campaign: string,
@@ -15,15 +48,7 @@ async function sendEmailViaSmtp(
   plain: string,
   meta?: { prospectId?: string },
 ): Promise<SendResult> {
-  const cfg = getSmtpConfig(campaign);
-  if (!cfg.configured) throw new Error(`SMTP not configured for campaign '${campaign}'`);
-
-  const transporter = nodemailer.createTransport({
-    host: cfg.host,
-    port: cfg.port,
-    secure: cfg.port === 465,
-    auth: { user: cfg.user, pass: cfg.password },
-  });
+  const { cfg, transporter } = createSmtpTransporter(campaign);
 
   const replyTo = cfg.replyTo ?? `${cfg.fromName} <${cfg.fromEmail}>`;
   const headers: Record<string, string> = {};
@@ -32,17 +57,20 @@ async function sendEmailViaSmtp(
     headers["X-Mailin-custom"] = JSON.stringify({ prospect_id: meta.prospectId, campaign });
   }
 
-  const info = await transporter.sendMail({
-    from: `${cfg.fromName} <${cfg.fromEmail}>`,
-    replyTo,
-    to,
-    subject,
-    text: plain,
-    html,
-    headers,
-  });
-
-  return { messageId: info.messageId, provider: "smtp" };
+  try {
+    const info = await transporter.sendMail({
+      from: `${cfg.fromName} <${cfg.fromEmail}>`,
+      replyTo,
+      to,
+      subject,
+      text: plain,
+      html,
+      headers,
+    });
+    return { messageId: info.messageId, provider: "smtp" };
+  } catch (err) {
+    throw new Error(formatMailError(err));
+  }
 }
 
 async function sendEmailViaResend(

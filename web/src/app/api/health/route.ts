@@ -1,4 +1,9 @@
 import { NextResponse } from "next/server";
+import {
+  getEmailProvider,
+  getSmtpConfig,
+  isConfiguredForCampaign,
+} from "@/lib/outreach/campaign-env";
 import { resolveNextPublicSupabaseKey } from "@/lib/resolve-next-public-supabase-key";
 import { getSupabaseAdmin } from "@/lib/supabase-admin";
 
@@ -19,6 +24,10 @@ export async function GET() {
     stripeEncryptionConfigured: Boolean(process.env.STRIPE_SECRET_ENCRYPTION_KEY?.trim()),
     brevoWebhookSecretConfigured: Boolean(process.env.BREVO_WEBHOOK_SECRET?.trim()),
     cronSecretConfigured: Boolean(process.env.CRON_SECRET?.trim()),
+    outreachEmailProvider: getEmailProvider(),
+    outreachPesttraceEmailConfigured: isConfiguredForCampaign("pesttrace").ok,
+    outreachPesttraceSmtpConfigured: getSmtpConfig("pesttrace").configured,
+    outreachPublicBaseUrlConfigured: Boolean(process.env.OUTREACH_PUBLIC_BASE_URL?.trim()),
   };
 
   let supabaseQueryable = false;
@@ -56,6 +65,12 @@ export async function GET() {
   }
   if (!checks.brevoWebhookSecretConfigured) {
     hints.push("Set BREVO_WEBHOOK_SECRET and register /api/outreach-webhooks/brevo in Brevo");
+  }
+  if (!checks.outreachPesttraceEmailConfigured) {
+    hints.push("Set SMTP_HOST, SMTP_USER, SMTP_PASSWORD, OUTREACH_FROM_EMAIL on Vercel Production");
+  }
+  if (!checks.outreachPublicBaseUrlConfigured) {
+    hints.push("Set OUTREACH_PUBLIC_BASE_URL=https://intent-flow-xi.vercel.app for tracking links");
   }
 
   const ready = url && srk && supabaseQueryable && outreachSchemaReady && outreachStatsRpcReady;

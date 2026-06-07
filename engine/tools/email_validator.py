@@ -17,7 +17,7 @@ with _BLOCKLIST_PATH.open(encoding="utf-8") as f:
 AI_PHRASE_BLOCKLIST: tuple[str, ...] = tuple(_BLOCKLIST["phrases"])
 SPAM_TRIGGERS: tuple[str, ...] = tuple(_BLOCKLIST["spam_triggers"])
 
-WORD_LIMITS: dict[str, int] = {"initial": 180, "followup": 90}
+WORD_LIMITS: dict[str, int] = {"initial": 220, "followup": 90}
 
 _MARKDOWN_PATTERNS = [
     re.compile(r"\*\*[^*]+\*\*"),
@@ -44,7 +44,8 @@ def _count_urls(text: str) -> int:
 
 
 def _has_all_caps_words(text: str) -> bool:
-    return bool(re.search(r"\b[A-Z]{4,}\b", text))
+    # Allow short acronyms (BPCA, STOP) in footers; flag 5+ letter shouty words.
+    return bool(re.search(r"\b[A-Z]{5,}\b", text))
 
 
 def _has_duplicate_sentence(text: str) -> bool:

@@ -3,6 +3,7 @@ import { loadAbWinner } from "@/lib/outreach/ab-winner";
 import { invalidateOutreachStats } from "@/lib/outreach/campaign-stats";
 import {
   getDailyLimit,
+  getEmailProvider,
   isConfiguredForCampaign,
   pickSubjectVariant,
 } from "@/lib/outreach/campaign-env";
@@ -13,7 +14,8 @@ import { getPublicBaseUrl } from "@/lib/outreach/public-base-url";
 import { canSendThisHour, sendJitterMs } from "@/lib/outreach/send-pacing";
 import { stripAiMetaFromHtml } from "@/lib/outreach/email-validator";
 import { validateEmailForSend } from "@/lib/outreach/send-validation";
-import { sendOutreachEmail } from "@/lib/outreach/send-mail";
+import { sendOutreachEmail, verifySmtpForCampaign } from "@/lib/outreach/send-mail";
+import { smtpTroubleshootingHint } from "@/lib/outreach/smtp-errors";
 import { injectTracking } from "@/lib/outreach/tracking";
 import { withSupabaseRoute } from "@/lib/with-supabase-route";
 
@@ -23,6 +25,37 @@ function normalizeCampaign(raw: unknown): string {
 
 function sleep(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+function sendFailurePayload(error: string, extra?: Record<string, unknown>) {
+  const hint = smtpTroubleshootingHint(error);
+  return { error, ...(hint ? { hint } : {}), ...extra };
+}
+
+/** GET ?campaign=pesttrace&verify=1 — outreach email config probe (no secrets). */
+export async function GET(req: Request) {
+  const url = new URL(req.url);
+  const campaign = normalizeCampaign(url.searchParams.get("campaign"));
+  const doVerify = url.searchParams.get("verify") === "1";
+  const check = isConfiguredForCampaign(campaign);
+
+  const payload: Record<string, unknown> = {
+    campaign,
+    provider: getEmailProvider(),
+    configured: check.ok,
+    ...(check.hint ? { configHint: check.hint } : {}),
+  };
+
+  if (doVerify && check.ok && getEmailProvider() !== "resend") {
+    const verify = await verifySmtpForCampaign(campaign);
+    payload.smtpVerify = verify.ok ? "ok" : verify.error;
+    if (!verify.ok) {
+      const hint = smtpTroubleshootingHint(verify.error);
+      if (hint) payload.hint = hint;
+    }
+  }
+
+  return NextResponse.json(payload, { status: check.ok ? 200 : 503 });
 }
 
 /** POST { id } or { bulk: true, campaign? } — send approved prospect email(s). */
@@ -108,6 +141,13 @@ export async function POST(req: Request) {
         );
       } catch (err) {
         const msg = err instanceof Error ? err.message : "SMTP error";
+        outreachLog({
+          level: "error",
+          event: "send_failed",
+          prospectId: prospect.id,
+          campaign,
+          error: msg,
+        });
         if (msg.toLowerCase().includes("recipient") || msg.toLowerCase().includes("address")) {
           await sb
             .from("outreach_prospects")
@@ -187,10 +227,16 @@ export async function POST(req: Request) {
 
       const result = await sendOne(prospect);
       if (!result.ok) {
-        return NextResponse.json(
-          { error: result.error, issues: "issues" in result ? result.issues : undefined },
-          { status: result.status },
-        );
+        const extra =
+          result.status === 502 && result.error
+            ? sendFailurePayload(result.error, {
+                issues: "issues" in result ? result.issues : undefined,
+              })
+            : {
+                error: result.error,
+                issues: "issues" in result ? result.issues : undefined,
+              };
+        return NextResponse.json(extra, { status: result.status });
       }
 
       return NextResponse.json({
@@ -232,7 +278,9 @@ export async function POST(req: Request) {
 
     let sent = 0;
     let failed = 0;
+    let validationFailed = 0;
     let firstError: string | null = null;
+    let firstIssues: string[] | undefined;
     for (const prospect of prospects) {
       if (!prospect.email || (!prospect.email_subject && !prospect.email_subject_b) || !prospect.email_body)
         continue;
@@ -242,15 +290,36 @@ export async function POST(req: Request) {
         await sleep(sendJitterMs());
       } else {
         failed++;
-        if (!firstError) firstError = result.error;
+        if (result.status === 422) validationFailed++;
+        if (!firstError) {
+          firstError = result.error;
+          if ("issues" in result && Array.isArray(result.issues)) firstIssues = result.issues;
+        }
         if (result.status === 429) break;
       }
     }
 
     if (sent === 0 && failed > 0) {
+      const allValidation = validationFailed === failed;
+      const errMsg = allValidation
+        ? `All ${failed} emails failed validation before send`
+        : `All ${failed} sends failed`;
+      const hint =
+        !allValidation && firstError ? smtpTroubleshootingHint(firstError) : undefined;
       return NextResponse.json(
-        { ok: false, sent, failed, limit, campaign, error: `All ${failed} sends failed`, firstError },
-        { status: 502 },
+        {
+          ok: false,
+          sent,
+          failed,
+          validationFailed,
+          limit,
+          campaign,
+          error: errMsg,
+          firstError,
+          firstIssues,
+          ...(hint ? { hint } : {}),
+        },
+        { status: allValidation ? 422 : 502 },
       );
     }
     return NextResponse.json({ ok: true, sent, failed, limit, campaign, firstError });
