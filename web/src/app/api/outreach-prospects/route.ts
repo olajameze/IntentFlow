@@ -124,23 +124,29 @@ export async function PATCH(req: Request) {
 export async function DELETE(req: Request) {
   return withSupabaseRoute(async (sb) => {
     const { searchParams } = new URL(req.url);
-    const id = searchParams.get("id");
-    if (!id) return NextResponse.json({ error: "id required" }, { status: 400 });
+    const idsParam = searchParams.get("ids");
+    const singleId = searchParams.get("id");
+    const ids = idsParam
+      ? idsParam.split(",").map((s) => s.trim()).filter(Boolean)
+      : singleId
+        ? [singleId]
+        : [];
+    if (!ids.length) return NextResponse.json({ error: "id or ids required" }, { status: 400 });
 
     const { data, error } = await sb
       .from("outreach_prospects")
       .delete()
-      .eq("id", id)
-      .select("id, campaign")
-      .maybeSingle();
+      .in("id", ids)
+      .select("id, campaign");
 
     if (error) return supabaseErrorResponse(error);
-    if (!data) {
-      // Idempotent — already removed (e.g. double-click delete).
-      return NextResponse.json({ ok: true, alreadyDeleted: true });
+    const rows = data ?? [];
+    if (!rows.length) {
+      return NextResponse.json({ ok: true, deleted: 0, alreadyDeleted: true });
     }
 
-    invalidateOutreachStats(String(data.campaign ?? "pesttrace"));
-    return NextResponse.json({ ok: true });
+    const campaigns = new Set(rows.map((r) => String(r.campaign ?? "pesttrace")));
+    for (const campaign of campaigns) invalidateOutreachStats(campaign);
+    return NextResponse.json({ ok: true, deleted: rows.length });
   });
 }

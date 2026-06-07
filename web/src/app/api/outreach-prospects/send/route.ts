@@ -11,6 +11,7 @@ import { nextFollowUpAt } from "@/lib/outreach/followup-schedule";
 import { outreachLog } from "@/lib/outreach/logger";
 import { getPublicBaseUrl } from "@/lib/outreach/public-base-url";
 import { canSendThisHour, sendJitterMs } from "@/lib/outreach/send-pacing";
+import { stripAiMetaFromHtml } from "@/lib/outreach/email-validator";
 import { validateEmailForSend } from "@/lib/outreach/send-validation";
 import { sendOutreachEmail } from "@/lib/outreach/send-mail";
 import { injectTracking } from "@/lib/outreach/tracking";
@@ -80,7 +81,11 @@ export async function POST(req: Request) {
         prospect.email_subject_b,
         preferredWinner,
       );
-      const trackedHtml = injectTracking(prospect.email_body, prospect.id, baseUrl);
+      const trackedHtml = injectTracking(
+        stripAiMetaFromHtml(prospect.email_body),
+        prospect.id,
+        baseUrl,
+      );
       const validation = validateEmailForSend(subject, trackedHtml, "initial");
       if (!validation.ok) {
         return {

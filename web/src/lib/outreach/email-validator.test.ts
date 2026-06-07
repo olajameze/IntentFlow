@@ -4,6 +4,8 @@ import {
   validateOutreachCopy,
   plainTextFromHtml,
   normalizeOutreachBody,
+  stripAiMetaFromHtml,
+  stripAiMetaPreamble,
 } from "./email-validator";
 
 describe("validateOutreachCopy", () => {
@@ -67,5 +69,21 @@ describe("plainTextFromHtml", () => {
 describe("normalizeOutreachBody", () => {
   it("collapses triple newlines", () => {
     assert.equal(normalizeOutreachBody("a\n\n\n\nb"), "a\n\nb");
+  });
+});
+
+describe("stripAiMetaPreamble", () => {
+  it("removes professional B2B outreach email lead-in", () => {
+    const raw =
+      "Here is the professional B2B outreach email:\n\nDear Prospect,\n\nWe help teams.";
+    assert.equal(stripAiMetaPreamble(raw), "Dear Prospect,\n\nWe help teams.");
+  });
+
+  it("strips meta from first HTML paragraph", () => {
+    const html =
+      '<p>Here is the professional B2B outreach email:</p><p>Dear Alex,</p><p>Body copy.</p>';
+    const cleaned = stripAiMetaFromHtml(html);
+    assert.ok(!/here is the professional/i.test(cleaned));
+    assert.ok(cleaned.includes("Dear Alex"));
   });
 });

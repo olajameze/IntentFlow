@@ -126,8 +126,33 @@ def validate_outreach_copy(
     return len(issues) == 0, issues
 
 
+def _is_meta_preamble_line(line: str) -> bool:
+    t = line.strip()
+    if not t:
+        return True
+    low = t.lower()
+    if re.match(r"^(here (is|are)|below (is|are)|following (is|are))\b", low):
+        return True
+    if re.search(r"professional.*(b2b\s*)?outreach.*email", t, re.I) and len(t) < 160:
+        return True
+    if _contains_blocked_phrase(t, AI_PHRASE_BLOCKLIST):
+        return True
+    return False
+
+
+def strip_ai_meta_preamble(text: str) -> str:
+    lines = text.replace("\r\n", "\n").split("\n")
+    while lines and _is_meta_preamble_line(lines[0]):
+        lines.pop(0)
+    joined = "\n".join(lines).strip()
+    inline_lead = re.compile(r"^(here (is|are) the professional[^\n]+)\n?", re.I)
+    while inline_lead.match(joined):
+        joined = inline_lead.sub("", joined, count=1).strip()
+    return re.sub(r"\n{3,}", "\n\n", joined).strip()
+
+
 def normalize_outreach_body(body: str) -> str:
-    return re.sub(r"\n{3,}", "\n\n", body).strip()
+    return strip_ai_meta_preamble(re.sub(r"\n{3,}", "\n\n", body).strip())
 
 
 def plain_text_from_html(html: str) -> str:

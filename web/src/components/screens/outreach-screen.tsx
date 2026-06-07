@@ -11,6 +11,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Textarea } from "@/components/ui/textarea";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { plainTextFromHtml, stripAiMetaFromHtml, stripAiMetaPreamble } from "@/lib/outreach/email-validator";
 
 /** Client-side Actions URL when `NEXT_PUBLIC_GITHUB_REPO` is set (token may still be missing). */
 function githubOutreachWorkflowUrl(): string | null {
@@ -313,6 +314,34 @@ const COUNTRY_LABELS: Record<string, string> = {
   AU: "Australia",
   INT: "International",
 };
+
+function TabBulkDelete({
+  count,
+  disabled,
+  onDelete,
+}: {
+  count: number;
+  disabled: boolean;
+  onDelete: () => void;
+}) {
+  if (count === 0) return null;
+  return (
+    <div className="flex justify-end">
+      <Button
+        type="button"
+        variant="outline"
+        size="sm"
+        className="h-8 text-xs text-destructive hover:text-destructive"
+        disabled={disabled}
+        onClick={onDelete}
+      >
+        <Trash2 className="mr-1 h-3.5 w-3.5" />
+        Delete all ({count})
+      </Button>
+    </div>
+  );
+}
+
 const PREVIEW_LEN = 140;
 
 const CAMPAIGN_META: Record<
@@ -396,7 +425,9 @@ function ProspectCard({
 
   const [subject, setSubject] = useState(String(prospect.email_subject ?? ""));
   const [previewVariantB, setPreviewVariantB] = useState(false);
-  const [body, setBody] = useState(String(prospect.email_body ?? ""));
+  const [body, setBody] = useState(() =>
+    prospect.email_body ? stripAiMetaFromHtml(String(prospect.email_body)) : "",
+  );
   const [bodyLoading, setBodyLoading] = useState(false);
   const [expanded, setExpanded] = useState(false);
 
@@ -407,7 +438,7 @@ function ProspectCard({
       const res = await fetch(`/api/outreach-prospects?id=${encodeURIComponent(id)}`);
       if (res.ok) {
         const row = (await res.json()) as Prospect;
-        if (row.email_body) setBody(String(row.email_body));
+        if (row.email_body) setBody(stripAiMetaFromHtml(String(row.email_body)));
       }
     } finally {
       setBodyLoading(false);
@@ -425,7 +456,7 @@ function ProspectCard({
   const [sending, setSending] = useState(false);
   const [deleting, setDeleting] = useState(false);
 
-  const bodyText = body.replace(/<[^>]+>/g, " ").replace(/\s{2,}/g, " ").trim();
+  const bodyText = stripAiMetaPreamble(plainTextFromHtml(body));
   const preview = bodyText.length > PREVIEW_LEN ? bodyText.slice(0, PREVIEW_LEN).trimEnd() + "…" : bodyText;
 
   const copyEmail = async () => {
@@ -854,6 +885,7 @@ export function OutreachScreen() {
   campaignRef.current = campaign;
   const [country, setCountry] = useState<string>("all");
   const [bulkSending, setBulkSending] = useState(false);
+  const [bulkDeleting, setBulkDeleting] = useState(false);
   const [dispatching, setDispatching] = useState(false);
 
   const loadStats = useCallback(async (forCampaign: Campaign) => {
@@ -955,6 +987,28 @@ export function OutreachScreen() {
       toast.error("Could not reach /api/trigger-outreach-engine");
     } finally {
       setDispatching(false);
+    }
+  };
+
+  const bulkDeleteProspects = async (list: Prospect[], label: string) => {
+    const ids = list.map((p) => String(p.id)).filter(Boolean);
+    if (!ids.length) return;
+    if (!window.confirm(`Delete all ${ids.length} ${label}? This cannot be undone.`)) return;
+    setBulkDeleting(true);
+    try {
+      const res = await fetch(
+        `/api/outreach-prospects?ids=${ids.map(encodeURIComponent).join(",")}`,
+        { method: "DELETE" },
+      );
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        toast.error(typeof data.error === "string" ? data.error : "Bulk delete failed");
+        return;
+      }
+      toast.success(`Removed ${data.deleted ?? ids.length} prospect(s)`);
+      await refreshProspects();
+    } finally {
+      setBulkDeleting(false);
     }
   };
 
@@ -1121,6 +1175,11 @@ export function OutreachScreen() {
           <p className="text-xs text-muted-foreground">
             Prospects who clicked your CTA (high intent). Call or email while they are warm — webhook may auto-mark paying customers when they book.
           </p>
+          <TabBulkDelete
+            count={filterByCountry(hotProspects).length}
+            disabled={bulkDeleting}
+            onDelete={() => void bulkDeleteProspects(filterByCountry(hotProspects), "hot leads")}
+          />
           {filterByCountry(hotProspects).length
             ? filterByCountry(hotProspects).map((p) => (
                 <ProspectCard key={String(p.id)} prospect={p} mode="sent" onRefresh={refreshProspects} />
@@ -1132,6 +1191,11 @@ export function OutreachScreen() {
           <p className="text-xs text-muted-foreground">
             Review each LLM-generated email. Edit if needed, then Approve to queue for sending.
           </p>
+          <TabBulkDelete
+            count={reviewList.length}
+            disabled={bulkDeleting}
+            onDelete={() => void bulkDeleteProspects(reviewList, "drafts in review")}
+          />
           {reviewList.length
             ? reviewList.map((p) => <ProspectCard key={String(p.id)} prospect={p} mode="review" onRefresh={refreshProspects} />)
             : empty(`No ${meta.short} emails to review — click "Run ${meta.short} engine" above to generate new drafts.`)}
@@ -1139,12 +1203,24 @@ export function OutreachScreen() {
 
         <TabsContent value="approved" className="mt-3 space-y-2">
           {approvedList.length > 0 && (
-            <div className="flex items-center justify-between">
+            <div className="flex flex-wrap items-center justify-between gap-2">
               <p className="text-xs text-muted-foreground">{approvedList.length} email{approvedList.length !== 1 ? "s" : ""} ready to send.</p>
-              <Button type="button" variant="secondary" className="h-8 text-xs" disabled={bulkSending} onClick={() => void bulkSend()}>
-                <Send className="mr-1.5 h-3.5 w-3.5" />
-                {bulkSending ? "Sending all…" : "Send all approved"}
-              </Button>
+              <div className="flex flex-wrap gap-2">
+                <Button type="button" variant="secondary" className="h-8 text-xs" disabled={bulkSending || bulkDeleting} onClick={() => void bulkSend()}>
+                  <Send className="mr-1.5 h-3.5 w-3.5" />
+                  {bulkSending ? "Sending all…" : "Send all approved"}
+                </Button>
+                <Button
+                  type="button"
+                  variant="outline"
+                  className="h-8 text-xs text-destructive hover:text-destructive"
+                  disabled={bulkDeleting || bulkSending}
+                  onClick={() => void bulkDeleteProspects(approvedList, "approved emails")}
+                >
+                  <Trash2 className="mr-1.5 h-3.5 w-3.5" />
+                  {bulkDeleting ? "Deleting…" : "Delete all approved"}
+                </Button>
+              </div>
             </div>
           )}
           {approvedList.length
@@ -1153,12 +1229,22 @@ export function OutreachScreen() {
         </TabsContent>
 
         <TabsContent value="sent" className="mt-3 space-y-2">
+          <TabBulkDelete
+            count={sentList.length}
+            disabled={bulkDeleting}
+            onDelete={() => void bulkDeleteProspects(sentList, "sent emails")}
+          />
           {sentList.length
             ? sentList.map((p) => <ProspectCard key={String(p.id)} prospect={p} mode="sent" onRefresh={refreshProspects} />)
             : empty("No emails sent yet.")}
         </TabsContent>
 
         <TabsContent value="rejected" className="mt-3 space-y-2">
+          <TabBulkDelete
+            count={rejectedList.length}
+            disabled={bulkDeleting}
+            onDelete={() => void bulkDeleteProspects(rejectedList, "rejected prospects")}
+          />
           {rejectedList.length
             ? rejectedList.map((p) => <ProspectCard key={String(p.id)} prospect={p} mode="rejected" onRefresh={refreshProspects} />)
             : empty("No rejected prospects.")}

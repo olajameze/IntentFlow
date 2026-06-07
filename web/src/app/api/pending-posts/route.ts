@@ -31,15 +31,26 @@ const updateSchema = z
 export async function DELETE(req: Request) {
   return withSupabaseRoute(async (sb) => {
     const { searchParams } = new URL(req.url);
-    const id = searchParams.get("id");
-    if (!id) return NextResponse.json({ error: "id required" }, { status: 400 });
-    const { error } = await sb
+    const idsParam = searchParams.get("ids");
+    const singleId = searchParams.get("id");
+    const ids = idsParam
+      ? idsParam.split(",").map((s) => s.trim()).filter(Boolean)
+      : singleId
+        ? [singleId]
+        : [];
+    if (!ids.length) return NextResponse.json({ error: "id or ids required" }, { status: 400 });
+
+    const { data, error } = await sb
       .from("pending_posts")
       .delete()
-      .eq("id", id)
-      .neq("status", "published"); // prevent deleting already-published posts
+      .in("id", ids)
+      .neq("status", "published")
+      .select("id");
+
     if (error) return supabaseErrorResponse(error);
-    return NextResponse.json({ ok: true });
+    const deleted = data?.length ?? 0;
+    if (!deleted) return NextResponse.json({ ok: true, deleted: 0, alreadyDeleted: true });
+    return NextResponse.json({ ok: true, deleted });
   });
 }
 

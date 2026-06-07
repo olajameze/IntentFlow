@@ -305,6 +305,7 @@ export function ApprovalsScreen() {
   const [publishedPosts, setPublishedPosts] = useState<Post[]>([]);
   const [businesses, setBusinesses] = useState<Post[]>([]);
   const [biz, setBiz] = useState<string>("all");
+  const [bulkDeleting, setBulkDeleting] = useState(false);
 
   const load = async () => {
     const [pending, approved, published, b] = await Promise.all([
@@ -331,6 +332,28 @@ export function ApprovalsScreen() {
   const empty = (label: string) => (
     <p className="py-8 text-center text-sm text-muted-foreground">{label}</p>
   );
+
+  const bulkDeletePosts = async (posts: Post[], label: string) => {
+    const ids = posts.map((p) => String(p.id)).filter(Boolean);
+    if (!ids.length) return;
+    if (!window.confirm(`Delete all ${ids.length} ${label}? This cannot be undone.`)) return;
+    setBulkDeleting(true);
+    try {
+      const res = await fetch(
+        `/api/pending-posts?ids=${ids.map(encodeURIComponent).join(",")}`,
+        { method: "DELETE" },
+      );
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        toast.error(typeof data.error === "string" ? data.error : "Bulk delete failed");
+        return;
+      }
+      toast.success(`Removed ${data.deleted ?? ids.length} post(s)`);
+      await load();
+    } finally {
+      setBulkDeleting(false);
+    }
+  };
 
   return (
     <div className="min-w-0 space-y-3">
@@ -375,6 +398,21 @@ export function ApprovalsScreen() {
         </TabsList>
 
         <TabsContent value="pending" className="mt-3 space-y-2">
+          {pending.length > 0 && (
+            <div className="flex justify-end">
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                className="h-8 text-xs text-destructive hover:text-destructive"
+                disabled={bulkDeleting}
+                onClick={() => void bulkDeletePosts(pending, "pending posts")}
+              >
+                <Trash2 className="mr-1 h-3.5 w-3.5" />
+                Delete all pending ({pending.length})
+              </Button>
+            </div>
+          )}
           {pending.length
             ? pending.map((p) => (
                 <PostCard key={String(p.id)} post={p} businesses={businesses} mode="pending" onRefresh={load} />
@@ -383,6 +421,21 @@ export function ApprovalsScreen() {
         </TabsContent>
 
         <TabsContent value="approved" className="mt-3 space-y-2">
+          {approved.length > 0 && (
+            <div className="flex justify-end">
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                className="h-8 text-xs text-destructive hover:text-destructive"
+                disabled={bulkDeleting}
+                onClick={() => void bulkDeletePosts(approved, "approved posts")}
+              >
+                <Trash2 className="mr-1 h-3.5 w-3.5" />
+                Delete all approved ({approved.length})
+              </Button>
+            </div>
+          )}
           {approved.length
             ? approved.map((p) => (
                 <PostCard key={String(p.id)} post={p} businesses={businesses} mode="approved" onRefresh={load} />

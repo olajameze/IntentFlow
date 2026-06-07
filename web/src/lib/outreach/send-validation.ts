@@ -1,5 +1,7 @@
 import {
   plainTextFromHtml,
+  stripAiMetaFromHtml,
+  stripAiMetaPreamble,
   validateOutreachCopy,
   type OutreachCopyKind,
 } from "@/lib/outreach/email-validator";
@@ -14,7 +16,8 @@ export function validateEmailForSend(
   htmlBody: string,
   kind: OutreachCopyKind = "initial",
 ): SendValidationResult {
-  const plainBody = plainTextFromHtml(htmlBody);
+  const cleanedHtml = stripAiMetaFromHtml(htmlBody);
+  const plainBody = stripAiMetaPreamble(plainTextFromHtml(cleanedHtml));
   const result = validateOutreachCopy(subject, plainBody, kind);
   if (!result.ok) {
     return { ok: false, issues: result.issues };

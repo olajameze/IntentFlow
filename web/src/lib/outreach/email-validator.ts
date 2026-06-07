@@ -134,7 +134,44 @@ export function plainTextFromHtml(html: string): string {
     .trim();
 }
 
-/** Normalize body text before validation (collapse excess newlines). */
+function isMetaPreambleLine(line: string): boolean {
+  const t = line.trim();
+  if (!t) return true;
+  const low = t.toLowerCase();
+  if (/^(here (is|are)|below (is|are)|following (is|are))\b/.test(low)) return true;
+  if (/professional.*(b2b\s*)?outreach.*email/i.test(t) && t.length < 160) return true;
+  if (containsBlockedPhrase(t, AI_PHRASE_BLOCKLIST)) return true;
+  return false;
+}
+
+/** Remove LLM meta preamble lines (e.g. "Here is the professional B2B outreach email:"). */
+export function stripAiMetaPreamble(text: string): string {
+  let lines = text.replace(/\r\n/g, "\n").split("\n");
+  while (lines.length > 0 && isMetaPreambleLine(lines[0] ?? "")) {
+    lines.shift();
+  }
+  let joined = lines.join("\n").trim();
+  const inlineLead = /^(here (is|are) the professional[^\n]+)\n?/i;
+  while (inlineLead.test(joined)) {
+    joined = joined.replace(inlineLead, "").trim();
+  }
+  return joined.replace(/\n{3,}/g, "\n\n").trim();
+}
+
+/** Strip meta preamble from the first HTML paragraph(s) in stored email_body. */
+export function stripAiMetaFromHtml(html: string): string {
+  let out = html;
+  for (let i = 0; i < 3; i++) {
+    const match = out.match(/<p[^>]*>[\s\S]*?<\/p>/i);
+    if (!match) break;
+    const inner = plainTextFromHtml(match[0]);
+    if (!isMetaPreambleLine(inner) && !containsBlockedPhrase(inner, AI_PHRASE_BLOCKLIST)) break;
+    out = out.replace(match[0], "");
+  }
+  return out.trim();
+}
+
+/** Normalize body text before validation (strip meta + collapse excess newlines). */
 export function normalizeOutreachBody(body: string): string {
-  return body.replace(/\n{3,}/g, "\n\n").trim();
+  return stripAiMetaPreamble(body.replace(/\n{3,}/g, "\n\n").trim());
 }
