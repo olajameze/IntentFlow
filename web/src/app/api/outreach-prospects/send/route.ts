@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { loadAbWinner } from "@/lib/outreach/ab-winner";
+import { invalidateOutreachStats } from "@/lib/outreach/campaign-stats";
 import {
   getDailyLimit,
   isConfiguredForCampaign,
@@ -146,6 +147,8 @@ export async function POST(req: Request) {
         campaign,
         event_type: "sent",
       });
+
+      invalidateOutreachStats(campaign);
 
       return { ok: true as const, campaign, variant };
     };

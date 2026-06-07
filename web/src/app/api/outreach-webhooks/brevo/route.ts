@@ -1,6 +1,8 @@
 import { createHmac, timingSafeEqual } from "crypto";
 import { NextResponse } from "next/server";
+import { invalidateOutreachStats } from "@/lib/outreach/campaign-stats";
 import { handleInboundReply } from "@/lib/outreach/reply-handler";
+import { outreachLog } from "@/lib/outreach/logger";
 import { withSupabaseRoute } from "@/lib/with-supabase-route";
 
 type BrevoEvent = {
@@ -60,6 +62,7 @@ export async function POST(req: Request) {
     for (const event of events) {
       const eventType = (event.event || "").toLowerCase();
       let prospectId = prospectIdFromEvent(event);
+      const hadHeaderId = Boolean(prospectId);
       const email = event.email?.trim().toLowerCase();
 
       if (!prospectId && email) {
@@ -70,7 +73,18 @@ export async function POST(req: Request) {
           .order("updated_at", { ascending: false })
           .limit(1)
           .maybeSingle();
-        if (match) prospectId = match.id;
+        if (match) {
+          prospectId = match.id;
+          if (!hadHeaderId) {
+            outreachLog({
+              level: "warn",
+              event: "brevo_email_only_match",
+              campaign: match.campaign ?? "pesttrace",
+              prospectId: match.id,
+              issues: [email],
+            });
+          }
+        }
       }
 
       if (!prospectId) continue;
@@ -123,6 +137,14 @@ export async function POST(req: Request) {
           bodyText: event.reason || event.subject || "",
           subject: event.subject,
         });
+      }
+
+      if (
+        ["delivered", "hard_bounce", "soft_bounce", "blocked", "spam", "invalid", "inbound_email", "reply"].includes(
+          eventType,
+        )
+      ) {
+        invalidateOutreachStats(campaign);
       }
     }
 

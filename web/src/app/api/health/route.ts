@@ -17,11 +17,15 @@ export async function GET() {
     supabaseServiceRoleConfigured: srk,
     supabasePublishableConfigured: publishable,
     stripeEncryptionConfigured: Boolean(process.env.STRIPE_SECRET_ENCRYPTION_KEY?.trim()),
+    brevoWebhookSecretConfigured: Boolean(process.env.BREVO_WEBHOOK_SECRET?.trim()),
+    cronSecretConfigured: Boolean(process.env.CRON_SECRET?.trim()),
   };
 
   let supabaseQueryable = false;
   let outreachSchemaReady = false;
+  let outreachStatsRpcReady = false;
   let queryError: string | undefined;
+  const hints: string[] = [];
 
   if (url && srk) {
     try {
@@ -36,12 +40,25 @@ export async function GET() {
         .limit(1);
       outreachSchemaReady = !outreachErr;
       if (outreachErr && !queryError) queryError = outreachErr.message;
+
+      const { error: rpcErr } = await sb.rpc("outreach_campaign_stats", { p_campaign: "pesttrace" });
+      outreachStatsRpcReady = !rpcErr;
+      if (rpcErr && !outreachStatsRpcReady) {
+        hints.push("Run POST /api/setup/apply-outreach-migration for stats RPC");
+      }
     } catch (e) {
       queryError = e instanceof Error ? e.message : String(e);
     }
   }
 
-  const ready = url && srk && supabaseQueryable && outreachSchemaReady;
+  if (!outreachSchemaReady) {
+    hints.push("Apply outreach migrations (20260607+)");
+  }
+  if (!checks.brevoWebhookSecretConfigured) {
+    hints.push("Set BREVO_WEBHOOK_SECRET and register /api/outreach-webhooks/brevo in Brevo");
+  }
+
+  const ready = url && srk && supabaseQueryable && outreachSchemaReady && outreachStatsRpcReady;
 
   const body = {
     ok: ready,
@@ -50,8 +67,10 @@ export async function GET() {
       ...checks,
       supabaseQueryable,
       outreachSchemaReady,
+      outreachStatsRpcReady,
     },
     ...(queryError ? { hint: queryError } : {}),
+    ...(hints.length ? { hints } : {}),
   };
 
   return NextResponse.json(body, { status: ready ? 200 : 503 });

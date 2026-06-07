@@ -1,5 +1,6 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { engagementUpdateFields } from "@/lib/outreach/engagement";
+import { invalidateOutreachStats } from "@/lib/outreach/campaign-stats";
 import { emitOutreachWebhooks } from "@/lib/outreach/emit-webhook";
 
 export type ConversionEventType =
@@ -182,6 +183,7 @@ export async function recordOutreachConversion(
       }
     }
 
+    invalidateOutreachStats(prospect.campaign);
     return { booked: true, duplicate: false };
   }
 
@@ -198,5 +200,6 @@ export async function recordOutreachConversion(
       .eq("id", prospect.id);
   }
 
+  invalidateOutreachStats(prospect.campaign);
   return { booked: !!prospect.booked_at, duplicate: false };
 }

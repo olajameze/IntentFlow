@@ -36,10 +36,151 @@ type OutreachSettings = {
   follow_up_prompts?: string[] | null;
 };
 
+type PromptDraft = {
+  subject_prompt: string;
+  body_prompt: string;
+  follow_up_prompts: string;
+};
+
+type WebhookSub = {
+  id: string;
+  url: string;
+  campaign: string;
+  events: string[];
+  enabled: boolean;
+};
+
+function OutreachWebhookCard() {
+  const [subs, setSubs] = useState<WebhookSub[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [form, setForm] = useState({
+    url: "",
+    secret: "",
+    campaign: "all",
+    events: ["reply", "booked", "converted", "hot_lead"] as string[],
+  });
+
+  const loadSubs = async () => {
+    const res = await fetch("/api/outreach-webhooks/subscriptions/manage");
+    if (res.ok) setSubs(await res.json());
+    setLoading(false);
+  };
+
+  useEffect(() => {
+    void loadSubs();
+  }, []);
+
+  const toggleEvent = (event: string) => {
+    setForm((prev) => ({
+      ...prev,
+      events: prev.events.includes(event)
+        ? prev.events.filter((e) => e !== event)
+        : [...prev.events, event],
+    }));
+  };
+
+  const createSub = async () => {
+    const res = await fetch("/api/outreach-webhooks/subscriptions/manage", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(form),
+    });
+    if (!res.ok) {
+      const d = await res.json().catch(() => ({}));
+      toast.error(typeof d.error === "string" ? d.error : "Could not create subscription");
+      return;
+    }
+    toast.success("Webhook subscription created");
+    setForm({ url: "", secret: "", campaign: "all", events: ["reply", "booked", "converted", "hot_lead"] });
+    void loadSubs();
+  };
+
+  const setEnabled = async (id: string, enabled: boolean) => {
+    const res = await fetch("/api/outreach-webhooks/subscriptions/manage", {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ id, enabled }),
+    });
+    if (!res.ok) {
+      toast.error("Update failed");
+      return;
+    }
+    void loadSubs();
+  };
+
+  const eventOptions = ["reply", "booked", "converted", "hot_lead", "unsubscribe", "interested", "meeting_booked"];
+
+  return (
+    <Card>
+      <CardHeader>
+        <CardTitle className="text-base">Outbound webhook subscriptions</CardTitle>
+      </CardHeader>
+      <CardContent className="space-y-3 text-sm">
+        <p className="text-muted-foreground">
+          Notify Zapier, Slack, or your CRM when outreach events fire (reply, booked, converted, etc.).
+        </p>
+        {loading ? (
+          <p className="text-muted-foreground">Loading…</p>
+        ) : (
+          <>
+            {subs.length === 0 ? (
+              <p className="text-xs text-muted-foreground">No subscriptions yet.</p>
+            ) : (
+              <ul className="space-y-2">
+                {subs.map((s) => (
+                  <li key={s.id} className="flex flex-wrap items-center justify-between gap-2 rounded border p-2 text-xs">
+                    <div>
+                      <p className="font-mono break-all">{s.url}</p>
+                      <p className="text-muted-foreground">
+                        {s.campaign} · {s.events.join(", ")}
+                      </p>
+                    </div>
+                    <Switch
+                      checked={s.enabled}
+                      onCheckedChange={(v) => void setEnabled(s.id, v)}
+                      aria-label={`Toggle webhook ${s.url}`}
+                    />
+                  </li>
+                ))}
+              </ul>
+            )}
+            <div className="space-y-2 rounded border p-3">
+              <Label className="text-xs">Endpoint URL</Label>
+              <Input value={form.url} onChange={(e) => setForm((f) => ({ ...f, url: e.target.value }))} placeholder="https://hooks.zapier.com/..." />
+              <Label className="text-xs">Signing secret (min 16 chars)</Label>
+              <Input type="password" value={form.secret} onChange={(e) => setForm((f) => ({ ...f, secret: e.target.value }))} />
+              <Label className="text-xs">Campaign filter</Label>
+              <Input value={form.campaign} onChange={(e) => setForm((f) => ({ ...f, campaign: e.target.value }))} placeholder="all or pesttrace" />
+              <div className="flex flex-wrap gap-2">
+                {eventOptions.map((ev) => (
+                  <Button
+                    key={ev}
+                    type="button"
+                    size="sm"
+                    variant={form.events.includes(ev) ? "default" : "outline"}
+                    onClick={() => toggleEvent(ev)}
+                  >
+                    {ev}
+                  </Button>
+                ))}
+              </div>
+              <Button type="button" size="sm" onClick={() => void createSub()}>
+                Add subscription
+              </Button>
+            </div>
+          </>
+        )}
+      </CardContent>
+    </Card>
+  );
+}
+
 function OutreachPortfolioCard({ businesses }: { businesses: Biz[] }) {
   const [settings, setSettings] = useState<OutreachSettings[]>([]);
   const [loading, setLoading] = useState(true);
   const [promptsOpen, setPromptsOpen] = useState<Record<string, boolean>>({});
+  const [editingPrompts, setEditingPrompts] = useState<Record<string, boolean>>({});
+  const [promptDrafts, setPromptDrafts] = useState<Record<string, PromptDraft>>({});
   const siteBase =
     typeof window !== "undefined"
       ? window.location.origin
@@ -102,6 +243,46 @@ function OutreachPortfolioCard({ businesses }: { businesses: Biz[] }) {
     void loadOutreach();
   };
 
+  const startEditPrompts = (bizId: string, row: OutreachSettings) => {
+    setPromptDrafts((prev) => ({
+      ...prev,
+      [bizId]: {
+        subject_prompt: row.subject_prompt ?? "",
+        body_prompt: row.body_prompt ?? "",
+        follow_up_prompts: Array.isArray(row.follow_up_prompts) ? row.follow_up_prompts.join("\n---\n") : "",
+      },
+    }));
+    setEditingPrompts((prev) => ({ ...prev, [bizId]: true }));
+    setPromptsOpen((prev) => ({ ...prev, [bizId]: true }));
+  };
+
+  const savePrompts = async (bizId: string) => {
+    const draft = promptDrafts[bizId];
+    if (!draft) return;
+    const followUps = draft.follow_up_prompts
+      .split("\n---\n")
+      .map((s) => s.trim())
+      .filter(Boolean);
+    const res = await fetch("/api/business-outreach", {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        business_id: bizId,
+        subject_prompt: draft.subject_prompt,
+        body_prompt: draft.body_prompt,
+        follow_up_prompts: followUps,
+      }),
+    });
+    if (!res.ok) {
+      const d = await res.json().catch(() => ({}));
+      toast.error(typeof d.error === "string" ? d.error : "Save failed");
+      return;
+    }
+    toast.success("Prompts saved");
+    setEditingPrompts((prev) => ({ ...prev, [bizId]: false }));
+    void loadOutreach();
+  };
+
   return (
     <Card>
       <CardHeader>
@@ -144,47 +325,114 @@ function OutreachPortfolioCard({ businesses }: { businesses: Biz[] }) {
                       <Button type="button" size="sm" variant="secondary" onClick={() => void bootstrapCopy(biz.id)}>
                         Generate campaign copy
                       </Button>
-                      {(row.subject_prompt || row.body_prompt) && (
-                        <Button
-                          type="button"
-                          size="sm"
-                          variant="outline"
-                          onClick={() =>
-                            setPromptsOpen((prev) => ({ ...prev, [biz.id]: !prev[biz.id] }))
-                          }
-                        >
-                          {promptsOpen[biz.id] ? (
-                            <ChevronUp className="mr-1 h-3.5 w-3.5" />
-                          ) : (
-                            <ChevronDown className="mr-1 h-3.5 w-3.5" />
-                          )}
-                          View prompts
+                      <Button
+                        type="button"
+                        size="sm"
+                        variant="outline"
+                        onClick={() =>
+                          setPromptsOpen((prev) => ({ ...prev, [biz.id]: !prev[biz.id] }))
+                        }
+                      >
+                        {promptsOpen[biz.id] ? (
+                          <ChevronUp className="mr-1 h-3.5 w-3.5" />
+                        ) : (
+                          <ChevronDown className="mr-1 h-3.5 w-3.5" />
+                        )}
+                        {row.subject_prompt || row.body_prompt ? "View prompts" : "Edit prompts"}
+                      </Button>
+                      {(row.subject_prompt || row.body_prompt) && !editingPrompts[biz.id] && (
+                        <Button type="button" size="sm" variant="ghost" onClick={() => startEditPrompts(biz.id, row)}>
+                          Edit
                         </Button>
                       )}
                     </div>
                     {promptsOpen[biz.id] && (
                       <div className="space-y-2 rounded border bg-muted/30 p-2 text-[11px]">
-                        {row.subject_prompt && (
-                          <div>
-                            <p className="font-medium text-foreground">Subject prompt</p>
-                            <p className="whitespace-pre-wrap text-muted-foreground">{row.subject_prompt}</p>
-                          </div>
-                        )}
-                        {row.body_prompt && (
-                          <div>
-                            <p className="font-medium text-foreground">Body prompt</p>
-                            <p className="whitespace-pre-wrap text-muted-foreground">{row.body_prompt}</p>
-                          </div>
-                        )}
-                        {Array.isArray(row.follow_up_prompts) && row.follow_up_prompts.length > 0 && (
-                          <div>
-                            <p className="font-medium text-foreground">Follow-up prompts</p>
-                            <ol className="list-decimal space-y-1 pl-4 text-muted-foreground">
-                              {row.follow_up_prompts.map((p, i) => (
-                                <li key={i} className="whitespace-pre-wrap">{p}</li>
-                              ))}
-                            </ol>
-                          </div>
+                        {editingPrompts[biz.id] && promptDrafts[biz.id] ? (
+                          <>
+                            <div>
+                              <p className="font-medium text-foreground">Subject prompt</p>
+                              <Textarea
+                                className="mt-1 min-h-[80px] text-xs"
+                                value={promptDrafts[biz.id].subject_prompt}
+                                onChange={(e) =>
+                                  setPromptDrafts((prev) => ({
+                                    ...prev,
+                                    [biz.id]: { ...prev[biz.id], subject_prompt: e.target.value },
+                                  }))
+                                }
+                              />
+                            </div>
+                            <div>
+                              <p className="font-medium text-foreground">Body prompt</p>
+                              <Textarea
+                                className="mt-1 min-h-[120px] text-xs"
+                                value={promptDrafts[biz.id].body_prompt}
+                                onChange={(e) =>
+                                  setPromptDrafts((prev) => ({
+                                    ...prev,
+                                    [biz.id]: { ...prev[biz.id], body_prompt: e.target.value },
+                                  }))
+                                }
+                              />
+                            </div>
+                            <div>
+                              <p className="font-medium text-foreground">Follow-up prompts (separate with ---)</p>
+                              <Textarea
+                                className="mt-1 min-h-[80px] text-xs"
+                                value={promptDrafts[biz.id].follow_up_prompts}
+                                onChange={(e) =>
+                                  setPromptDrafts((prev) => ({
+                                    ...prev,
+                                    [biz.id]: { ...prev[biz.id], follow_up_prompts: e.target.value },
+                                  }))
+                                }
+                              />
+                            </div>
+                            <div className="flex gap-2">
+                              <Button type="button" size="sm" onClick={() => void savePrompts(biz.id)}>
+                                Save prompts
+                              </Button>
+                              <Button
+                                type="button"
+                                size="sm"
+                                variant="ghost"
+                                onClick={() => setEditingPrompts((prev) => ({ ...prev, [biz.id]: false }))}
+                              >
+                                Cancel
+                              </Button>
+                            </div>
+                          </>
+                        ) : (
+                          <>
+                            {row.subject_prompt && (
+                              <div>
+                                <p className="font-medium text-foreground">Subject prompt</p>
+                                <p className="whitespace-pre-wrap text-muted-foreground">{row.subject_prompt}</p>
+                              </div>
+                            )}
+                            {row.body_prompt && (
+                              <div>
+                                <p className="font-medium text-foreground">Body prompt</p>
+                                <p className="whitespace-pre-wrap text-muted-foreground">{row.body_prompt}</p>
+                              </div>
+                            )}
+                            {Array.isArray(row.follow_up_prompts) && row.follow_up_prompts.length > 0 && (
+                              <div>
+                                <p className="font-medium text-foreground">Follow-up prompts</p>
+                                <ol className="list-decimal space-y-1 pl-4 text-muted-foreground">
+                                  {row.follow_up_prompts.map((p, i) => (
+                                    <li key={i} className="whitespace-pre-wrap">{p}</li>
+                                  ))}
+                                </ol>
+                              </div>
+                            )}
+                            {!row.subject_prompt && !row.body_prompt && (
+                              <Button type="button" size="sm" variant="secondary" onClick={() => startEditPrompts(biz.id, row)}>
+                                Add prompts manually
+                              </Button>
+                            )}
+                          </>
                         )}
                       </div>
                     )}
@@ -453,6 +701,7 @@ export function SettingsScreen() {
       </Card>
 
       <OutreachPortfolioCard businesses={businesses} />
+      <OutreachWebhookCard />
 
       <Card>
         <CardHeader>

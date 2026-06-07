@@ -1,5 +1,6 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { engagementUpdateFields } from "@/lib/outreach/engagement";
+import { invalidateOutreachStats } from "@/lib/outreach/campaign-stats";
 import { emitOutreachWebhooks } from "@/lib/outreach/emit-webhook";
 
 const STOP_PATTERNS = [
@@ -72,6 +73,8 @@ export async function handleInboundReply(
     prospectId: input.prospectId,
     email: input.fromEmail,
   });
+
+  invalidateOutreachStats(input.campaign);
 
   return { ok: true, unsubscribed };
 }

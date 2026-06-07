@@ -1,28 +1,45 @@
 import { NextResponse } from "next/server";
+import { invalidateOutreachStats } from "@/lib/outreach/campaign-stats";
 import { supabaseErrorResponse } from "@/lib/supabase-error-response";
 import { withSupabaseRoute } from "@/lib/with-supabase-route";
 import { z } from "zod";
+
+const SUMMARY_COLUMNS =
+  "id,name,email,phone,website_url,city,country,sector,campaign,status,source,business_id,email_subject,email_subject_b,lead_score,engagement_tier,subject_variant,sent_at,opened_at,clicked_at,replied_at,booked_at,delivered_at,interested_at,meeting_booked_at,converted_at,followup_count,sequence_step,next_send_at,open_count,click_count,created_at,updated_at,raw";
 
 const VALID_STATUSES = ["scraped", "draft_ready", "approved", "rejected", "sent", "bounced", "unsubscribed"] as const;
 export async function GET(req: Request) {
   return withSupabaseRoute(async (sb) => {
     const { searchParams } = new URL(req.url);
+    const id = searchParams.get("id");
     const status = searchParams.get("status");
     const country = searchParams.get("country");
     const campaign = searchParams.get("campaign");
     const hotOnly = searchParams.get("hot") === "1";
     const engagementTier = searchParams.get("engagement_tier");
+    const fullFields = searchParams.get("fields") === "full";
 
-    let query = sb.from("outreach_prospects").select("*");
+    if (id) {
+      const { data, error } = await sb.from("outreach_prospects").select("*").eq("id", id).maybeSingle();
+      if (error) return supabaseErrorResponse(error);
+      if (!data) return NextResponse.json({ error: "Not found" }, { status: 404 });
+      return NextResponse.json(data);
+    }
+
+    const columns = fullFields ? "*" : SUMMARY_COLUMNS;
+    let query = sb.from("outreach_prospects").select(columns);
 
     if (hotOnly) {
       query = query
         .eq("engagement_tier", "hot")
         .eq("status", "sent")
         .is("booked_at", null)
-        .order("click_count", { ascending: false });
+        .order("click_count", { ascending: false })
+        .order("lead_score", { ascending: false });
     } else if (status === "draft_ready" || status === "approved") {
       query = query.order("lead_score", { ascending: false }).order("created_at", { ascending: false });
+    } else if (status === "sent") {
+      query = query.order("lead_score", { ascending: false }).order("click_count", { ascending: false });
     } else {
       query = query.order("created_at", { ascending: false });
     }
@@ -116,6 +133,9 @@ export async function PATCH(req: Request) {
         event_type: "booked",
       });
     }
+    if (replied === true || booked === true) {
+      invalidateOutreachStats(String(data.campaign ?? "pesttrace"));
+    }
     return NextResponse.json(data);
   });
 }
@@ -126,13 +146,17 @@ export async function DELETE(req: Request) {
     const id = searchParams.get("id");
     if (!id) return NextResponse.json({ error: "id required" }, { status: 400 });
 
-    const { error } = await sb
+    const { data, error } = await sb
       .from("outreach_prospects")
       .delete()
       .eq("id", id)
-      .not("status", "eq", "sent"); // keep sent records for audit
+      .select("id, campaign")
+      .maybeSingle();
 
     if (error) return supabaseErrorResponse(error);
+    if (!data) return NextResponse.json({ error: "Not found" }, { status: 404 });
+
+    invalidateOutreachStats(String(data.campaign ?? "pesttrace"));
     return NextResponse.json({ ok: true });
   });
 }

@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { handleInboundReply } from "@/lib/outreach/reply-handler";
+import { pollImapReplies } from "@/lib/outreach/imap-reply";
 import { withSupabaseRoute } from "@/lib/with-supabase-route";
 
 /**
@@ -27,21 +27,16 @@ export async function POST(req: Request) {
     });
   }
 
-  return withSupabaseRoute(async (sb) => {
-    // Lightweight stub: production IMAP requires imapflow package.
-    // Log configuration present so operators know to prefer Brevo webhook.
-    void req;
-    void host;
-    void user;
-    void password;
-    void handleInboundReply;
-    void sb;
+  void req;
 
-    return NextResponse.json({
-      ok: true,
-      processed: 0,
-      hint: "Configure Brevo inbound webhook at /api/outreach-webhooks/brevo for automatic reply detection.",
-    });
+  return withSupabaseRoute(async (sb) => {
+    try {
+      const result = await pollImapReplies(sb, { host, user, password });
+      return NextResponse.json({ ok: true, ...result });
+    } catch (e) {
+      const message = e instanceof Error ? e.message : String(e);
+      return NextResponse.json({ ok: false, error: message }, { status: 500 });
+    }
   });
 }
 

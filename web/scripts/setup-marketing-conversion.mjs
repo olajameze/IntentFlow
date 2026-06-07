@@ -49,6 +49,7 @@ async function applyMigrationWithPg() {
     "20260607000000_outreach_intelligence.sql",
     "20260608000000_outreach_event_types.sql",
     "20260608100000_outreach_webhook_subscriptions.sql",
+    "20260609000000_outreach_campaign_stats_rpc.sql",
   ];
   const sql = migrationFiles
     .map((f) => fs.readFileSync(path.join(root, "..", "supabase", "migrations", f), "utf8"))

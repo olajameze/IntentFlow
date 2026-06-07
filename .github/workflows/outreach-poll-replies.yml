@@ -1,0 +1,41 @@
+name: Outreach IMAP Reply Poll
+
+# Fallback when Brevo inbound webhook is unavailable — polls IMAP every 30 minutes.
+# Requires OUTREACH_REPLY_IMAP_* env vars on the dashboard deployment.
+
+on:
+  workflow_dispatch: {}
+  schedule:
+    - cron: "*/30 * * * *"
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  poll-replies:
+    runs-on: ubuntu-latest
+    env:
+      DASHBOARD_URL: ${{ secrets.OUTREACH_DASHBOARD_URL }}
+      CRON_SECRET: ${{ secrets.CRON_SECRET }}
+    steps:
+      - name: Verify required secrets
+        run: |
+          set -e
+          if [ -z "${DASHBOARD_URL:-}" ]; then
+            echo "::error::Secret OUTREACH_DASHBOARD_URL is empty"
+            exit 1
+          fi
+          echo "::notice::Polling IMAP via ${DASHBOARD_URL}/api/outreach-poll-replies"
+
+      - name: POST to IMAP poll endpoint
+        run: |
+          set -e
+          AUTH=""
+          if [ -n "${CRON_SECRET:-}" ]; then
+            AUTH="-H \"Authorization: Bearer ${CRON_SECRET}\""
+          fi
+          eval curl -fsSL -X POST $AUTH "${DASHBOARD_URL}/api/outreach-poll-replies" -w "\nHTTP %{http_code}\n"

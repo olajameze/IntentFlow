@@ -114,6 +114,9 @@ type CampaignStats = {
   bounced: number;
   hot_leads?: number;
   revenue_attributed?: number;
+  verify_failed?: number;
+  inbox_pending?: number;
+  delivery_rate?: number;
   engagement?: { hot: number; warm: number; cold: number };
   open_rate: number;
   click_rate: number;
@@ -135,14 +138,40 @@ function pct(n: number): string {
   return `${(n * 100).toFixed(n >= 0.1 ? 0 : 1)}%`;
 }
 
-/** Klaviyo step 9 — conversion funnel KPI strip. Sent → Open → Click → Reply → Booked. */
-function StatsPanel({ stats }: { stats: CampaignStats | null }) {
-  if (!stats) {
-    return (
-      <div className="rounded-lg border bg-card p-3 text-xs text-muted-foreground">
-        Loading conversion metrics…
+function StatsSkeleton() {
+  return (
+    <div className="space-y-2 rounded-lg border bg-card p-3">
+      <div className="grid grid-cols-2 gap-2 md:grid-cols-3 lg:grid-cols-6">
+        {Array.from({ length: 6 }).map((_, i) => (
+          <div key={i} className="animate-pulse rounded-md border bg-background/50 p-2">
+            <div className="h-3 w-16 rounded bg-muted" />
+            <div className="mt-2 h-6 w-10 rounded bg-muted" />
+            <div className="mt-1 h-3 w-20 rounded bg-muted" />
+          </div>
+        ))}
       </div>
-    );
+      <div className="grid grid-cols-3 gap-2">
+        {Array.from({ length: 3 }).map((_, i) => (
+          <div key={i} className="animate-pulse rounded-md border bg-background/30 px-2 py-1.5">
+            <div className="h-3 w-20 rounded bg-muted" />
+            <div className="mt-1 h-4 w-8 rounded bg-muted" />
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+/** Klaviyo step 9 — conversion funnel KPI strip. Sent → Open → Click → Reply → Booked. */
+function StatsPanel({
+  stats,
+  updating,
+}: {
+  stats: CampaignStats | null;
+  updating?: boolean;
+}) {
+  if (!stats) {
+    return <StatsSkeleton />;
   }
 
   const tiles: Array<{
@@ -222,6 +251,9 @@ function StatsPanel({ stats }: { stats: CampaignStats | null }) {
 
   return (
     <div className="space-y-2 rounded-lg border bg-card p-3">
+      {updating && (
+        <p className="text-[10px] text-muted-foreground">Updating metrics…</p>
+      )}
       <div className="grid grid-cols-2 gap-2 md:grid-cols-3 lg:grid-cols-6">
         {tiles.map((t) => (
           <div key={t.label} className="rounded-md border bg-background/50 p-2">
@@ -246,6 +278,22 @@ function StatsPanel({ stats }: { stats: CampaignStats | null }) {
         <p className="text-[11px] text-muted-foreground">
           <span className="font-medium text-foreground">Subject A/B:</span> {abVerdict}
         </p>
+      )}
+      {(stats.delivery_rate != null || stats.inbox_pending != null || stats.verify_failed != null) && (
+        <div className="grid grid-cols-3 gap-2 border-t pt-2 text-[11px]">
+          <div>
+            <p className="text-muted-foreground">Delivery rate</p>
+            <p className="font-semibold tabular-nums">{pct(stats.delivery_rate ?? 0)}</p>
+          </div>
+          <div>
+            <p className="text-muted-foreground">In flight</p>
+            <p className="font-semibold tabular-nums">{stats.inbox_pending ?? 0}</p>
+          </div>
+          <div>
+            <p className="text-muted-foreground">Verify failed</p>
+            <p className="font-semibold tabular-nums">{stats.verify_failed ?? 0}</p>
+          </div>
+        </div>
       )}
     </div>
   );
@@ -349,7 +397,28 @@ function ProspectCard({
   const [subject, setSubject] = useState(String(prospect.email_subject ?? ""));
   const [previewVariantB, setPreviewVariantB] = useState(false);
   const [body, setBody] = useState(String(prospect.email_body ?? ""));
+  const [bodyLoading, setBodyLoading] = useState(false);
   const [expanded, setExpanded] = useState(false);
+
+  const hydrateBody = async () => {
+    if (body || bodyLoading) return;
+    setBodyLoading(true);
+    try {
+      const res = await fetch(`/api/outreach-prospects?id=${encodeURIComponent(id)}`);
+      if (res.ok) {
+        const row = (await res.json()) as Prospect;
+        if (row.email_body) setBody(String(row.email_body));
+      }
+    } finally {
+      setBodyLoading(false);
+    }
+  };
+
+  const toggleExpanded = () => {
+    const next = !expanded;
+    setExpanded(next);
+    if (next) void hydrateBody();
+  };
   const [previewing, setPreviewing] = useState(false);
   const [copied, setCopied] = useState(false);
   const [saving, setSaving] = useState(false);
@@ -438,15 +507,20 @@ function ProspectCard({
   };
 
   const deleteProspect = async () => {
-    if (!window.confirm("Delete this prospect? This cannot be undone.")) return;
+    const isSentOrHot = mode === "sent" || Boolean(sentAt);
+    const msg = isSentOrHot
+      ? "Delete this prospect and all send/tracking history? This frees list space and cannot be undone."
+      : "Delete this prospect? This cannot be undone.";
+    if (!window.confirm(msg)) return;
     setDeleting(true);
     try {
       const res = await fetch(`/api/outreach-prospects?id=${encodeURIComponent(id)}`, { method: "DELETE" });
       if (!res.ok) {
-        toast.error("Could not delete");
+        const data = await res.json().catch(() => ({}));
+        toast.error(typeof data.error === "string" ? data.error : "Could not delete");
         return;
       }
-      toast.success("Deleted");
+      toast.success(isSentOrHot ? "Prospect and tracking data removed" : "Deleted");
       await onRefresh();
     } finally { setDeleting(false); }
   };
@@ -624,21 +698,20 @@ function ProspectCard({
               >
                 {copied ? <Check className="h-3.5 w-3.5 text-emerald-500" /> : <Copy className="h-3.5 w-3.5" />}
               </Button>
-              {mode !== "sent" && (
-                <Button
-                  type="button" variant="ghost" size="icon"
-                  className="h-7 w-7 text-destructive"
-                  disabled={deleting}
-                  onClick={deleteProspect}
-                  aria-label="Delete prospect"
-                >
-                  <Trash2 className="h-3.5 w-3.5" />
-                </Button>
-              )}
+              <Button
+                type="button" variant="ghost" size="icon"
+                className="h-7 w-7 text-destructive"
+                disabled={deleting}
+                onClick={() => void deleteProspect()}
+                aria-label="Delete prospect"
+                title={mode === "sent" ? "Remove sent prospect and tracking data" : "Delete prospect"}
+              >
+                <Trash2 className="h-3.5 w-3.5" />
+              </Button>
               <Button
                 type="button" variant="ghost" size="icon"
                 className="h-7 w-7"
-                onClick={() => setExpanded((v) => !v)}
+                onClick={toggleExpanded}
                 aria-label={expanded ? "Collapse" : "Expand"}
               >
                 {expanded ? <ChevronUp className="h-3.5 w-3.5" /> : <ChevronDown className="h-3.5 w-3.5" />}
@@ -650,9 +723,12 @@ function ProspectCard({
           {!expanded && bodyText && (
             <p
               className="mt-2 cursor-pointer text-[11px] leading-relaxed text-muted-foreground"
-              onClick={() => setExpanded(true)}
+              onClick={() => {
+                setExpanded(true);
+                void hydrateBody();
+              }}
             >
-              {preview}
+              {bodyLoading ? "Loading email…" : preview}
               {bodyText.length > PREVIEW_LEN && (
                 <span className="ml-1 text-primary">more</span>
               )}
@@ -676,6 +752,7 @@ function ProspectCard({
                     type="button"
                     variant={repliedAt ? "default" : "secondary"}
                     className="h-9 w-full text-xs sm:flex-1"
+                    title="Auto-detected via Brevo inbound or IMAP when configured"
                     onClick={() => void markFlag("replied", !repliedAt)}
                   >
                     <Reply className="mr-1.5 h-3.5 w-3.5" />
@@ -690,6 +767,16 @@ function ProspectCard({
                   >
                     <CheckCircle2 className="mr-1.5 h-3.5 w-3.5" />
                     {bookedAt ? "Booked ✓ (click to clear)" : "Mark as paying customer"}
+                  </Button>
+                  <Button
+                    type="button"
+                    variant="destructive"
+                    className="h-9 w-full text-xs sm:flex-1"
+                    disabled={deleting}
+                    onClick={() => void deleteProspect()}
+                  >
+                    <Trash2 className="mr-1.5 h-3.5 w-3.5" />
+                    {deleting ? "Deleting…" : "Delete record"}
                   </Button>
                 </div>
               </div>
@@ -755,20 +842,34 @@ export function OutreachScreen() {
   const [rejectedProspects, setRejectedProspects] = useState<Prospect[]>([]);
   const [hotProspects, setHotProspects] = useState<Prospect[]>([]);
   const [stats, setStats] = useState<CampaignStats | null>(null);
+  const [statsUpdating, setStatsUpdating] = useState(false);
+  const statsCacheRef = useRef<Partial<Record<Campaign, CampaignStats>>>({});
+  const campaignRef = useRef(campaign);
+  campaignRef.current = campaign;
   const [country, setCountry] = useState<string>("all");
   const [bulkSending, setBulkSending] = useState(false);
   const [dispatching, setDispatching] = useState(false);
 
   const loadStats = useCallback(async (forCampaign: Campaign) => {
-    const res = await fetch(`/api/outreach-prospects/stats?campaign=${forCampaign}`);
-    if (res.ok) setStats(await res.json());
-    else setStats(null);
+    const cached = statsCacheRef.current[forCampaign];
+    const isActive = campaignRef.current === forCampaign;
+    if (cached && isActive) setStats(cached);
+    if (isActive) setStatsUpdating(true);
+    try {
+      const res = await fetch(`/api/outreach-prospects/stats?campaign=${forCampaign}`);
+      if (res.ok) {
+        const data = (await res.json()) as CampaignStats;
+        statsCacheRef.current[forCampaign] = data;
+        if (campaignRef.current === forCampaign) setStats(data);
+      }
+    } finally {
+      if (campaignRef.current === forCampaign) setStatsUpdating(false);
+    }
   }, []);
 
   const load = useCallback(
     async (forCampaign: Campaign = campaign) => {
       const q = `campaign=${forCampaign}`;
-      void loadStats(forCampaign);
       const [review, approved, sent, rejected, hot] = await Promise.all([
         fetch(`/api/outreach-prospects?status=draft_ready&${q}`),
         fetch(`/api/outreach-prospects?status=approved&${q}`),
@@ -782,14 +883,24 @@ export function OutreachScreen() {
       if (rejected.ok) setRejectedProspects(await rejected.json());
       if (hot.ok) setHotProspects(await hot.json());
     },
-    [campaign, loadStats],
+    [campaign],
   );
 
-  // Re-load whenever the operator switches campaign tab
+  const refreshProspects = useCallback(async () => {
+    await load(campaign);
+    await loadStats(campaign);
+  }, [campaign, load, loadStats]);
+
   useEffect(() => {
-    setStats(null);
     void load(campaign);
-  }, [campaign, load]);
+    void loadStats(campaign);
+  }, [campaign, load, loadStats]);
+
+  useEffect(() => {
+    void loadStats("pesttrace");
+    void loadStats("weathers");
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- prefetch once on mount
+  }, []);
 
   const filterByCountry = (prospects: Prospect[]) =>
     country === "all" ? prospects : prospects.filter((p) => String(p.country) === country);
@@ -930,7 +1041,7 @@ export function OutreachScreen() {
       </div>
 
       {/* KPI panel — conversion funnel + hot leads + webhook revenue */}
-      <StatsPanel stats={stats} />
+      <StatsPanel stats={stats} updating={statsUpdating} />
       {(stats?.hot_leads ?? 0) > 0 && (
         <div className="rounded-lg border border-orange-500/30 bg-orange-500/10 px-3 py-2 text-xs text-orange-200">
           <span className="font-medium text-orange-100">{stats?.hot_leads} hot lead(s)</span>
@@ -1006,7 +1117,7 @@ export function OutreachScreen() {
           </p>
           {filterByCountry(hotProspects).length
             ? filterByCountry(hotProspects).map((p) => (
-                <ProspectCard key={String(p.id)} prospect={p} mode="sent" onRefresh={() => load(campaign)} />
+                <ProspectCard key={String(p.id)} prospect={p} mode="sent" onRefresh={refreshProspects} />
               ))
             : empty("No hot leads for this campaign yet — clicks on your booking/signup link appear here.")}
         </TabsContent>
@@ -1016,7 +1127,7 @@ export function OutreachScreen() {
             Review each LLM-generated email. Edit if needed, then Approve to queue for sending.
           </p>
           {reviewList.length
-            ? reviewList.map((p) => <ProspectCard key={String(p.id)} prospect={p} mode="review" onRefresh={() => load(campaign)} />)
+            ? reviewList.map((p) => <ProspectCard key={String(p.id)} prospect={p} mode="review" onRefresh={refreshProspects} />)
             : empty(`No ${meta.short} emails to review — click "Run ${meta.short} engine" above to generate new drafts.`)}
         </TabsContent>
 
@@ -1031,19 +1142,19 @@ export function OutreachScreen() {
             </div>
           )}
           {approvedList.length
-            ? approvedList.map((p) => <ProspectCard key={String(p.id)} prospect={p} mode="approved" onRefresh={() => load(campaign)} />)
+            ? approvedList.map((p) => <ProspectCard key={String(p.id)} prospect={p} mode="approved" onRefresh={refreshProspects} />)
             : empty("No approved emails — approve items from the Review tab.")}
         </TabsContent>
 
         <TabsContent value="sent" className="mt-3 space-y-2">
           {sentList.length
-            ? sentList.map((p) => <ProspectCard key={String(p.id)} prospect={p} mode="sent" onRefresh={() => load(campaign)} />)
+            ? sentList.map((p) => <ProspectCard key={String(p.id)} prospect={p} mode="sent" onRefresh={refreshProspects} />)
             : empty("No emails sent yet.")}
         </TabsContent>
 
         <TabsContent value="rejected" className="mt-3 space-y-2">
           {rejectedList.length
-            ? rejectedList.map((p) => <ProspectCard key={String(p.id)} prospect={p} mode="rejected" onRefresh={() => load(campaign)} />)
+            ? rejectedList.map((p) => <ProspectCard key={String(p.id)} prospect={p} mode="rejected" onRefresh={refreshProspects} />)
             : empty("No rejected prospects.")}
         </TabsContent>
       </Tabs>

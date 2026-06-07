@@ -6,6 +6,7 @@ const MIGRATION_FILES = [
   "20260607000000_outreach_intelligence.sql",
   "20260608000000_outreach_event_types.sql",
   "20260608100000_outreach_webhook_subscriptions.sql",
+  "20260609000000_outreach_campaign_stats_rpc.sql",
 ] as const;
 
 export function outreachMigrationPaths(): string[] {

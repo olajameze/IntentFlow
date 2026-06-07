@@ -326,12 +326,18 @@ def generate_outreach_email(
     # tracking URLs before delivery.
     html_body = _render_html(body_text, cfg, prospect_id=str(pid))
 
+    from tools.ab_winner import apply_ab_winner_subjects, load_ab_winner
+
+    primary_subject, challenger_subject = apply_ab_winner_subjects(
+        subject_a, subject_b, load_ab_winner(cfg.id)
+    )
+
     try:
         sb = get_supabase()
         sb.table("outreach_prospects").update(
             {
-                "email_subject": subject_a,
-                "email_subject_b": subject_b,
+                "email_subject": primary_subject,
+                "email_subject_b": challenger_subject,
                 "email_body": html_body,
                 "status": "draft_ready",
                 "campaign": cfg.id,

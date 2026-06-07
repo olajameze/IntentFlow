@@ -13,7 +13,8 @@ Use this checklist the first time (or after a clean clone) before reporting “n
    - `20260607000000_outreach_intelligence.sql` (`lead_score`, `delivered_at`, `sequence_step`, …)
    - `20260608000000_outreach_event_types.sql` (allows `sent`, `delivered`, `meeting_booked`, …)
    - `20260608100000_outreach_webhook_subscriptions.sql` (outbound integrator webhooks)
-4. Confirm `businesses` exists and optionally seed rows. `GET /api/health` should report `outreachSchemaReady: true`.
+   - `20260609000000_outreach_campaign_stats_rpc.sql` (single-query KPI RPC + deliverability fields)
+4. Confirm `businesses` exists and optionally seed rows. `GET /api/health` should report `outreachSchemaReady: true` and `outreachStatsRpcReady: true`.
 
 ## 2. Environment
 
@@ -99,10 +100,15 @@ cd engine && python -c "import config; print('Groq:', 'yes' if config.groq_api_k
    - Optional `BREVO_API_KEY` for contacts validate API (pre-send gate)
 5. Send pacing env: `OUTREACH_DAILY_SEND_LIMIT`, `OUTREACH_HOURLY_SEND_LIMIT` (default 30), jitter 200–800 ms between bulk sends.
 6. Optional env: `OUTREACH_CONVERSION_SECRET` (global fallback), `OUTREACH_PUBLIC_BASE_URL` (tracking pixels), `GROQ_API_KEY` (LLM follow-ups).
-7. Cron jobs (GitHub Actions + `CRON_SECRET`):
+7. Optional IMAP reply fallback (when Brevo inbound is unavailable):
+   - `OUTREACH_REPLY_IMAP_HOST`, `OUTREACH_REPLY_IMAP_USER`, `OUTREACH_REPLY_IMAP_PASSWORD` in `web/.env.local`
+   - `outreach-poll-replies.yml` cron → `POST /api/outreach-poll-replies` every 30 min
+8. Cron jobs (GitHub Actions + `CRON_SECRET` + `OUTREACH_DASHBOARD_URL`):
    - `outreach-followups.yml` → `POST /api/outreach-prospects/send-followups`
-   - `ab-winner` daily → `POST /api/outreach-prospects/ab-winner`
-8. Monitor **Outreach** KPI strip — benchmark targets: open 40–60%, click 5–15%, reply 2–8%, bounce &lt; 3%. Hot leads and `booked_at` fill from clicks + conversion webhooks.
+   - `outreach-ab-winner.yml` daily → `POST /api/outreach-prospects/ab-winner`
+   - `outreach-poll-replies.yml` → `POST /api/outreach-poll-replies` (IMAP fallback)
+9. **Settings → Outbound webhook subscriptions** — register Zapier/CRM endpoints without exposing service keys.
+10. Monitor **Outreach** KPI strip — benchmark targets: open 40–60%, click 5–15%, reply 2–8%, bounce &lt; 3%. Hot leads and `booked_at` fill from clicks + conversion webhooks. Deliverability row shows `delivery_rate`, in-flight, and verify failures.
 
 Run all enabled campaigns:
 

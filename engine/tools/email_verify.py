@@ -5,6 +5,7 @@ from __future__ import annotations
 import re
 
 _EMAIL_RE = re.compile(r"^[a-zA-Z0-9._%+\-]+@[a-zA-Z0-9.\-]+\.[a-zA-Z]{2,}$")
+_ROLE_LOCALS = ("noreply", "no-reply", "donotreply", "do-not-reply", "mailer-daemon")
 
 
 def is_valid_email_format(email: str) -> bool:
@@ -37,6 +38,9 @@ def verify_outreach_email(email: str) -> tuple[bool, str | None]:
     trimmed = email.strip().lower()
     if not is_valid_email_format(trimmed):
         return False, "Invalid email format"
+    local = trimmed.split("@", 1)[0]
+    if any(local == p or local.startswith(f"{p}+") for p in _ROLE_LOCALS):
+        return False, "Role account address"
     domain = trimmed.split("@", 1)[1]
     if not has_mx_records(domain):
         return False, "No MX records for domain"

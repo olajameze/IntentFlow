@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { computeEngagementTier, engagementUpdateFields } from "@/lib/outreach/engagement";
+import { invalidateOutreachStats } from "@/lib/outreach/campaign-stats";
 import { emitOutreachWebhooks } from "@/lib/outreach/emit-webhook";
 import { getSupabaseAdmin } from "@/lib/supabase-admin";
 
@@ -89,10 +90,12 @@ export async function GET(req: Request) {
         })
         .eq("id", prospect.id);
 
+      const camp = prospect.campaign ?? "pesttrace";
+      invalidateOutreachStats(camp);
       if (tierFields.engagement_tier === "hot" && prevTier !== "hot") {
         await emitOutreachWebhooks(sb, {
           event: "hot_lead",
-          campaign: prospect.campaign ?? "pesttrace",
+          campaign: camp,
           prospectId: prospect.id,
           email: prospect.email ?? undefined,
         });

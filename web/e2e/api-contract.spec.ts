@@ -9,6 +9,9 @@ test.describe("Tier D — Route Handlers", () => {
         nextPublicSupabaseUrl: expect.any(Boolean),
         supabaseServiceRoleConfigured: expect.any(Boolean),
         supabasePublishableConfigured: expect.any(Boolean),
+        brevoWebhookSecretConfigured: expect.any(Boolean),
+        cronSecretConfigured: expect.any(Boolean),
+        outreachStatsRpcReady: expect.any(Boolean),
       }),
       ok: expect.any(Boolean),
       status: expect.stringMatching(/ready|degraded/),
@@ -79,6 +82,9 @@ test.describe("Tier D — Route Handlers", () => {
       expect(json).toMatchObject({
         hot_leads: expect.any(Number),
         delivered: expect.any(Number),
+        delivery_rate: expect.any(Number),
+        verify_failed: expect.any(Number),
+        inbox_pending: expect.any(Number),
         interested: expect.any(Number),
         meeting_booked: expect.any(Number),
         converted: expect.any(Number),
@@ -109,6 +115,7 @@ test.describe("Tier D — Route Handlers", () => {
     const json = await res.json();
     expect(json.checks).toMatchObject({
       outreachSchemaReady: expect.any(Boolean),
+      outreachStatsRpcReady: expect.any(Boolean),
     });
   });
 

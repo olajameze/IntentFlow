@@ -21,6 +21,9 @@ const patchSchema = z.object({
   cta_label: z.string().min(1).max(80).optional(),
   accent_color: z.string().regex(/^#[0-9A-Fa-f]{6}$/).optional(),
   regenerate_secret: z.boolean().optional(),
+  subject_prompt: z.string().min(20).max(20_000).optional(),
+  body_prompt: z.string().min(20).max(20_000).optional(),
+  follow_up_prompts: z.array(z.string().min(10).max(5000)).max(10).optional(),
 });
 
 export async function GET(req: Request) {
@@ -124,6 +127,11 @@ export async function PATCH(req: Request) {
     if (parsed.data.accent_color) updates.accent_color = parsed.data.accent_color;
     if (parsed.data.regenerate_secret) {
       updates.conversion_webhook_secret = randomBytes(24).toString("hex");
+    }
+    if (parsed.data.subject_prompt !== undefined) updates.subject_prompt = parsed.data.subject_prompt;
+    if (parsed.data.body_prompt !== undefined) updates.body_prompt = parsed.data.body_prompt;
+    if (parsed.data.follow_up_prompts !== undefined) {
+      updates.follow_up_prompts = parsed.data.follow_up_prompts;
     }
 
     const { data, error } = await sb
