@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { loadAbWinner } from "@/lib/outreach/ab-winner";
 import {
   getDailyLimit,
   isConfiguredForCampaign,
@@ -29,6 +30,15 @@ export async function POST(req: Request) {
   const baseUrl = getPublicBaseUrl(req);
 
   return withSupabaseRoute(async (sb) => {
+    const winnerCache = new Map<string, "A" | "B" | null>();
+    const abWinnerFor = async (campaign: string) => {
+      const key = campaign.trim().toLowerCase();
+      if (!winnerCache.has(key)) {
+        winnerCache.set(key, await loadAbWinner(sb, key));
+      }
+      return winnerCache.get(key) ?? null;
+    };
+
     const sendOne = async (prospect: {
       id: string;
       email: string;
@@ -63,7 +73,12 @@ export async function POST(req: Request) {
         return { ok: false as const, status: 422, error: verify.reason ?? "Email verification failed" };
       }
 
-      const { subject, variant } = pickSubjectVariant(prospect.email_subject, prospect.email_subject_b);
+      const preferredWinner = await abWinnerFor(campaign);
+      const { subject, variant } = pickSubjectVariant(
+        prospect.email_subject,
+        prospect.email_subject_b,
+        preferredWinner,
+      );
       const trackedHtml = injectTracking(prospect.email_body, prospect.id, baseUrl);
       const validation = validateEmailForSend(subject, trackedHtml, "initial");
       if (!validation.ok) {

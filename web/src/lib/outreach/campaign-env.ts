@@ -110,15 +110,24 @@ export function isConfiguredForCampaign(campaign: string): { ok: boolean; hint?:
   return { ok: false, hint };
 }
 
+/** Pick A/B subject; when `preferredWinner` is set, send winner ~80% (challenger 20%). */
 export function pickSubjectVariant(
   a: string | null,
   b: string | null,
+  preferredWinner?: "A" | "B" | null,
 ): { subject: string; variant: "A" | "B" } {
   const sA = (a || "").trim();
   const sB = (b || "").trim();
   if (sA && sB) {
+    if (preferredWinner === "A" || preferredWinner === "B") {
+      const pickWinner = Math.random() < 0.8;
+      if (preferredWinner === "A") {
+        return pickWinner ? { subject: sA, variant: "A" } : { subject: sB, variant: "B" };
+      }
+      return pickWinner ? { subject: sB, variant: "B" } : { subject: sA, variant: "A" };
+    }
     const pickB = Math.random() < 0.5;
     return { subject: pickB ? sB : sA, variant: pickB ? "B" : "A" };
   }
-  return { subject: sA || sB || "", variant: "A" };
+  return { subject: sA || sB || "", variant: sB && !sA ? "B" : "A" };
 }

@@ -5,11 +5,24 @@ export type AbVariantStats = {
   replied: number;
 };
 
+import type { SupabaseClient } from "@supabase/supabase-js";
+
 export type AbWinnerResult = {
   winner: "A" | "B" | null;
   confidence: number;
   reason: string;
 };
+
+/** Load persisted A/B winner for a campaign (set by daily cron). */
+export async function loadAbWinner(
+  sb: SupabaseClient,
+  campaign: string,
+): Promise<"A" | "B" | null> {
+  const key = `outreach_ab_winner_${campaign.trim().toLowerCase()}`;
+  const { data } = await sb.from("app_settings").select("value").eq("key", key).maybeSingle();
+  const winner = (data?.value as { winner?: string } | null)?.winner;
+  return winner === "A" || winner === "B" ? winner : null;
+}
 
 const MIN_SENDS_PER_VARIANT = 20;
 

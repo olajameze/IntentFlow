@@ -1,0 +1,49 @@
+name: Outreach A/B Winner (Daily)
+
+# Compares subject A vs B reply rates and persists the winner to app_settings.
+# The send route biases ~80% of sends toward the winning variant.
+
+on:
+  workflow_dispatch: {}
+  schedule:
+    - cron: "0 8 * * *"   # 08:00 UTC daily (before follow-ups at 09:00)
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  ab-winner:
+    runs-on: ubuntu-latest
+    env:
+      DASHBOARD_URL: ${{ secrets.OUTREACH_DASHBOARD_URL }}
+      CRON_SECRET: ${{ secrets.CRON_SECRET }}
+    steps:
+      - name: Verify required secrets
+        run: |
+          set -e
+          if [ -z "${DASHBOARD_URL:-}" ]; then
+            echo "::error::Secret OUTREACH_DASHBOARD_URL is empty"
+            exit 1
+          fi
+
+      - name: Run A/B winner for pesttrace
+        run: |
+          set -e
+          AUTH=""
+          if [ -n "${CRON_SECRET:-}" ]; then
+            AUTH="-H \"Authorization: Bearer ${CRON_SECRET}\""
+          fi
+          eval curl -fsSL -X POST $AUTH "${DASHBOARD_URL}/api/outreach-prospects/ab-winner?campaign=pesttrace"
+
+      - name: Run A/B winner for weathers
+        run: |
+          set -e
+          AUTH=""
+          if [ -n "${CRON_SECRET:-}" ]; then
+            AUTH="-H \"Authorization: Bearer ${CRON_SECRET}\""
+          fi
+          eval curl -fsSL -X POST $AUTH "${DASHBOARD_URL}/api/outreach-prospects/ab-winner?campaign=weathers"

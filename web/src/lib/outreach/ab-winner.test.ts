@@ -29,3 +29,14 @@ describe("ab-winner", () => {
     assert.equal(result.winner, null);
   });
 });
+
+describe("pickSubjectVariant with winner", () => {
+  it("respects preferred winner when both subjects exist", async () => {
+    const { pickSubjectVariant } = await import("./campaign-env");
+    const results = Array.from({ length: 100 }, () =>
+      pickSubjectVariant("Subject A", "Subject B", "A"),
+    );
+    const aCount = results.filter((r) => r.variant === "A").length;
+    assert.ok(aCount >= 60, `expected A bias, got ${aCount}/100`);
+  });
+});
