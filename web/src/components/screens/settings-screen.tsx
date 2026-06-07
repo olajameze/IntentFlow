@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { ChevronDown, ChevronUp } from "lucide-react";
 import { toast } from "sonner";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Label } from "@/components/ui/label";
@@ -30,11 +31,15 @@ type OutreachSettings = {
   campaign_slug: string;
   cta_url_template: string;
   conversion_webhook_secret: string | null;
+  subject_prompt?: string | null;
+  body_prompt?: string | null;
+  follow_up_prompts?: string[] | null;
 };
 
 function OutreachPortfolioCard({ businesses }: { businesses: Biz[] }) {
   const [settings, setSettings] = useState<OutreachSettings[]>([]);
   const [loading, setLoading] = useState(true);
+  const [promptsOpen, setPromptsOpen] = useState<Record<string, boolean>>({});
   const siteBase =
     typeof window !== "undefined"
       ? window.location.origin
@@ -139,7 +144,50 @@ function OutreachPortfolioCard({ businesses }: { businesses: Biz[] }) {
                       <Button type="button" size="sm" variant="secondary" onClick={() => void bootstrapCopy(biz.id)}>
                         Generate campaign copy
                       </Button>
+                      {(row.subject_prompt || row.body_prompt) && (
+                        <Button
+                          type="button"
+                          size="sm"
+                          variant="outline"
+                          onClick={() =>
+                            setPromptsOpen((prev) => ({ ...prev, [biz.id]: !prev[biz.id] }))
+                          }
+                        >
+                          {promptsOpen[biz.id] ? (
+                            <ChevronUp className="mr-1 h-3.5 w-3.5" />
+                          ) : (
+                            <ChevronDown className="mr-1 h-3.5 w-3.5" />
+                          )}
+                          View prompts
+                        </Button>
+                      )}
                     </div>
+                    {promptsOpen[biz.id] && (
+                      <div className="space-y-2 rounded border bg-muted/30 p-2 text-[11px]">
+                        {row.subject_prompt && (
+                          <div>
+                            <p className="font-medium text-foreground">Subject prompt</p>
+                            <p className="whitespace-pre-wrap text-muted-foreground">{row.subject_prompt}</p>
+                          </div>
+                        )}
+                        {row.body_prompt && (
+                          <div>
+                            <p className="font-medium text-foreground">Body prompt</p>
+                            <p className="whitespace-pre-wrap text-muted-foreground">{row.body_prompt}</p>
+                          </div>
+                        )}
+                        {Array.isArray(row.follow_up_prompts) && row.follow_up_prompts.length > 0 && (
+                          <div>
+                            <p className="font-medium text-foreground">Follow-up prompts</p>
+                            <ol className="list-decimal space-y-1 pl-4 text-muted-foreground">
+                              {row.follow_up_prompts.map((p, i) => (
+                                <li key={i} className="whitespace-pre-wrap">{p}</li>
+                              ))}
+                            </ol>
+                          </div>
+                        )}
+                      </div>
+                    )}
                   </>
                 )}
                 {!row && (

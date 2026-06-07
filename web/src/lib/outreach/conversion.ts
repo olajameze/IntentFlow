@@ -1,5 +1,6 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { engagementUpdateFields } from "@/lib/outreach/engagement";
+import { emitOutreachWebhooks } from "@/lib/outreach/emit-webhook";
 
 export type ConversionEventType =
   | "booking_started"
@@ -91,6 +92,12 @@ export async function recordOutreachConversion(
       campaign: prospect.campaign,
       event_type: "meeting_booked",
     });
+    await emitOutreachWebhooks(sb, {
+      event: "meeting_booked",
+      campaign: prospect.campaign,
+      prospectId: prospect.id,
+      email: prospect.email ?? undefined,
+    });
   }
 
   if (INTERESTED_EVENTS.includes(eventType) && !prospect.interested_at) {
@@ -99,6 +106,12 @@ export async function recordOutreachConversion(
       prospect_id: prospect.id,
       campaign: prospect.campaign,
       event_type: "interested",
+    });
+    await emitOutreachWebhooks(sb, {
+      event: "interested",
+      campaign: prospect.campaign,
+      prospectId: prospect.id,
+      email: prospect.email ?? undefined,
     });
   }
 
@@ -131,6 +144,21 @@ export async function recordOutreachConversion(
       campaign: prospect.campaign,
       event_type: "booked",
     });
+
+    await emitOutreachWebhooks(sb, {
+      event: "booked",
+      campaign: prospect.campaign,
+      prospectId: prospect.id,
+      email: prospect.email ?? undefined,
+    });
+    if (updates.converted_at) {
+      await emitOutreachWebhooks(sb, {
+        event: "converted",
+        campaign: prospect.campaign,
+        prospectId: prospect.id,
+        email: prospect.email ?? undefined,
+      });
+    }
 
     if (prospect.business_id && prospect.email) {
       const { data: existingLead } = await sb

@@ -20,6 +20,7 @@ export async function GET() {
   };
 
   let supabaseQueryable = false;
+  let outreachSchemaReady = false;
   let queryError: string | undefined;
 
   if (url && srk) {
@@ -28,12 +29,19 @@ export async function GET() {
       const { error } = await sb.from("businesses").select("id").limit(1);
       supabaseQueryable = !error;
       if (error) queryError = error.message;
+
+      const { error: outreachErr } = await sb
+        .from("outreach_prospects")
+        .select("lead_score, delivered_at, sequence_step")
+        .limit(1);
+      outreachSchemaReady = !outreachErr;
+      if (outreachErr && !queryError) queryError = outreachErr.message;
     } catch (e) {
       queryError = e instanceof Error ? e.message : String(e);
     }
   }
 
-  const ready = url && srk && supabaseQueryable;
+  const ready = url && srk && supabaseQueryable && outreachSchemaReady;
 
   const body = {
     ok: ready,
@@ -41,6 +49,7 @@ export async function GET() {
     checks: {
       ...checks,
       supabaseQueryable,
+      outreachSchemaReady,
     },
     ...(queryError ? { hint: queryError } : {}),
   };

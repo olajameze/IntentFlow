@@ -5,8 +5,15 @@ Use this checklist the first time (or after a clean clone) before reporting “n
 ## 1. Supabase
 
 1. Create/open your Supabase project.
-2. Run SQL from `supabase/migrations/` in order (including `20260604000000_business_outreach.sql` for conversion webhooks and per-business campaigns).
-3. Confirm `businesses` exists and optionally seed rows.
+2. Run SQL from `supabase/migrations/` in order, **or** apply outreach migrations in one shot:
+   - `POST /api/setup/apply-outreach-migration` (dashboard, service role), or
+   - `cd web && node scripts/setup-marketing-conversion.mjs` with `SUPABASE_DB_URL` set.
+3. Outreach intelligence migrations (required for lead score, delivery tracking, event log):
+   - `20260604000000_business_outreach.sql`
+   - `20260607000000_outreach_intelligence.sql` (`lead_score`, `delivered_at`, `sequence_step`, …)
+   - `20260608000000_outreach_event_types.sql` (allows `sent`, `delivered`, `meeting_booked`, …)
+   - `20260608100000_outreach_webhook_subscriptions.sql` (outbound integrator webhooks)
+4. Confirm `businesses` exists and optionally seed rows. `GET /api/health` should report `outreachSchemaReady: true`.
 
 ## 2. Environment
 
@@ -82,12 +89,20 @@ cd engine && python -c "import config; print('Groq:', 'yes' if config.groq_api_k
 
 ## 5. Outreach conversion loop
 
-1. Apply migration `20260604000000_business_outreach.sql`.
-2. In **Settings → Outreach & conversion webhooks**, enable outreach per business and copy the webhook secret.
+1. Apply outreach migrations (see §1).
+2. In **Settings → Outreach & conversion webhooks**, enable outreach per business, **Generate campaign copy**, and copy the conversion webhook secret.
 3. Wire your brand site (`/book`, Stripe, signup) using [`docs/outreach-conversion-webhook.md`](outreach-conversion-webhook.md) — pass `p` from the URL through to the webhook `prospect_id`.
-4. Optional env: `OUTREACH_CONVERSION_SECRET` (global fallback), `OUTREACH_PUBLIC_BASE_URL` (tracking pixels), `GROQ_API_KEY` (LLM follow-ups).
-5. Daily follow-ups: GitHub workflow `outreach-followups.yml` → `POST /api/outreach-prospects/send-followups` with `Authorization: Bearer $CRON_SECRET`.
-6. Monitor **Outreach → Hot leads** for clickers; `booked_at` fills automatically when webhooks fire.
+4. **Brevo SMTP + deliverability** (recommended when `OUTREACH_EMAIL_PROVIDER=smtp`):
+   - Dashboard → Transactional → Settings → Webhooks → URL: `https://<dashboard>/api/outreach-webhooks/brevo`
+   - Events: `delivered`, `hard_bounce`, `soft_bounce`, `spam`, `blocked`, optional `inbound_email` for auto-reply stop
+   - Set `BREVO_WEBHOOK_SECRET` in `web/.env.local` (and Vercel) — must match Brevo signing token
+   - Optional `BREVO_API_KEY` for contacts validate API (pre-send gate)
+5. Send pacing env: `OUTREACH_DAILY_SEND_LIMIT`, `OUTREACH_HOURLY_SEND_LIMIT` (default 30), jitter 200–800 ms between bulk sends.
+6. Optional env: `OUTREACH_CONVERSION_SECRET` (global fallback), `OUTREACH_PUBLIC_BASE_URL` (tracking pixels), `GROQ_API_KEY` (LLM follow-ups).
+7. Cron jobs (GitHub Actions + `CRON_SECRET`):
+   - `outreach-followups.yml` → `POST /api/outreach-prospects/send-followups`
+   - `ab-winner` daily → `POST /api/outreach-prospects/ab-winner`
+8. Monitor **Outreach** KPI strip — benchmark targets: open 40–60%, click 5–15%, reply 2–8%, bounce &lt; 3%. Hot leads and `booked_at` fill from clicks + conversion webhooks.
 
 Run all enabled campaigns:
 

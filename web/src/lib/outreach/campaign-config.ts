@@ -92,7 +92,11 @@ function researchVarsFromProspect(prospect: {
     [prospect.city, prospect.country].filter(Boolean).join(", ");
   const weaknesses = research.weaknesses;
   const opportunities = research.opportunities;
+  const contactName = String(research.contact_name || "").trim();
   return {
+    name: prospect.name,
+    contact_name: contactName || prospect.name,
+    phone: String(research.phone || ""),
     services,
     location,
     industry: String(research.industry || prospect.sector || "commercial").replace(/_/g, " "),

@@ -5,7 +5,10 @@ type Research = {
   has_https?: boolean;
   has_contact_page?: boolean;
   page_text_length?: number;
+  page_text_sample?: string;
   sector?: string;
+  contact_name?: string;
+  phone?: string;
 };
 
 function contactQualityScore(email: string): number {
@@ -49,6 +52,17 @@ function companySizeScore(research: Research, phone: string): number {
   return Math.min(20, score);
 }
 
+function researchBoostScore(research: Research): number {
+  let score = 0;
+  if (String(research.contact_name || "").trim()) score += 10;
+  if (String(research.phone || "").trim()) score += 5;
+  const blob = (research.page_text_sample || "").toLowerCase();
+  if (["compliance", "audit", "haccp", "food safety", "ipc"].some((k) => blob.includes(k))) {
+    score += 10;
+  }
+  return Math.min(25, score);
+}
+
 function localMarketScore(country: string, city: string, campaignId: string): number {
   const c = country.toUpperCase();
   if (campaignId === "weathers") {
@@ -74,9 +88,10 @@ export function computeLeadScore(prospect: {
   const breakdown = {
     website_quality: websiteQualityScore(research),
     industry_fit: industryFitScore(sector, campaign),
-    company_size: companySizeScore(research, prospect.phone || ""),
+    company_size: companySizeScore(research, prospect.phone || research.phone || ""),
     contact_quality: contactQualityScore(prospect.email || ""),
     local_market: localMarketScore(prospect.country || "", prospect.city || "", campaign),
+    research_boost: researchBoostScore(research),
   };
 
   const score = Math.min(100, Object.values(breakdown).reduce((a, b) => a + b, 0));

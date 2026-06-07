@@ -1,10 +1,9 @@
 import { NextResponse } from "next/server";
-import fs from "fs";
-import path from "path";
+import { readOutreachMigrationsSql } from "@/lib/outreach/apply-migrations";
 
 /**
  * POST /api/setup/apply-outreach-migration
- * One-time DDL when SUPABASE_DB_URL (or DATABASE_URL) is set in env.
+ * Applies all outreach-related DDL when SUPABASE_DB_URL (or DATABASE_URL) is set.
  * Auth: Authorization: Bearer <CRON_SECRET> or <SUPABASE_SERVICE_ROLE_KEY>
  */
 export async function POST(req: Request) {
@@ -32,18 +31,13 @@ export async function POST(req: Request) {
     );
   }
 
-  const migrationPath = path.join(
-    process.cwd(),
-    "..",
-    "supabase",
-    "migrations",
-    "20260604000000_business_outreach.sql",
-  );
-  if (!fs.existsSync(migrationPath)) {
-    return NextResponse.json({ error: "Migration file not found" }, { status: 500 });
+  let sql: string;
+  try {
+    sql = readOutreachMigrationsSql();
+  } catch (e) {
+    const msg = e instanceof Error ? e.message : "Migration file not found";
+    return NextResponse.json({ error: msg }, { status: 500 });
   }
-
-  const sql = fs.readFileSync(migrationPath, "utf8");
 
   try {
     const { default: pg } = await import("pg");
@@ -54,7 +48,16 @@ export async function POST(req: Request) {
     } finally {
       await client.end();
     }
-    return NextResponse.json({ ok: true, message: "Migration applied" });
+    return NextResponse.json({
+      ok: true,
+      message: "Outreach migrations applied",
+      migrations: [
+        "20260604000000_business_outreach",
+        "20260607000000_outreach_intelligence",
+        "20260608000000_outreach_event_types",
+        "20260608100000_outreach_webhook_subscriptions",
+      ],
+    });
   } catch (e) {
     const msg = e instanceof Error ? e.message : "Migration failed";
     return NextResponse.json({ error: msg }, { status: 500 });

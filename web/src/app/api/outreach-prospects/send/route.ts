@@ -4,8 +4,11 @@ import {
   isConfiguredForCampaign,
   pickSubjectVariant,
 } from "@/lib/outreach/campaign-env";
+import { verifyOutreachEmail } from "@/lib/outreach/email-verify";
 import { nextFollowUpAt } from "@/lib/outreach/followup-schedule";
+import { outreachLog } from "@/lib/outreach/logger";
 import { getPublicBaseUrl } from "@/lib/outreach/public-base-url";
+import { canSendThisHour, sendJitterMs } from "@/lib/outreach/send-pacing";
 import { validateEmailForSend } from "@/lib/outreach/send-validation";
 import { sendOutreachEmail } from "@/lib/outreach/send-mail";
 import { injectTracking } from "@/lib/outreach/tracking";
@@ -13,6 +16,10 @@ import { withSupabaseRoute } from "@/lib/with-supabase-route";
 
 function normalizeCampaign(raw: unknown): string {
   return typeof raw === "string" && raw.trim() ? raw.trim().toLowerCase() : "pesttrace";
+}
+
+function sleep(ms: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
 /** POST { id } or { bulk: true, campaign? } — send approved prospect email(s). */
@@ -29,8 +36,33 @@ export async function POST(req: Request) {
       email_subject_b: string | null;
       email_body: string;
       campaign: string | null;
+      raw?: Record<string, unknown> | null;
     }) => {
       const campaign = normalizeCampaign(prospect.campaign);
+
+      const hourly = await canSendThisHour(sb, campaign);
+      if (!hourly.ok) {
+        outreachLog({ level: "warn", event: "hourly_cap_reached", campaign, issues: [hourly.reason ?? ""] });
+        return { ok: false as const, status: 429, error: hourly.reason ?? "Hourly cap reached" };
+      }
+
+      const verify = await verifyOutreachEmail(prospect.email);
+      if (!verify.ok) {
+        const raw = (prospect.raw && typeof prospect.raw === "object" ? prospect.raw : {}) as Record<
+          string,
+          unknown
+        >;
+        await sb
+          .from("outreach_prospects")
+          .update({
+            status: "bounced",
+            raw: { ...raw, verify: { reason: verify.reason, at: new Date().toISOString() } },
+            updated_at: new Date().toISOString(),
+          })
+          .eq("id", prospect.id);
+        return { ok: false as const, status: 422, error: verify.reason ?? "Email verification failed" };
+      }
+
       const { subject, variant } = pickSubjectVariant(prospect.email_subject, prospect.email_subject_b);
       const trackedHtml = injectTracking(prospect.email_body, prospect.id, baseUrl);
       const validation = validateEmailForSend(subject, trackedHtml, "initial");
@@ -43,8 +75,9 @@ export async function POST(req: Request) {
         };
       }
 
+      let sendResult;
       try {
-        await sendOutreachEmail(
+        sendResult = await sendOutreachEmail(
           campaign,
           prospect.email,
           validation.subject,
@@ -66,18 +99,29 @@ export async function POST(req: Request) {
       const now = new Date();
       const nowIso = now.toISOString();
       const nextSendAt = nextFollowUpAt(nowIso, 0);
+      const raw = (prospect.raw && typeof prospect.raw === "object" ? prospect.raw : {}) as Record<
+        string,
+        unknown
+      >;
 
       await sb
         .from("outreach_prospects")
         .update({
           status: "sent",
           sent_at: nowIso,
-          delivered_at: nowIso,
           subject_variant: variant,
           next_send_at: nextSendAt,
           sequence_step: 0,
           followup_count: 0,
           engagement_tier: "cold",
+          raw: {
+            ...raw,
+            last_send: {
+              message_id: sendResult.messageId,
+              provider: sendResult.provider,
+              at: nowIso,
+            },
+          },
           updated_at: nowIso,
         })
         .eq("id", prospect.id);
@@ -172,9 +216,11 @@ export async function POST(req: Request) {
       const result = await sendOne(prospect);
       if (result.ok) {
         sent++;
+        await sleep(sendJitterMs());
       } else {
         failed++;
         if (!firstError) firstError = result.error;
+        if (result.status === 429) break;
       }
     }
 

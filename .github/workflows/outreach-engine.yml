@@ -107,5 +107,8 @@ jobs:
       - name: Verify engine imports
         run: python -c "import crypto_util, supabase_client, main; print('CLI import graph OK')"
 
+      - name: Run engine unit tests
+        run: python -m pytest tests/ -q
+
       - name: Run outreach pipeline (scrape + draft emails)
         run: python main.py outreach --campaign "${OUTREACH_CAMPAIGN}"

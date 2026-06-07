@@ -31,6 +31,20 @@ _META_DESC_RE = re.compile(
 )
 _TAG_RE = re.compile(r"<[^>]+>")
 _WS_RE = re.compile(r"\s+")
+_PHONE_RE = re.compile(
+    r"(?:\+?\d{1,3}[\s.-]?)?(?:\(?\d{2,4}\)?[\s.-]?)?\d{3,4}[\s.-]?\d{3,4}(?:[\s.-]?\d{1,6})?",
+)
+_CONTACT_NAME_RE = re.compile(
+    r"(?:contact|director|manager|owner|founder|ceo|md)\s*[:\-]?\s*([A-Z][a-z]+(?:\s+[A-Z][a-z]+)?)",
+    re.I,
+)
+_TEAM_NAME_RE = re.compile(
+    r"<(?:h[1-4]|strong|b)[^>]*>\s*([A-Z][a-z]+(?:\s+[A-Z][a-z]+)?)\s*</",
+)
+_REVIEW_RE = re.compile(
+    r"(?:testimonial|review|what our clients say|customer feedback)[^<]{0,80}([\"'])(.{20,200}?)\1",
+    re.I | re.S,
+)
 
 
 def _strip_html(html: str) -> str:
@@ -55,6 +69,37 @@ def _fetch_pages(base_url: str) -> str:
         if total >= 8000:
             break
     return "\n\n".join(chunks)[:8000]
+
+
+def _extract_phone(html: str, text: str) -> str:
+    for source in (html, text):
+        for match in _PHONE_RE.finditer(source):
+            digits = re.sub(r"\D", "", match.group(0))
+            if 10 <= len(digits) <= 15:
+                return match.group(0).strip()
+    return ""
+
+
+def _extract_contact_name(html: str, text: str, company: str) -> str:
+    for pattern in (_CONTACT_NAME_RE, _TEAM_NAME_RE):
+        for match in pattern.finditer(html if "<" in html else text):
+            name = match.group(1).strip()
+            if len(name) > 3 and name.lower() not in company.lower():
+                return name
+    return ""
+
+
+def _extract_reviews_snippet(text: str) -> str:
+    match = _REVIEW_RE.search(text)
+    if match:
+        return _WS_RE.sub(" ", match.group(2)).strip()[:240]
+    for line in text.split("."):
+        low = line.lower()
+        if any(k in low for k in ("recommend", "excellent", "professional", "5 star", "five star")):
+            snippet = line.strip()
+            if 30 < len(snippet) < 240:
+                return snippet
+    return ""
 
 
 def _heuristic_research(
@@ -92,7 +137,10 @@ def _llm_extract_research(name: str, website: str, country: str, page_text: str)
   "location": "City, Country",
   "industry": "industry label",
   "weaknesses": ["one credible gap"],
-  "opportunities": ["one relevant business opportunity"]
+  "opportunities": ["one relevant business opportunity"],
+  "contact_name": "first name or empty string",
+  "phone": "phone or empty string",
+  "reviews_snippet": "short testimonial quote or empty string"
 }}
 
 Company: {name}
@@ -152,10 +200,17 @@ def research_prospect(prospect: dict[str, Any]) -> dict[str, Any]:
 
     research["sector"] = sector
     research["page_text_length"] = len(page_text)
+    research["page_text_sample"] = page_text[:2000]
     research["has_https"] = website.lower().startswith("https://")
     research["has_contact_page"] = any(
         s in combined_html.lower() for s in ("/contact", "contact us", "mailto:")
     )
+    if not research.get("phone"):
+        research["phone"] = _extract_phone(combined_html, page_text)
+    if not research.get("contact_name"):
+        research["contact_name"] = _extract_contact_name(combined_html, page_text, name)
+    if not research.get("reviews_snippet"):
+        research["reviews_snippet"] = _extract_reviews_snippet(page_text)
     return research
 
 
@@ -164,7 +219,7 @@ def persist_research(prospect_id: str, research: dict[str, Any]) -> bool:
         sb = get_supabase()
         row = (
             sb.table("outreach_prospects")
-            .select("raw")
+            .select("raw, phone")
             .eq("id", prospect_id)
             .single()
             .execute()
@@ -173,7 +228,11 @@ def persist_research(prospect_id: str, research: dict[str, Any]) -> bool:
         if not isinstance(raw, dict):
             raw = {}
         raw["research"] = research
-        sb.table("outreach_prospects").update({"raw": raw}).eq("id", prospect_id).execute()
+        updates: dict[str, Any] = {"raw": raw}
+        phone = str(research.get("phone") or "").strip()
+        if phone and not (row.data.get("phone") or "").strip():
+            updates["phone"] = phone
+        sb.table("outreach_prospects").update(updates).eq("id", prospect_id).execute()
         return True
     except Exception as exc:  # noqa: BLE001
         logger.warning("[prospect_research] persist failed for %s: %s", prospect_id, exc)

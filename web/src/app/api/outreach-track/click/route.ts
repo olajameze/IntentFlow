@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
-import { engagementUpdateFields } from "@/lib/outreach/engagement";
+import { computeEngagementTier, engagementUpdateFields } from "@/lib/outreach/engagement";
+import { emitOutreachWebhooks } from "@/lib/outreach/emit-webhook";
 import { getSupabaseAdmin } from "@/lib/supabase-admin";
 
 /**
@@ -56,11 +57,12 @@ export async function GET(req: Request) {
 
     const { data: prospect } = await sb
       .from("outreach_prospects")
-      .select("id, campaign, clicked_at, click_count, opened_at, open_count, booked_at")
+      .select("id, campaign, email, clicked_at, click_count, opened_at, open_count, booked_at, engagement_tier")
       .eq("id", prospectId)
       .maybeSingle();
 
     if (prospect) {
+      const prevTier = computeEngagementTier(prospect);
       await sb.from("outreach_email_events").insert({
         prospect_id: prospect.id,
         campaign: prospect.campaign ?? "pesttrace",
@@ -86,6 +88,15 @@ export async function GET(req: Request) {
           updated_at: now.toISOString(),
         })
         .eq("id", prospect.id);
+
+      if (tierFields.engagement_tier === "hot" && prevTier !== "hot") {
+        await emitOutreachWebhooks(sb, {
+          event: "hot_lead",
+          campaign: prospect.campaign ?? "pesttrace",
+          prospectId: prospect.id,
+          email: prospect.email ?? undefined,
+        });
+      }
     }
   } catch {
     // swallow — never block the redirect

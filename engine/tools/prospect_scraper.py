@@ -28,6 +28,7 @@ from config import outreach_scrape_limit
 from supabase_client import get_supabase
 from tools.outreach_campaign_db import get_scrape_queries
 from tools.outreach_campaigns import CampaignConfig, get_campaign
+from tools.email_verify import verify_outreach_email
 from tools.outreach_sector import classify_sector
 
 
@@ -298,6 +299,12 @@ def scrape_prospects(
                     continue
 
                 _p(f"      → email: {email}")
+
+                ok, reason = verify_outreach_email(email)
+                if not ok:
+                    _p(f"      → skipped (verify): {reason}")
+                    time.sleep(0.3)
+                    continue
 
                 sector = classify_sector(name_guess, query, url)
                 business_id = None

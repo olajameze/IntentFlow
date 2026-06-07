@@ -48,12 +48,24 @@ def _company_size_score(research: dict[str, Any], phone: str) -> int:
     services = research.get("services") or []
     if isinstance(services, list) and len(services) >= 2:
         score += 10
-    if (phone or "").strip():
+    if (phone or "").strip() or str(research.get("phone") or "").strip():
         score += 5
     text_len = int(research.get("page_text_length") or 0)
     if text_len > 3000:
         score += 5
     return min(20, score)
+
+
+def _research_boost_score(research: dict[str, Any], page_text: str = "") -> int:
+    score = 0
+    if str(research.get("contact_name") or "").strip():
+        score += 10
+    if str(research.get("phone") or "").strip():
+        score += 5
+    blob = (page_text or "").lower()
+    if any(k in blob for k in ("compliance", "audit", "haccp", "food safety", "ipc")):
+        score += 10
+    return min(25, score)
 
 
 def _local_market_score(country: str, city: str, campaign_id: str) -> int:
@@ -80,12 +92,14 @@ def compute_lead_score(prospect: dict[str, Any], research: dict[str, Any] | None
     city = str(prospect.get("city") or "")
     phone = str(prospect.get("phone") or "")
 
+    page_text = str(research.get("page_text_sample") or "")
     breakdown = {
         "website_quality": _website_quality_score(research),
         "industry_fit": _industry_fit_score(sector, campaign),
         "company_size": _company_size_score(research, phone),
         "contact_quality": _contact_quality_score(email),
         "local_market": _local_market_score(country, city, campaign),
+        "research_boost": _research_boost_score(research, page_text),
     }
     total = min(100, sum(breakdown.values()))
     return total, breakdown

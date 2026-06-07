@@ -11,10 +11,22 @@ export function nextFollowUpAt(sentAtIso: string, followupCountAfterSend: number
   return new Date(base.getTime() + days * 24 * 60 * 60 * 1000).toISOString();
 }
 
-export function isFollowUpDue(sentAtIso: string, followupCount: number, now = new Date()): boolean {
+/** Hot leads may receive the next touch 1 day earlier than the fixed cadence. */
+export function followUpOffsetDays(followupCount: number, tier: "cold" | "warm" | "hot" = "cold"): number {
+  const base = FOLLOW_UP_OFFSETS_DAYS[followupCount] ?? 0;
+  if (tier === "hot" && base > 1) return base - 1;
+  return base;
+}
+
+export function isFollowUpDue(
+  sentAtIso: string,
+  followupCount: number,
+  now = new Date(),
+  tier: "cold" | "warm" | "hot" = "cold",
+): boolean {
   if (followupCount >= MAX_FOLLOWUPS) return false;
-  const days = FOLLOW_UP_OFFSETS_DAYS[followupCount];
-  if (days === undefined) return false;
+  const days = followUpOffsetDays(followupCount, tier);
+  if (days <= 0) return false;
   const due = new Date(new Date(sentAtIso).getTime() + days * 24 * 60 * 60 * 1000);
   return now >= due;
 }

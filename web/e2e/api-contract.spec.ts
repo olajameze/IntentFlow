@@ -71,13 +71,17 @@ test.describe("Tier D — Route Handlers", () => {
     expect(res.status()).toBe(400);
   });
 
-  test("GET /api/outreach-prospects/stats includes hot_leads field", async ({ request }) => {
+  test("GET /api/outreach-prospects/stats includes funnel fields", async ({ request }) => {
     const res = await request.get("/api/outreach-prospects/stats?campaign=pesttrace");
     expect([200, 503]).toContain(res.status());
     if (res.ok()) {
       const json = await res.json();
       expect(json).toMatchObject({
         hot_leads: expect.any(Number),
+        delivered: expect.any(Number),
+        interested: expect.any(Number),
+        meeting_booked: expect.any(Number),
+        converted: expect.any(Number),
         revenue_attributed: expect.any(Number),
         engagement: expect.objectContaining({
           hot: expect.any(Number),
@@ -86,6 +90,26 @@ test.describe("Tier D — Route Handlers", () => {
         }),
       });
     }
+  });
+
+  test("POST /api/outreach-webhooks/brevo rejects unsigned when secret configured", async ({ request }) => {
+    if (!process.env.BREVO_WEBHOOK_SECRET?.trim()) {
+      test.skip();
+      return;
+    }
+    const res = await request.post("/api/outreach-webhooks/brevo", {
+      data: { event: "delivered", email: "test@example.com" },
+      headers: { "Content-Type": "application/json" },
+    });
+    expect(res.status()).toBe(401);
+  });
+
+  test("GET /api/health exposes outreach schema probe", async ({ request }) => {
+    const res = await request.get("/api/health");
+    const json = await res.json();
+    expect(json.checks).toMatchObject({
+      outreachSchemaReady: expect.any(Boolean),
+    });
   });
 
   test("GET /api/trigger-traffic-sync exposes workflow + PAT + repo booleans safely", async ({ request }) => {

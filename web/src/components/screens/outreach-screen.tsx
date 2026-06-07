@@ -107,6 +107,10 @@ type CampaignStats = {
   clicked: number;
   replied: number;
   booked: number;
+  delivered?: number;
+  interested?: number;
+  meeting_booked?: number;
+  converted?: number;
   bounced: number;
   hot_leads?: number;
   revenue_attributed?: number;
@@ -151,7 +155,12 @@ function StatsPanel({ stats }: { stats: CampaignStats | null }) {
     {
       label: "Sent",
       value: String(stats.sent),
-      sub: stats.bounced > 0 ? `${stats.bounced} bounced` : "delivered",
+      sub:
+        stats.delivered != null
+          ? `${stats.delivered} delivered${stats.bounced > 0 ? ` · ${stats.bounced} bounced` : ""}`
+          : stats.bounced > 0
+            ? `${stats.bounced} bounced`
+            : "in flight",
       icon: <Send className="h-3.5 w-3.5" />,
       accent: "text-foreground",
     },
@@ -205,6 +214,12 @@ function StatsPanel({ stats }: { stats: CampaignStats | null }) {
     abVerdict = `A: ${ab.variant_a_sent} · B: ${ab.variant_b_sent} — need ${aMin} each`;
   }
 
+  const funnelTiles: Array<{ label: string; value: string }> = [
+    { label: "Interested", value: String(stats.interested ?? 0) },
+    { label: "Meeting booked", value: String(stats.meeting_booked ?? 0) },
+    { label: "Converted", value: String(stats.converted ?? 0) },
+  ];
+
   return (
     <div className="space-y-2 rounded-lg border bg-card p-3">
       <div className="grid grid-cols-2 gap-2 md:grid-cols-3 lg:grid-cols-6">
@@ -216,6 +231,14 @@ function StatsPanel({ stats }: { stats: CampaignStats | null }) {
             </p>
             <p className="mt-1 text-lg font-semibold tabular-nums">{t.value}</p>
             <p className="text-[11px] text-muted-foreground">{t.sub}</p>
+          </div>
+        ))}
+      </div>
+      <div className="grid grid-cols-3 gap-2">
+        {funnelTiles.map((t) => (
+          <div key={t.label} className="rounded-md border bg-background/30 px-2 py-1.5">
+            <p className="text-[10px] uppercase tracking-wide text-muted-foreground">{t.label}</p>
+            <p className="text-sm font-semibold tabular-nums">{t.value}</p>
           </div>
         ))}
       </div>
@@ -306,10 +329,25 @@ function ProspectCard({
   const engagementTier = (prospect.engagement_tier as string | null | undefined) || "cold";
   const clickCount = Number(prospect.click_count ?? 0);
   const subjectVariant = (prospect.subject_variant as string | null | undefined) || "";
+  const subjectB = String(prospect.email_subject_b ?? "");
+  const leadScore = Number(prospect.lead_score ?? 0);
+  const followupCount = Number(prospect.followup_count ?? 0);
+  const sequenceStep = Number(prospect.sequence_step ?? followupCount);
+  const nextSendAt = prospect.next_send_at as string | null | undefined;
+  const raw = (prospect.raw && typeof prospect.raw === "object" ? prospect.raw : {}) as Record<string, unknown>;
+  const research = (raw.research && typeof raw.research === "object" ? raw.research : {}) as Record<string, unknown>;
+  const verify = (raw.verify && typeof raw.verify === "object" ? raw.verify : null) as { ok?: boolean; reason?: string } | null;
+  const servicesSnippet = Array.isArray(research.services)
+    ? (research.services as string[]).slice(0, 2).join(", ")
+    : "";
+  const weaknessSnippet = Array.isArray(research.weaknesses)
+    ? String((research.weaknesses as string[])[0] || "")
+    : "";
   const campaign: Campaign = prospect.campaign === "weathers" ? "weathers" : "pesttrace";
   const fromLabel = `${CAMPAIGN_META[campaign].label} <${CAMPAIGN_META[campaign].fromEmail}>`;
 
   const [subject, setSubject] = useState(String(prospect.email_subject ?? ""));
+  const [previewVariantB, setPreviewVariantB] = useState(false);
   const [body, setBody] = useState(String(prospect.email_body ?? ""));
   const [expanded, setExpanded] = useState(false);
   const [previewing, setPreviewing] = useState(false);
@@ -417,11 +455,14 @@ function ProspectCard({
     <>
       {previewing && body && (
         <EmailPreviewModal
-          subject={subject}
+          subject={previewVariantB && subjectB ? subjectB : subject}
           html={body}
           recipientEmail={email}
           fromLabel={fromLabel}
-          onClose={() => setPreviewing(false)}
+          onClose={() => {
+            setPreviewing(false);
+            setPreviewVariantB(false);
+          }}
         />
       )}
 
@@ -452,6 +493,15 @@ function ProspectCard({
                     {sector.replace(/_/g, " ")}
                   </Badge>
                 )}
+                {leadScore > 0 && (
+                  <Badge
+                    variant="outline"
+                    className="shrink-0 text-[10px] border-emerald-600/30 bg-emerald-600/10 text-emerald-400"
+                    title="Lead score (0–100)"
+                  >
+                    Score {leadScore}
+                  </Badge>
+                )}
                 {mode === "sent" && engagementTier === "hot" && !bookedAt && (
                   <Badge className="shrink-0 border-orange-600/30 bg-orange-600/15 text-[10px] text-orange-400">
                     <Flame className="mr-0.5 h-3 w-3" />
@@ -460,6 +510,28 @@ function ProspectCard({
                 )}
                 {city && <span className="shrink-0 text-[11px] text-muted-foreground">{city}</span>}
               </div>
+              {(servicesSnippet || weaknessSnippet) && (
+                <p className="mt-1 truncate text-[10px] text-muted-foreground" title="Research summary">
+                  {servicesSnippet}
+                  {servicesSnippet && weaknessSnippet ? " · " : ""}
+                  {weaknessSnippet}
+                </p>
+              )}
+              {mode === "sent" && !repliedAt && !bookedAt && sentAt && followupCount < 3 && (
+                <p className="mt-1 text-[10px] text-muted-foreground">
+                  Touch {sequenceStep + 1}/4
+                  {nextSendAt
+                    ? ` · due ${new Date(nextSendAt).toLocaleDateString()}`
+                    : followupCount >= 3
+                      ? " · sequence complete"
+                      : ""}
+                </p>
+              )}
+              {verify && verify.ok === false && (
+                <p className="mt-1 text-[10px] text-amber-500">
+                  Verification: {verify.reason || "failed — fix before send"}
+                </p>
+              )}
               {mode === "sent" && (openedAt || clickedAt || repliedAt || bookedAt || subjectVariant) && (
                 <div className="mt-1 flex flex-wrap items-center gap-1.5 text-[10px]">
                   {subjectVariant && (
@@ -507,17 +579,37 @@ function ProspectCard({
               {subject && (
                 <p className="mt-1 truncate text-[11px] font-medium italic text-foreground/80">
                   &ldquo;{subject}&rdquo;
+                  {subjectB && mode !== "sent" && (
+                    <span className="ml-1 not-italic text-muted-foreground">/ B: {subjectB.slice(0, 60)}{subjectB.length > 60 ? "…" : ""}</span>
+                  )}
                 </p>
               )}
             </div>
 
             {/* Right: icon buttons — fixed width, never wrap */}
             <div className="flex shrink-0 items-center">
+              {body && subjectB && mode !== "sent" && (
+                <Button
+                  type="button" variant="ghost" size="icon"
+                  className="h-7 w-7 text-muted-foreground hover:text-foreground"
+                  onClick={() => {
+                    setPreviewVariantB(true);
+                    setPreviewing(true);
+                  }}
+                  aria-label="Preview variant B subject"
+                  title="Preview with subject variant B"
+                >
+                  <Sparkles className="h-3.5 w-3.5" />
+                </Button>
+              )}
               {body && (
                 <Button
                   type="button" variant="ghost" size="icon"
                   className="h-7 w-7 text-muted-foreground hover:text-foreground"
-                  onClick={() => setPreviewing(true)}
+                  onClick={() => {
+                    setPreviewVariantB(false);
+                    setPreviewing(true);
+                  }}
                   aria-label="Preview email"
                   title="Preview how this email looks in an inbox"
                 >

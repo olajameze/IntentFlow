@@ -103,3 +103,37 @@ X-IntentFlow-Signature: sha256=<hmac_sha256_hex(raw_body, secret)>
 - Updates engagement tier to **hot**
 
 Monitor **Outreach → Hot leads** for clickers who have not yet converted.
+
+## Brevo transactional webhooks (delivery + replies)
+
+When sending via Brevo SMTP (`OUTREACH_EMAIL_PROVIDER=smtp`), configure Brevo to POST events to:
+
+```
+POST https://<your-intentflow-dashboard>/api/outreach-webhooks/brevo
+```
+
+Set `BREVO_WEBHOOK_SECRET` in the dashboard env. Brevo should send the same value as `X-Brevo-Signature` (HMAC-SHA256 of the raw body) or `Authorization: Bearer <secret>`.
+
+| Brevo event | IntentFlow action |
+|-------------|-------------------|
+| `delivered` | Sets `delivered_at`, logs `delivered` |
+| `hard_bounce` / `soft_bounce` / `blocked` | `status=bounced`, logs `bounce` |
+| `spam` / `invalid` | `status=unsubscribed`, logs `unsubscribe` |
+| `inbound_email` / `reply` | Auto `replied_at`, stops sequence; STOP/unsubscribe keywords honoured |
+
+SMTP sends include `X-IntentFlow-Prospect-Id` for correlation.
+
+## Outbound integrator webhooks (Zapier / HubSpot)
+
+Register subscriptions via `POST /api/outreach-webhooks/subscriptions` (service role or `CRON_SECRET`):
+
+```json
+{
+  "url": "https://hooks.zapier.com/...",
+  "secret": "your-signing-secret",
+  "campaign": "pesttrace",
+  "events": ["reply", "booked", "converted", "hot_lead"]
+}
+```
+
+IntentFlow signs payloads with `X-IntentFlow-Signature` (HMAC-SHA256). Events fire on reply, conversion webhook, and first hot-tier click.

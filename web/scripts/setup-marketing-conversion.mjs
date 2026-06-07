@@ -44,8 +44,15 @@ async function applyMigrationWithPg() {
     return false;
   }
 
-  const sqlPath = path.join(root, "..", "supabase", "migrations", "20260604000000_business_outreach.sql");
-  const sql = fs.readFileSync(sqlPath, "utf8");
+  const migrationFiles = [
+    "20260604000000_business_outreach.sql",
+    "20260607000000_outreach_intelligence.sql",
+    "20260608000000_outreach_event_types.sql",
+    "20260608100000_outreach_webhook_subscriptions.sql",
+  ];
+  const sql = migrationFiles
+    .map((f) => fs.readFileSync(path.join(root, "..", "supabase", "migrations", f), "utf8"))
+    .join("\n\n");
   const client = new pg.Client({ connectionString: url, ssl: { rejectUnauthorized: false } });
   await client.connect();
   try {
@@ -86,7 +93,7 @@ Option A — add SUPABASE_DB_URL to web/.env.local (Database → Connection stri
 
 Option B — Supabase SQL Editor:
   https://supabase.com/dashboard/project/tajdfxphgeddfcswsham/sql/new
-  Paste: supabase/migrations/20260604000000_business_outreach.sql
+  Paste all files in supabase/migrations/20260604*.sql through 202606081*.sql
 `);
       process.exit(1);
     }

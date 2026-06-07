@@ -16,11 +16,16 @@ import { getPublicBaseUrl } from "@/lib/outreach/public-base-url";
 import { isConfiguredForCampaign } from "@/lib/outreach/campaign-env";
 import { validateEmailForSend } from "@/lib/outreach/send-validation";
 import { sendOutreachEmail } from "@/lib/outreach/send-mail";
+import { canSendThisHour, sendJitterMs } from "@/lib/outreach/send-pacing";
 import { injectTracking } from "@/lib/outreach/tracking";
 import { withSupabaseRoute } from "@/lib/with-supabase-route";
 
 const FOLLOWUP_BATCH = 25;
 const HOT_DAILY_CAP = 10;
+
+function sleep(ms: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
 
 /** POST — 4-touch sequence follow-ups (Day 3 / 7 / 14 from initial send). */
 export async function POST(req: Request) {
@@ -51,10 +56,12 @@ export async function POST(req: Request) {
     if (error) return NextResponse.json({ error: error.message }, { status: 500 });
 
     const eligible = (due ?? []).filter((p) => {
+      if (p.status === "unsubscribed" || p.status === "bounced") return false;
       const sentAt = String(p.sent_at || "");
       const count = p.followup_count ?? 0;
       if (!sentAt || count >= MAX_FOLLOWUPS) return false;
-      return isFollowUpDue(sentAt, count, now);
+      const tier = computeEngagementTier(p);
+      return isFollowUpDue(sentAt, count, now, tier);
     });
 
     if (!eligible.length) {
@@ -87,6 +94,12 @@ export async function POST(req: Request) {
 
       const tier = computeEngagementTier(p);
       if (tier === "hot" && hotSentToday >= HOT_DAILY_CAP) continue;
+
+      const hourly = await canSendThisHour(sb, campaign);
+      if (!hourly.ok) {
+        errors.push(hourly.reason ?? "Hourly cap");
+        break;
+      }
 
       const touchIndex = Math.min(p.followup_count ?? 0, MAX_FOLLOWUPS - 1);
       const settings = await loadOutreachSettings(sb, campaign);
@@ -130,7 +143,7 @@ export async function POST(req: Request) {
       }
 
       try {
-        await sendOutreachEmail(
+        const sendResult = await sendOutreachEmail(
           campaign,
           p.email,
           validation.subject,
@@ -142,6 +155,7 @@ export async function POST(req: Request) {
         const newCount = (p.followup_count ?? 0) + 1;
         const sentAtIso = String(p.sent_at);
         const nextSend = nextFollowUpAt(sentAtIso, newCount);
+        const raw = (p.raw && typeof p.raw === "object" ? p.raw : {}) as Record<string, unknown>;
 
         await sb
           .from("outreach_prospects")
@@ -149,8 +163,16 @@ export async function POST(req: Request) {
             followup_count: newCount,
             sequence_step: newCount,
             next_send_at: nextSend,
-            delivered_at: nowIso,
             engagement_tier: tier,
+            raw: {
+              ...raw,
+              last_send: {
+                message_id: sendResult.messageId,
+                provider: sendResult.provider,
+                at: nowIso,
+                touch: newCount,
+              },
+            },
             updated_at: nowIso,
           })
           .eq("id", p.id);
@@ -163,6 +185,7 @@ export async function POST(req: Request) {
 
         if (tier === "hot") hotSentToday++;
         sent++;
+        await sleep(sendJitterMs());
       } catch (err) {
         failed++;
         errors.push(`${p.email}: ${err instanceof Error ? err.message : "send failed"}`);

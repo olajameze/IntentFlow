@@ -6,8 +6,19 @@ import { uuidLike } from "@/lib/zod-schemas";
 
 const schema = z.object({ business_id: uuidLike });
 
+function promptsPopulated(settings: Record<string, unknown> | null): boolean {
+  if (!settings) return false;
+  return Boolean(
+    typeof settings.subject_prompt === "string" &&
+      settings.subject_prompt.trim() &&
+      typeof settings.body_prompt === "string" &&
+      settings.body_prompt.trim(),
+  );
+}
+
 /** POST — LLM-generate outreach prompts for a business (marketing expert bootstrap). */
 export async function POST(req: Request) {
+  const force = new URL(req.url).searchParams.get("force") === "1";
   const parsed = schema.safeParse(await req.json().catch(() => ({})));
   if (!parsed.success) {
     const msg = parsed.error.issues[0]?.message ?? "business_id required";
@@ -35,6 +46,15 @@ export async function POST(req: Request) {
       return NextResponse.json({ error: "Enable outreach first" }, { status: 400 });
     }
 
+    if (!force && promptsPopulated(settings)) {
+      return NextResponse.json({
+        ok: true,
+        skipped: true,
+        message: "Prompts already populated — pass ?force=1 to regenerate",
+        settings,
+      });
+    }
+
     const prompt = `Generate cold B2B outreach campaign JSON for this business:
 Name: ${business.name}
 Type: ${business.type}
@@ -47,11 +67,18 @@ Locale rules for all email prompts:
 - Do NOT mention United Kingdom or "UK" unless recipient country is UK.
 - Pest control / compliance SaaS: target DE, FR, ES, IT, NL, IN, IE, UK, US, CA, AU — not UK-only framing.
 
+All email prompts MUST support these merge placeholders from prospect research:
+{name}, {contact_name}, {website}, {country}, {city}, {sector_angle}, {services}, {location}, {industry}, {weakness}, {opportunity}, {phone}
+
 Return JSON only:
 {
-  "subject_prompt": "LLM instructions for two A/B subject lines...",
-  "body_prompt": "LLM instructions for email body max 180 words...",
-  "follow_up_prompts": ["touch 2 with {name} {website} {country} {sector_angle}", "touch 3 break-up with {country}"],
+  "subject_prompt": "LLM instructions for two A/B subject lines using {services} and {location}...",
+  "body_prompt": "LLM instructions for email body max 180 words referencing {weakness} and {opportunity}...",
+  "follow_up_prompts": [
+    "touch 2 with {name} {contact_name} {website} {country} {sector_angle} {services}",
+    "touch 3 break-up with {country} {weakness}",
+    "touch 4 final nudge with {opportunity}"
+  ],
   "sector_angles": {"generic": "angle text", "restaurant": "..."},
   "scrape_queries": {"DE": [["query", "City"]], "FR": [...], "IN": [...], "UK": [...], "US": [...]}
 }`;
