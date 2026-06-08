@@ -98,7 +98,7 @@ cd engine && python -c "import config; print('Groq:', 'yes' if config.groq_api_k
    - Events: `delivered`, `hard_bounce`, `soft_bounce`, `spam`, `blocked`, optional `inbound_email` for auto-reply stop
    - Set `BREVO_WEBHOOK_SECRET` in `web/.env.local` (and Vercel) — must match Brevo signing token
    - Optional `BREVO_API_KEY` for contacts validate API (pre-send gate)
-5. Send pacing env: `OUTREACH_DAILY_SEND_LIMIT`, `OUTREACH_HOURLY_SEND_LIMIT` (default 30), jitter 200–800 ms between bulk sends.
+5. Send pacing env: `OUTREACH_DAILY_SEND_LIMIT`, `OUTREACH_HOURLY_SEND_LIMIT` (default 30), `OUTREACH_SEND_WINDOW_MINUTES` (default 20), jitter 200–800 ms between bulk sends.
 6. Optional env: `OUTREACH_CONVERSION_SECRET` (global fallback), `OUTREACH_PUBLIC_BASE_URL` (tracking pixels), `GROQ_API_KEY` (LLM follow-ups).
 7. Optional IMAP reply fallback (when Brevo inbound is unavailable):
    - `OUTREACH_REPLY_IMAP_HOST`, `OUTREACH_REPLY_IMAP_USER`, `OUTREACH_REPLY_IMAP_PASSWORD` in `web/.env.local`
