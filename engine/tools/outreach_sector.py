@@ -27,6 +27,10 @@ _SECTOR_PATTERNS: tuple[tuple[str, re.Pattern[str]], ...] = (
     ("food_production",re.compile(r"\b(food\s?production|food\s?manufactur|food\s?process|abattoir|butcher)\b", re.IGNORECASE)),
     ("restaurant",     re.compile(r"\b(restaurant|cafe|café|bistro|takeaway|takeout|eatery|kitchen|food|dine)\b", re.IGNORECASE)),
     ("pest_control_firm", re.compile(r"\b(pest\s?control|exterminat|pest\s?management)\b",                     re.IGNORECASE)),
+    ("tradesperson",   re.compile(r"\b(plumb|electric|roof|builder|joiner|carpenter|locksmith|handyman|heating|hvac|gas\s?safe)\b", re.IGNORECASE)),
+    ("salon",          re.compile(r"\b(hair|salon|barber|beauty|nail|spa|aesthetics|cosmetic)\b",              re.IGNORECASE)),
+    ("local_shop",     re.compile(r"\b(florist|butcher|baker|shop|store|boutique|retail|gift)\b",               re.IGNORECASE)),
+    ("professional",   re.compile(r"\b(accountant|solicitor|lawyer|consultant|coach|therapist|clinic|dental|dentist)\b", re.IGNORECASE)),
 )
 
 

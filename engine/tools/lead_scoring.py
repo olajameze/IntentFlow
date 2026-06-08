@@ -40,6 +40,12 @@ def _industry_fit_score(sector: str, campaign_id: str) -> int:
         return 25 if sector in fit_sectors else 12 if sector != "generic" else 8
     if campaign_id == "pesttrace":
         return 25 if sector in ("pest_control_firm", "generic") else 15
+    if campaign_id == "jgdevs":
+        fit = {
+            "tradesperson", "salon", "local_shop", "professional",
+            "restaurant", "gym", "pet_groomer", "pub", "bakery", "generic",
+        }
+        return 25 if sector in fit else 12
     return 12
 
 
@@ -72,6 +78,9 @@ def _local_market_score(country: str, city: str, campaign_id: str) -> int:
     country = (country or "").upper()
     if campaign_id == "weathers":
         return 15 if country == "UK" and city else 10 if country == "UK" else 0
+    if campaign_id == "jgdevs":
+        eu = {"UK", "IE", "DE", "FR", "ES", "IT", "NL", "BE", "AT", "PT", "PL", "SE", "DK"}
+        return 15 if country in eu and city else 10 if country in eu else 0
     target = {"UK", "IE", "DE", "FR", "ES", "IT", "NL", "IN", "US", "CA", "AU"}
     return 15 if country in target else 5
 
@@ -101,6 +110,19 @@ def compute_lead_score(prospect: dict[str, Any], research: dict[str, Any] | None
         "local_market": _local_market_score(country, city, campaign),
         "research_boost": _research_boost_score(research, page_text),
     }
+    if campaign == "jgdevs":
+        text_len = int(research.get("page_text_length") or 0)
+        opp = 0
+        if not research.get("has_https"):
+            opp += 10
+        if text_len < 500:
+            opp += 12
+        if not research.get("has_contact_page"):
+            opp += 8
+        blob = page_text.lower()
+        if not any(k in blob for k in ("book", "booking", "appointment", "schedule")):
+            opp += 5
+        breakdown["website_quality"] = min(25, opp)
     total = min(100, sum(breakdown.values()))
     return total, breakdown
 

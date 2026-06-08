@@ -58,6 +58,12 @@ def _apply_web_env_local_overrides() -> None:
         "WEATHERS_SMTP_PASSWORD",
         "WEATHERS_OUTREACH_FROM_NAME",
         "WEATHERS_OUTREACH_FROM_EMAIL",
+        "JGDEVS_OUTREACH_FROM_NAME",
+        "JGDEVS_OUTREACH_FROM_EMAIL",
+        "JGDEVS_SMTP_HOST",
+        "JGDEVS_SMTP_PORT",
+        "JGDEVS_SMTP_USER",
+        "JGDEVS_SMTP_PASSWORD",
         "OUTREACH_PUBLIC_BASE_URL",
         "OUTREACH_SNAPSHOT_ENABLED",
     ):

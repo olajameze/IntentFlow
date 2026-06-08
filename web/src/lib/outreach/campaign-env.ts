@@ -23,6 +23,17 @@ export const CAMPAIGN_ENV = {
     resendApiKey: "WEATHERS_RESEND_API_KEY",
     defaultFromName: "Weathers Pest Solutions",
   },
+  jgdevs: {
+    fromName: "JGDEVS_OUTREACH_FROM_NAME",
+    fromEmail: "JGDEVS_OUTREACH_FROM_EMAIL",
+    replyTo: "JGDEVS_REPLY_TO",
+    smtpHost: "JGDEVS_SMTP_HOST",
+    smtpUser: "JGDEVS_SMTP_USER",
+    smtpPassword: "JGDEVS_SMTP_PASSWORD",
+    smtpPort: "JGDEVS_SMTP_PORT",
+    resendApiKey: "JGDEVS_RESEND_API_KEY",
+    defaultFromName: "JGDevs",
+  },
 } as const;
 
 export type LegacyCampaignId = keyof typeof CAMPAIGN_ENV;
@@ -38,6 +49,7 @@ function envVal(name: string): string | undefined {
 export function resolveCampaignEnvKey(campaign: string): LegacyCampaignId {
   const slug = campaign.trim().toLowerCase();
   if (slug === "weathers") return "weathers";
+  if (slug === "jgdevs") return "jgdevs";
   return "pesttrace";
 }
 
@@ -106,7 +118,9 @@ export function isConfiguredForCampaign(campaign: string): { ok: boolean; hint?:
   const hint =
     key === "weathers"
       ? `Set WEATHERS SMTP credentials in web/.env.local: ${keys.smtpHost}, ${keys.smtpUser}, ${keys.smtpPassword}.`
-      : `Set SMTP_HOST, SMTP_USER, SMTP_PASSWORD (and OUTREACH_FROM_EMAIL) in web/.env.local.`;
+      : key === "jgdevs"
+        ? `Set JGDEVS SMTP credentials in web/.env.local: ${keys.smtpHost}, ${keys.smtpUser}, ${keys.smtpPassword}.`
+        : `Set SMTP_HOST, SMTP_USER, SMTP_PASSWORD (and OUTREACH_FROM_EMAIL) in web/.env.local.`;
   return { ok: false, hint };
 }
 

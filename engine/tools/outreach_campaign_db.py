@@ -11,6 +11,7 @@ from tools.outreach_campaigns import (
     CAMPAIGNS,
     CampaignConfig,
     DEFAULT_CAMPAIGN_ID,
+    JGDEVS,
     PESTTRACE,
     WEATHERS,
     get_campaign as get_static_campaign,
@@ -158,6 +159,6 @@ def load_enabled_campaigns() -> list[CampaignConfig]:
         pass
 
     if not configs:
-        return [PESTTRACE, WEATHERS]
+        return [PESTTRACE, WEATHERS, JGDEVS]
 
     return configs

@@ -117,6 +117,8 @@ Run all enabled campaigns:
 cd engine && python main.py outreach --campaign all
 ```
 
+Campaigns: `pesttrace` (compliance SaaS + audit snapshots), `weathers` (West Midlands pest control), `jgdevs` (websites, SEO, booking for UK small businesses).
+
 ## 6. E2E tests (optional)
 
 ### Tier A + C + D (default CI / local smoke)

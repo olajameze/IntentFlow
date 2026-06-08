@@ -8,6 +8,7 @@ const MIGRATION_FILES = [
   "20260608100000_outreach_webhook_subscriptions.sql",
   "20260609000000_outreach_campaign_stats_rpc.sql",
   "20260610000000_outreach_snapshots.sql",
+  "20260611000000_outreach_jgdevs_campaign.sql",
 ] as const;
 
 export function outreachMigrationPaths(): string[] {

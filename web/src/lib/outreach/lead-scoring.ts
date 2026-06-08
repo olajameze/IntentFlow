@@ -41,6 +41,13 @@ function industryFitScore(sector: string, campaignId: string): number {
   if (campaignId === "pesttrace") {
     return s === "pest_control_firm" || s === "generic" ? 25 : 15;
   }
+  if (campaignId === "jgdevs") {
+    const fit = new Set([
+      "tradesperson", "salon", "local_shop", "professional",
+      "restaurant", "gym", "pet_groomer", "pub", "bakery", "generic",
+    ]);
+    return fit.has(s) ? 25 : 12;
+  }
   return 12;
 }
 
@@ -68,6 +75,10 @@ function localMarketScore(country: string, city: string, campaignId: string): nu
   if (campaignId === "weathers") {
     return c === "UK" && city ? 15 : c === "UK" ? 10 : 0;
   }
+  if (campaignId === "jgdevs") {
+    const eu = new Set(["UK", "IE", "DE", "FR", "ES", "IT", "NL", "BE", "AT", "PT", "PL", "SE", "DK"]);
+    return eu.has(c) && city ? 15 : eu.has(c) ? 10 : 0;
+  }
   const target = new Set(["UK", "IE", "DE", "FR", "ES", "IT", "NL", "IN", "US", "CA", "AU"]);
   return target.has(c) ? 15 : 5;
 }
@@ -93,6 +104,17 @@ export function computeLeadScore(prospect: {
     local_market: localMarketScore(prospect.country || "", prospect.city || "", campaign),
     research_boost: researchBoostScore(research),
   };
+
+  if (campaign === "jgdevs") {
+    let opp = 0;
+    if (!research.has_https) opp += 10;
+    const len = research.page_text_length ?? 0;
+    if (len < 500) opp += 12;
+    if (!research.has_contact_page) opp += 8;
+    const blob = (research.page_text_sample || "").toLowerCase();
+    if (!["book", "booking", "appointment", "schedule"].some((k) => blob.includes(k))) opp += 5;
+    breakdown.website_quality = Math.min(25, opp);
+  }
 
   const score = Math.min(100, Object.values(breakdown).reduce((a, b) => a + b, 0));
   return { score, breakdown };

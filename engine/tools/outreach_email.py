@@ -42,7 +42,7 @@ from config import (
 from supabase_client import get_supabase
 from html import escape as html_escape
 
-from tools.copy_doctrine import OUTREACH_CONVERSION_DOCTRINE
+from tools.copy_doctrine import JGDEVS_MARKETING_FOCUS, OUTREACH_CONVERSION_DOCTRINE
 from tools.audit_snapshot import SNAPSHOT_URL_PLACEHOLDER, prospect_has_snapshot
 from tools.email_validator import normalize_outreach_body, validate_outreach_copy
 from tools.outreach_locale import locale_rules_for_country, normalize_outreach_country
@@ -51,14 +51,59 @@ from tools.outreach_campaign_db import get_campaign
 from tools.outreach_campaigns import (
     CampaignConfig,
     DEFAULT_CAMPAIGN_ID,
+    JGDEVS_SNAPSHOT_BODY_PROMPT,
+    JGDEVS_SNAPSHOT_FALLBACK_BODY,
+    JGDEVS_SNAPSHOT_FALLBACK_SUBJECT_A,
+    JGDEVS_SNAPSHOT_FALLBACK_SUBJECT_B,
+    JGDEVS_SNAPSHOT_SUBJECT_PROMPT,
     PESTTRACE_SNAPSHOT_BODY_PROMPT,
     PESTTRACE_SNAPSHOT_FALLBACK_BODY,
     PESTTRACE_SNAPSHOT_FALLBACK_SUBJECT_A,
     PESTTRACE_SNAPSHOT_FALLBACK_SUBJECT_B,
     PESTTRACE_SNAPSHOT_SUBJECT_PROMPT,
+    WEATHERS_SNAPSHOT_BODY_PROMPT,
+    WEATHERS_SNAPSHOT_FALLBACK_BODY,
+    WEATHERS_SNAPSHOT_FALLBACK_SUBJECT_A,
+    WEATHERS_SNAPSHOT_FALLBACK_SUBJECT_B,
+    WEATHERS_SNAPSHOT_SUBJECT_PROMPT,
     render_fallback_body,
     sector_angle,
 )
+
+_SNAPSHOT_CAMPAIGNS = frozenset({"pesttrace", "weathers", "jgdevs"})
+
+_SNAPSHOT_SECONDARY_LABEL: dict[str, str] = {
+    "pesttrace": "Start 7-day free trial",
+    "weathers": "Book a pest control visit",
+    "jgdevs": "See how we can help",
+}
+
+
+def _snapshot_email_prompts(campaign_id: str, name: str) -> tuple[str, str, str, str, str]:
+    """Return subject_prompt, body_prompt, fallback_body, fallback_subject_a, fallback_subject_b."""
+    if campaign_id == "weathers":
+        return (
+            WEATHERS_SNAPSHOT_SUBJECT_PROMPT,
+            WEATHERS_SNAPSHOT_BODY_PROMPT,
+            WEATHERS_SNAPSHOT_FALLBACK_BODY,
+            WEATHERS_SNAPSHOT_FALLBACK_SUBJECT_A,
+            WEATHERS_SNAPSHOT_FALLBACK_SUBJECT_B,
+        )
+    if campaign_id == "jgdevs":
+        return (
+            JGDEVS_SNAPSHOT_SUBJECT_PROMPT,
+            JGDEVS_SNAPSHOT_BODY_PROMPT,
+            JGDEVS_SNAPSHOT_FALLBACK_BODY,
+            JGDEVS_SNAPSHOT_FALLBACK_SUBJECT_A,
+            JGDEVS_SNAPSHOT_FALLBACK_SUBJECT_B,
+        )
+    return (
+        PESTTRACE_SNAPSHOT_SUBJECT_PROMPT,
+        PESTTRACE_SNAPSHOT_BODY_PROMPT,
+        PESTTRACE_SNAPSHOT_FALLBACK_BODY,
+        PESTTRACE_SNAPSHOT_FALLBACK_SUBJECT_A,
+        PESTTRACE_SNAPSHOT_FALLBACK_SUBJECT_B,
+    )
 
 
 # ── Generation ───────────────────────────────────────────────────────────────
@@ -270,7 +315,6 @@ def generate_outreach_email(
     pid = prospect.get("id")
     name = (prospect.get("name") or "").strip()
     country = normalize_outreach_country(prospect.get("country"))
-    outreach_doctrine = f"{OUTREACH_CONVERSION_DOCTRINE}\n\n{locale_rules_for_country(country)}"
 
     if not pid or not name:
         return False
@@ -281,6 +325,10 @@ def generate_outreach_email(
         cfg = get_campaign(
             campaign or str(prospect.get("campaign") or "").strip() or DEFAULT_CAMPAIGN_ID
         )
+
+    outreach_doctrine = f"{OUTREACH_CONVERSION_DOCTRINE}\n\n{locale_rules_for_country(country)}"
+    if cfg.id == "jgdevs":
+        outreach_doctrine = f"{outreach_doctrine}\n\n{JGDEVS_MARKETING_FOCUS}"
 
     website = (prospect.get("website_url") or cfg.website).strip()
     sector = str(prospect.get("sector") or "generic").strip().lower() or "generic"
@@ -299,13 +347,14 @@ def generate_outreach_email(
         f'"location": "{research_vars["location"]}", "industry": "{research_vars["industry"]}"}}'
     )
     lead = f"Prospect: {name}"
-    use_snapshot = cfg.id == "pesttrace" and prospect_has_snapshot(prospect)
+    use_snapshot = cfg.id in _SNAPSHOT_CAMPAIGNS and prospect_has_snapshot(prospect)
 
     # ── Subject (A + B for Klaviyo-style A/B testing) ───────────────────────
     if use_snapshot:
-        subject_prompt = PESTTRACE_SNAPSHOT_SUBJECT_PROMPT.format(**fmt)
-        fallback_a = PESTTRACE_SNAPSHOT_FALLBACK_SUBJECT_A.format(name=name)[:60]
-        fallback_b = PESTTRACE_SNAPSHOT_FALLBACK_SUBJECT_B.format(name=name)[:60]
+        subject_prompt, _, _, fallback_a_tpl, fallback_b_tpl = _snapshot_email_prompts(cfg.id, name)
+        subject_prompt = subject_prompt.format(**fmt)
+        fallback_a = fallback_a_tpl.format(name=name)[:60]
+        fallback_b = fallback_b_tpl.format(name=name)[:60]
         subject_a, subject_b = _generate_validated_subjects(
             business_context=business_context,
             lead=lead,
@@ -327,8 +376,9 @@ def generate_outreach_email(
 
     # ── Body ─────────────────────────────────────────────────────────────────
     if use_snapshot:
-        body_prompt = PESTTRACE_SNAPSHOT_BODY_PROMPT.format(**fmt)
-        fallback_body = PESTTRACE_SNAPSHOT_FALLBACK_BODY.format(name=name)
+        _, body_prompt, fallback_body_tpl, _, _ = _snapshot_email_prompts(cfg.id, name)
+        body_prompt = body_prompt.format(**fmt)
+        fallback_body = fallback_body_tpl.format(name=name)
     else:
         body_prompt = cfg.body_prompt.format(**fmt)
         fallback_body = render_fallback_body(cfg, name)
@@ -354,6 +404,7 @@ def generate_outreach_email(
         cfg,
         prospect_id=str(pid),
         snapshot_primary=use_snapshot,
+        snapshot_secondary_label=_SNAPSHOT_SECONDARY_LABEL.get(cfg.id, cfg.cta_label),
     )
 
     from tools.ab_winner import apply_ab_winner_subjects, load_ab_winner
@@ -387,6 +438,7 @@ def _render_html(
     prospect_id: str = "",
     *,
     snapshot_primary: bool = False,
+    snapshot_secondary_label: str = "Learn more",
 ) -> str:
     """Render the campaign's branded conversion-focused HTML email.
 
@@ -421,7 +473,7 @@ def _render_html(
           <tr>
             <td align="center" style="padding:0 24px 16px 24px;">
               <a data-outreach-cta="true" href="{trial_url}" style="display:inline-block;background:#ffffff;color:{cfg.accent_color};text-decoration:none;padding:12px 24px;border-radius:8px;font-weight:600;font-size:14px;border:2px solid {cfg.accent_color};">
-                Start 7-day free trial
+                {html_escape(snapshot_secondary_label)}
               </a>
             </td>
           </tr>"""

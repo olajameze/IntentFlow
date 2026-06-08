@@ -7,18 +7,20 @@ name: Outreach Engine
 # Campaigns:
 #   pesttrace — compliance SaaS → pest control firms (UK/US/CA/AU)
 #   weathers  — Weathers Pest Solutions services → UK West Midlands businesses
+#   jgdevs    — JGDevs web/SEO/booking → UK small businesses
 #   all       — run every campaign in sequence
 on:
   workflow_dispatch:
     inputs:
       campaign:
-        description: "Outreach campaign to run (pesttrace, weathers, all)"
+        description: "Outreach campaign to run (pesttrace, weathers, jgdevs, all)"
         required: false
         default: "all"
         type: choice
         options:
           - pesttrace
           - weathers
+          - jgdevs
           - all
 
 permissions:
@@ -55,6 +57,12 @@ jobs:
       WEATHERS_SMTP_PORT: ${{ secrets.WEATHERS_SMTP_PORT || '587' }}
       WEATHERS_SMTP_USER: ${{ secrets.WEATHERS_SMTP_USER || secrets.WEATHERS_OUTREACH_FROM_EMAIL }}
       WEATHERS_SMTP_PASSWORD: ${{ secrets.WEATHERS_SMTP_PASSWORD }}
+      JGDEVS_OUTREACH_FROM_NAME: ${{ secrets.JGDEVS_OUTREACH_FROM_NAME || 'JGDevs' }}
+      JGDEVS_OUTREACH_FROM_EMAIL: ${{ secrets.JGDEVS_OUTREACH_FROM_EMAIL }}
+      JGDEVS_SMTP_HOST: ${{ secrets.JGDEVS_SMTP_HOST || secrets.SMTP_HOST }}
+      JGDEVS_SMTP_PORT: ${{ secrets.JGDEVS_SMTP_PORT || '587' }}
+      JGDEVS_SMTP_USER: ${{ secrets.JGDEVS_SMTP_USER || secrets.JGDEVS_OUTREACH_FROM_EMAIL }}
+      JGDEVS_SMTP_PASSWORD: ${{ secrets.JGDEVS_SMTP_PASSWORD || secrets.SMTP_PASSWORD }}
       # Campaign id forwarded to python main.py outreach
       OUTREACH_CAMPAIGN: ${{ inputs.campaign || 'pesttrace' }}
     defaults:

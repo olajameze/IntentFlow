@@ -22,6 +22,14 @@
   font-size: 14px;
 }
 
+.header[data-campaign="weathers"] {
+  background: #2f855a;
+}
+
+.header[data-campaign="jgdevs"] {
+  background: #2563eb;
+}
+
 .card {
   background: #fff;
   border: 1px solid #e5e5e5;
@@ -126,6 +134,14 @@
   font-size: 15px;
 }
 
+.cta[data-campaign="weathers"] {
+  background: #2f855a;
+}
+
+.cta[data-campaign="jgdevs"] {
+  background: #2563eb;
+}
+
 .disclaimer {
   font-size: 11px;
   line-height: 1.5;
@@ -174,9 +190,25 @@
   border-radius: 4px;
 }
 
+.scoreBarTrack[data-campaign="weathers"] progress::-webkit-progress-value {
+  background: #2f855a;
+}
+
+.scoreBarTrack[data-campaign="jgdevs"] progress::-webkit-progress-value {
+  background: #2563eb;
+}
+
 .scoreBarTrack progress::-moz-progress-bar {
   background: #0f766e;
   border-radius: 4px;
+}
+
+.scoreBarTrack[data-campaign="weathers"] progress::-moz-progress-bar {
+  background: #2f855a;
+}
+
+.scoreBarTrack[data-campaign="jgdevs"] progress::-moz-progress-bar {
+  background: #2563eb;
 }
 
 .gapCard {

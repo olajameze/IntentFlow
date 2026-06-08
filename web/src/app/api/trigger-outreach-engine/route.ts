@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 
 const WORKFLOW_FILE = "outreach-engine.yml";
-const VALID_CAMPAIGNS = ["pesttrace", "weathers", "all"] as const;
+const VALID_CAMPAIGNS = ["pesttrace", "weathers", "jgdevs", "all"] as const;
 type Campaign = (typeof VALID_CAMPAIGNS)[number];
 
 function normalizeCampaign(raw: unknown): Campaign {
@@ -84,7 +84,7 @@ export async function GET() {
 
 /**
  * POST — dispatches `.github/workflows/outreach-engine.yml` via GitHub API.
- * Accepts `{ campaign: "pesttrace" | "weathers" | "all" }` in the JSON body
+ * Accepts `{ campaign: "pesttrace" | "weathers" | "jgdevs" | "all" }` in the JSON body
  * (default: "pesttrace"). Drafts land in Supabase and appear in the Review
  * tab on /outreach filtered by the selected campaign.
  */

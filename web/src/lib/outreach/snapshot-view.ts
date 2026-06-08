@@ -51,6 +51,14 @@ export function pesttraceTrialUrl(prospectId: string): string {
   return `${base}${sep}utm_source=outreach&utm_medium=snapshot&utm_campaign=pesttrace&p=${encodeURIComponent(prospectId)}`;
 }
 
+export function weathersBookUrl(prospectId: string): string {
+  return `https://weatherspestsolutions.co.uk/book?utm_source=outreach&utm_medium=snapshot&utm_campaign=weathers&p=${encodeURIComponent(prospectId)}`;
+}
+
+export function jgdevSiteUrl(prospectId: string): string {
+  return `https://jgdev.co.uk/?utm_source=outreach&utm_medium=snapshot&utm_campaign=jgdevs&p=${encodeURIComponent(prospectId)}`;
+}
+
 export function trackedClickUrl(prospectId: string, destination: string, baseUrl: string): string {
   const origin = baseUrl.replace(/\/$/, "");
   return `${origin}/api/outreach-track/click?p=${encodeURIComponent(prospectId)}&to=${encodeURIComponent(destination)}`;
@@ -59,6 +67,13 @@ export function trackedClickUrl(prospectId: string, destination: string, baseUrl
 export function scoreBand(score: number): "red" | "amber" | "green" {
   if (score < 50) return "red";
   if (score < 70) return "amber";
+  return "green";
+}
+
+/** Higher score = higher seasonal risk exposure. */
+export function riskBand(score: number): "red" | "amber" | "green" {
+  if (score >= 70) return "red";
+  if (score >= 50) return "amber";
   return "green";
 }
 

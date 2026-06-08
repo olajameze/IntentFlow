@@ -12,7 +12,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { plainTextFromHtml, stripAiMetaFromHtml, stripAiMetaPreamble } from "@/lib/outreach/email-validator";
-import { parseProspectSnapshotMeta } from "@/lib/outreach/snapshot-types";
+import { parseProspectSnapshotMeta, snapshotBadgeLabel } from "@/lib/outreach/snapshot-types";
 
 /** Client-side Actions URL when `NEXT_PUBLIC_GITHUB_REPO` is set (token may still be missing). */
 function githubOutreachWorkflowUrl(): string | null {
@@ -100,7 +100,7 @@ function EmailPreviewModal({
 }
 
 type Prospect = Record<string, unknown>;
-type Campaign = "pesttrace" | "weathers";
+type Campaign = "pesttrace" | "weathers" | "jgdevs";
 
 type CampaignStats = {
   campaign: Campaign;
@@ -369,6 +369,13 @@ const CAMPAIGN_META: Record<
     fromEmail: "WeathersPestSolutions@hotmail.com",
     countries: "UK only (West Midlands)",
   },
+  jgdevs: {
+    label: "JGDevs",
+    short: "JGDevs",
+    blurb: "Websites, local SEO, and online booking for UK and European small businesses — trades, salons, shops, and professional services.",
+    fromEmail: "hello@jgdev.co.uk",
+    countries: "UK · IE · DE · FR · ES · IT · NL · BE · AT · PT · PL · SE · DK",
+  },
 };
 
 function countryBadgeClass(country: string) {
@@ -421,9 +428,13 @@ function ProspectCard({
   const weaknessSnippet = Array.isArray(research.weaknesses)
     ? String((research.weaknesses as string[])[0] || "")
     : "";
-  const campaign: Campaign = prospect.campaign === "weathers" ? "weathers" : "pesttrace";
-  const snapshotMeta =
-    campaign === "pesttrace" ? parseProspectSnapshotMeta(raw.snapshot) : null;
+  const campaign: Campaign =
+    prospect.campaign === "weathers"
+      ? "weathers"
+      : prospect.campaign === "jgdevs"
+        ? "jgdevs"
+        : "pesttrace";
+  const snapshotMeta = parseProspectSnapshotMeta(raw.snapshot);
   const fromLabel = `${CAMPAIGN_META[campaign].label} <${CAMPAIGN_META[campaign].fromEmail}>`;
 
   const [subject, setSubject] = useState(String(prospect.email_subject ?? ""));
@@ -604,7 +615,9 @@ function ProspectCard({
                   className={`shrink-0 text-[10px] ${
                     campaign === "weathers"
                       ? "border-amber-600/30 bg-amber-600/15 text-amber-400"
-                      : "border-primary/30 bg-primary/10 text-primary"
+                      : campaign === "jgdevs"
+                        ? "border-blue-600/30 bg-blue-600/15 text-blue-400"
+                        : "border-primary/30 bg-primary/10 text-primary"
                   }`}
                   title={`Campaign: ${CAMPAIGN_META[campaign].label}`}
                 >
@@ -628,9 +641,9 @@ function ProspectCard({
                   <Badge
                     variant="outline"
                     className="shrink-0 text-[10px] border-teal-600/30 bg-teal-600/10 text-teal-400"
-                    title="Audit readiness snapshot score"
+                    title={`${snapshotBadgeLabel(campaign)} score`}
                   >
-                    Snapshot {snapshotMeta.overall_score}/100
+                    {snapshotBadgeLabel(campaign)} {snapshotMeta.overall_score}/100
                   </Badge>
                 )}
                 {mode === "sent" && engagementTier === "hot" && !bookedAt && (
@@ -969,6 +982,7 @@ export function OutreachScreen() {
   useEffect(() => {
     void loadStats("pesttrace");
     void loadStats("weathers");
+    void loadStats("jgdevs");
     // eslint-disable-next-line react-hooks/exhaustive-deps -- prefetch once on mount
   }, []);
 
@@ -1100,13 +1114,21 @@ export function OutreachScreen() {
   return (
     <div className="min-w-0 space-y-3">
       {/* Campaign selector — switches the entire screen between PestTrace and Weathers */}
-      <Tabs value={campaign} onValueChange={(v) => setCampaign(v === "weathers" ? "weathers" : "pesttrace")}>
-        <TabsList className="grid w-full grid-cols-2 md:inline-flex">
+      <Tabs
+        value={campaign}
+        onValueChange={(v) =>
+          setCampaign(v === "weathers" ? "weathers" : v === "jgdevs" ? "jgdevs" : "pesttrace")
+        }
+      >
+        <TabsList className="grid w-full grid-cols-3 md:inline-flex">
           <TabsTrigger value="pesttrace" className="text-xs sm:text-sm">
             {CAMPAIGN_META.pesttrace.label}
           </TabsTrigger>
           <TabsTrigger value="weathers" className="text-xs sm:text-sm">
             {CAMPAIGN_META.weathers.label}
+          </TabsTrigger>
+          <TabsTrigger value="jgdevs" className="text-xs sm:text-sm">
+            {CAMPAIGN_META.jgdevs.label}
           </TabsTrigger>
         </TabsList>
       </Tabs>
@@ -1168,6 +1190,22 @@ export function OutreachScreen() {
                 <SelectItem value="US">USA</SelectItem>
                 <SelectItem value="CA">Canada</SelectItem>
                 <SelectItem value="AU">Australia</SelectItem>
+              </>
+            ) : campaign === "jgdevs" ? (
+              <>
+                <SelectItem value="UK">UK</SelectItem>
+                <SelectItem value="IE">Ireland</SelectItem>
+                <SelectItem value="DE">Germany</SelectItem>
+                <SelectItem value="FR">France</SelectItem>
+                <SelectItem value="ES">Spain</SelectItem>
+                <SelectItem value="IT">Italy</SelectItem>
+                <SelectItem value="NL">Netherlands</SelectItem>
+                <SelectItem value="BE">Belgium</SelectItem>
+                <SelectItem value="AT">Austria</SelectItem>
+                <SelectItem value="PT">Portugal</SelectItem>
+                <SelectItem value="PL">Poland</SelectItem>
+                <SelectItem value="SE">Sweden</SelectItem>
+                <SelectItem value="DK">Denmark</SelectItem>
               </>
             ) : (
               <SelectItem value="UK">UK</SelectItem>

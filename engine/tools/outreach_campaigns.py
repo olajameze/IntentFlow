@@ -602,6 +602,63 @@ Rules:
 )
 
 
+_WEATHERS_SNAPSHOT_SUBJECT_PROMPT = """You are writing TWO cold B2B email subject line variants for Weathers Pest Solutions.
+
+The recipient has a seasonal pest risk brief ready to view.
+Business: {name} ({website})
+Location: {location}
+
+Return EXACTLY two lines:
+Line 1 — variant A (question): seasonal pest risk brief for {name}? — max 60 chars.
+Line 2 — variant B (statement): "{name} — seasonal pest risks worth a look" style — max 60 chars.
+
+Rules:
+- Do NOT mention Weathers in the subject.
+- UK English. No exclamation marks. No emojis.
+
+Return ONLY two lines — no labels, no quotes."""
+
+
+_WEATHERS_SNAPSHOT_BODY_PROMPT = """You are writing a cold B2B email on behalf of Weathers Pest Solutions (West Midlands pest control).
+
+We prepared a short seasonal pest risk brief for the recipient — no signup needed to view it.
+
+Recipient: {name}
+Website: {website}
+Location: {location}
+Industry: {industry}
+Sector angle: {sector_angle}
+
+Write the email body. Rules:
+- Tone: practical and discreet — premises managers appreciate calm, factual advice.
+- UK English only.
+- Structure:
+  1. One sentence: we put together a seasonal risk brief for {name} based on their sector and premises type.
+  2. Two sentences: what it covers (rodent/insect pressure this season, audit or inspection context, prevention steps).
+  3. One sentence: if the risks look familiar, Weathers offers BPCA-certified treatments and 24/7 emergency cover in the West Midlands.
+  4. Sign-off: Best regards,\\nThe Weathers Pest Solutions Team
+- Max 140 words.
+- Do NOT include URLs in the body — the brief and booking buttons are added separately.
+- Return ONLY the email body text."""
+
+
+_WEATHERS_SNAPSHOT_FALLBACK_BODY = """\
+We put together a short seasonal pest risk brief for {name} based on your sector and premises type — no signup needed to view it.
+
+It covers rodent and insect pressure for this time of year, inspection context, and practical prevention steps for West Midlands commercial sites.
+
+If the risks look familiar, Weathers Pest Solutions offers BPCA-certified treatments, documented visits, and 24/7 emergency cover.
+
+Best regards,
+The Weathers Pest Solutions Team"""
+
+WEATHERS_SNAPSHOT_SUBJECT_PROMPT = _WEATHERS_SNAPSHOT_SUBJECT_PROMPT
+WEATHERS_SNAPSHOT_BODY_PROMPT = _WEATHERS_SNAPSHOT_BODY_PROMPT
+WEATHERS_SNAPSHOT_FALLBACK_BODY = _WEATHERS_SNAPSHOT_FALLBACK_BODY
+WEATHERS_SNAPSHOT_FALLBACK_SUBJECT_A = "Seasonal pest risk brief for {name}?"
+WEATHERS_SNAPSHOT_FALLBACK_SUBJECT_B = "{name} — pest risks worth a look"
+
+
 WEATHERS = CampaignConfig(
     id="weathers",
     label="Weathers Pest Solutions (services → UK West Midlands businesses)",
@@ -635,11 +692,342 @@ WEATHERS = CampaignConfig(
 )
 
 
+# ── JGDevs (web agency → UK small businesses) ───────────────────────────────
+#
+# Targets sole traders and small businesses that need a clearer online presence:
+# professional websites, local SEO, and simple booking/enquiry flows.
+
+_JGDEVS_SUBJECT_PROMPT = """You are writing TWO cold B2B email subject line variants for JGDevs (https://jgdev.co.uk) — a web agency for European small businesses.
+
+The recipient is a small business owner or manager at: {name} ({website})
+Location: {location}, {country}
+Sector angle: {sector_angle}
+
+Return EXACTLY two lines:
+Line 1 — variant A (question style): one clear online-presence or enquiry problem as a question.
+Line 2 — variant B (statement style): a plain statement about lost enquiries, visibility, or bookings — no question mark.
+
+Rules for BOTH:
+- Max 60 characters each.
+- Do NOT mention JGDevs in the subject.
+- Clear international English. No exclamation marks. No emojis.
+- Do NOT mention UK unless country is UK or IE.
+- Focus on: being invisible on Google, website not mobile-friendly, no online booking, missed enquiries.
+
+Examples:
+  Are customers finding you on Google?
+  Your site may be costing you enquiries
+  Still taking every booking by phone?
+
+Return ONLY two lines — no labels, no quotes."""
+
+
+_JGDEVS_BODY_PROMPT = """You are writing a cold B2B email on behalf of JGDevs (https://jgdev.co.uk).
+
+JGDevs helps European small businesses with:
+- Professional websites that explain what you do in plain language
+- Local SEO so you show up when people search in your area
+- Online booking and enquiry forms so customers can reach you 24/7
+- Fast, mobile-friendly pages (most customers browse on a phone)
+
+Recipient: {name}
+Website: {website}
+Country: {country}
+Location: {location}
+Industry: {industry}
+Services: {services}
+Sector angle: {sector_angle}
+Weakness to reference naturally: {weakness}
+Opportunity: {opportunity}
+
+Write a professional, easy-to-understand email. Rules:
+- Tone: helpful and practical — like advice from someone who builds websites for trades and local shops. Never pushy or jargon-heavy.
+- Clear international English. Do NOT mention UK unless country is UK or IE.
+- Mandatory structure (short paragraphs):
+  1) One-sentence hook using the sector angle — a problem they likely recognise (hard to find online, site looks dated, no way to book outside office hours).
+  2) Two sentences on what that costs them (competitors get the click, phone tag, enquiries lost after hours).
+  3) Two sentences on how JGDevs helps — website + SEO + booking/enquiry setup in plain terms (no tech stack lists).
+  4) Soft CTA: invite them to tap the button below to see examples and start a conversation — do NOT paste URLs in the body.
+- Max 160 words.
+- Do NOT invent client names, awards, or exact prices.
+- Do NOT use "I hope this finds you well", "just reaching out", or "touch base".
+- Sign off EXACTLY:
+  "Best regards,\\nThe JGDevs Team"
+- Return ONLY the email body — no subject, no meta-commentary."""
+
+
+_JGDEVS_FALLBACK_BODY = """\
+Many small businesses like {name} still lose enquiries because their website is hard to find on Google, awkward on mobile, or has no simple way to book or request a quote online.
+
+When customers compare options, they usually pick the business that looks clear, trustworthy, and easy to contact — often in the first minute on their phone.
+
+JGDevs builds professional websites for European small businesses with local SEO and booking or enquiry flows built in, so you can capture leads even when you are on a job.
+
+If improving your online presence is on your list this quarter, the link below shows how we work and what a better site could do for you.
+
+Best regards,
+The JGDevs Team"""
+
+
+_JGDEVS_QUERIES: dict[str, list[SearchQuery]] = {
+    "UK": [
+        ("plumber Birmingham site:.co.uk", "Birmingham"),
+        ("electrician Manchester site:.co.uk", "Manchester"),
+        ("roofer Leeds site:.co.uk", "Leeds"),
+        ("builder Bristol site:.co.uk", "Bristol"),
+        ("locksmith Liverpool site:.co.uk", "Liverpool"),
+        ("hair salon Sheffield site:.co.uk", "Sheffield"),
+        ("barber Nottingham site:.co.uk", "Nottingham"),
+        ("beauty salon Cardiff site:.co.uk", "Cardiff"),
+        ("accountant small business Birmingham site:.co.uk", "Birmingham"),
+        ("dental practice Manchester site:.co.uk", "Manchester"),
+        ("personal trainer gym Leeds site:.co.uk", "Leeds"),
+        ("florist Bristol site:.co.uk", "Bristol"),
+        ("dog groomer Newcastle site:.co.uk", "Newcastle"),
+        ("cafe independent Glasgow site:.co.uk", "Glasgow"),
+        ("restaurant Edinburgh site:.co.uk", "Edinburgh"),
+        ("solicitor small firm Birmingham site:.co.uk", "Birmingham"),
+        ("cleaning company Manchester site:.co.uk", "Manchester"),
+        ("landscaper Leeds site:.co.uk", "Leeds"),
+    ],
+    "IE": [
+        ("plumber Dublin site:.ie", "Dublin"),
+        ("electrician Cork site:.ie", "Cork"),
+        ("hair salon Galway site:.ie", "Galway"),
+        ("accountant Dublin site:.ie", "Dublin"),
+        ("restaurant Limerick site:.ie", "Limerick"),
+        ("barber Belfast site:.co.uk", "Belfast"),
+    ],
+    "DE": [
+        ("klempner Berlin site:.de", "Berlin"),
+        ("elektriker München site:.de", "Munich"),
+        ("friseur Hamburg site:.de", "Hamburg"),
+        ("bäckerei Köln site:.de", "Cologne"),
+        ("restaurant Frankfurt site:.de", "Frankfurt"),
+        ("steuerberater Stuttgart site:.de", "Stuttgart"),
+        ("zahnarzt Düsseldorf site:.de", "Düsseldorf"),
+    ],
+    "FR": [
+        ("plombier Paris site:.fr", "Paris"),
+        ("coiffeur Lyon site:.fr", "Lyon"),
+        ("restaurant Marseille site:.fr", "Marseille"),
+        ("boulangerie Bordeaux site:.fr", "Bordeaux"),
+        ("comptable Toulouse site:.fr", "Toulouse"),
+        ("salon de beauté Nice site:.fr", "Nice"),
+    ],
+    "ES": [
+        ("fontanero Madrid site:.es", "Madrid"),
+        ("electricista Barcelona site:.es", "Barcelona"),
+        ("peluquería Valencia site:.es", "Valencia"),
+        ("restaurante Sevilla site:.es", "Seville"),
+        ("panadería Málaga site:.es", "Málaga"),
+    ],
+    "IT": [
+        ("idraulico Roma site:.it", "Rome"),
+        ("elettricista Milano site:.it", "Milan"),
+        ("parrucchiere Torino site:.it", "Turin"),
+        ("ristorante Napoli site:.it", "Naples"),
+        ("pasticceria Bologna site:.it", "Bologna"),
+    ],
+    "NL": [
+        ("loodgieter Amsterdam site:.nl", "Amsterdam"),
+        ("kapper Rotterdam site:.nl", "Rotterdam"),
+        ("restaurant Utrecht site:.nl", "Utrecht"),
+        ("bakkerij Den Haag site:.nl", "The Hague"),
+        ("accountant Eindhoven site:.nl", "Eindhoven"),
+    ],
+    "BE": [
+        ("plombier Bruxelles site:.be", "Brussels"),
+        ("coiffeur Antwerpen site:.be", "Antwerp"),
+        ("restaurant Gent site:.be", "Ghent"),
+        ("boulangerie Liège site:.be", "Liège"),
+    ],
+    "AT": [
+        ("installateur Wien site:.at", "Vienna"),
+        ("friseur Graz site:.at", "Graz"),
+        ("restaurant Salzburg site:.at", "Salzburg"),
+    ],
+    "PT": [
+        ("canalizador Lisboa site:.pt", "Lisbon"),
+        ("cabeleireiro Porto site:.pt", "Porto"),
+        ("restaurante Braga site:.pt", "Braga"),
+    ],
+    "PL": [
+        ("hydraulik Warszawa site:.pl", "Warsaw"),
+        ("fryzjer Kraków site:.pl", "Krakow"),
+        ("restauracja Wrocław site:.pl", "Wroclaw"),
+        ("piekarz Gdańsk site:.pl", "Gdansk"),
+    ],
+    "SE": [
+        ("rörmokare Stockholm site:.se", "Stockholm"),
+        ("frisör Göteborg site:.se", "Gothenburg"),
+        ("restaurang Malmö site:.se", "Malmö"),
+    ],
+    "DK": [
+        ("blikkenslager København site:.dk", "Copenhagen"),
+        ("frisør Aarhus site:.dk", "Aarhus"),
+        ("restaurant Odense site:.dk", "Odense"),
+    ],
+}
+
+
+_JGDEVS_SKIP_KEYWORDS: tuple[str, ...] = (
+    "web-design", "webdesign", "digital-agency", "marketing-agency",
+    "seo-agency", "wix.com", "squarespace.com", "wordpress.com",
+    "freelancer.com", "fiverr", "upwork",
+)
+
+
+_JGDEVS_SECTOR_ANGLES: dict[str, str] = {
+    "tradesperson": "local customers searching for a tradesperson but choosing a competitor with a clearer website and online contact form",
+    "salon": "missed bookings because clients cannot book or check services easily on their phone",
+    "local_shop": "high street footfall lost to competitors who rank higher on Google and show opening hours clearly online",
+    "professional": "credibility gap — prospects expect a polished, trustworthy site before they call",
+    "restaurant": "empty tables when people check the menu online and go elsewhere because the site is slow or confusing on mobile",
+    "gym": "members comparing gyms online and picking the one with clear pricing and easy signup",
+    "pet_groomer": "appointment calls stacking up with no online booking for busy pet owners",
+    "pub": "event and table enquiries going to venues that are easier to find and contact online",
+    "bakery": "wholesale and walk-in customers choosing suppliers with clearer online menus and contact paths",
+    "generic": "enquiries lost because the business is hard to find, hard to trust, or impossible to contact outside office hours",
+}
+
+
+_JGDEVS_FOLLOWUP_PROMPTS = (
+    """You are writing a SHORT follow-up (max 90 words) from JGDevs to a small business that did not reply three days ago.
+
+Recipient: {name} ({website})
+Location: {location}
+Industry: {industry}
+Sector angle: {sector_angle}
+
+Rules:
+- Mention you wrote earlier in one clause — no apology.
+- One new angle: mobile-friendly site, local Google visibility, or online booking/enquiries.
+- Plain English — no jargon.
+- Soft CTA: button below to see how JGDevs helps small businesses like theirs.
+- Sign off: "Best regards,\\nThe JGDevs Team"
+- Max 90 words.""",
+    """You are writing a follow-up (max 90 words) from JGDevs with a practical tip.
+
+Recipient: {name} ({website})
+Industry: {industry}
+
+Rules:
+- Share one credible, general insight: most customers research online before calling a local business.
+- Tie it to their sector without inventing client names.
+- Mention JGDevs builds sites with SEO and booking/enquiry flows.
+- Soft CTA via button below.
+- Sign off: "Best regards,\\nThe JGDevs Team"
+- Max 90 words.""",
+    """You are writing the FINAL follow-up (max 60 words) from JGDevs.
+
+Recipient: {name} ({website})
+
+Rules:
+- Say you'll stop emailing after this — politely.
+- One sentence: JGDevs helps small businesses with websites, SEO, and online booking.
+- Soft CTA: door stays open at jgdev.co.uk via the button below.
+- Sign off: "Best regards,\\nThe JGDevs Team"
+- No emojis.""",
+)
+
+
+_JGDEVS_SNAPSHOT_SUBJECT_PROMPT = """You are writing TWO cold B2B email subject line variants for JGDevs.
+
+The recipient has a site score snapshot ready to view.
+Business: {name} ({website})
+Country: {country}
+
+Return EXACTLY two lines:
+Line 1 — variant A (question): site score snapshot for {name}? — max 60 chars.
+Line 2 — variant B (statement): "{name} — online gaps worth a look" style — max 60 chars.
+
+Rules:
+- Do NOT mention JGDevs in the subject.
+- Do NOT mention UK unless country is UK or IE.
+- No exclamation marks. No emojis.
+
+Return ONLY two lines — no labels, no quotes."""
+
+
+_JGDEVS_SNAPSHOT_BODY_PROMPT = """You are writing a cold B2B email on behalf of JGDevs (https://jgdev.co.uk).
+
+We prepared a short site score snapshot for the recipient — no signup needed to view it.
+
+Recipient: {name}
+Website: {website}
+Country: {country}
+Location: {location}
+Sector angle: {sector_angle}
+Weakness to reference: {weakness}
+
+Write the email body. Rules:
+- Tone: helpful and practical — not salesy.
+- Do NOT mention UK unless country is UK or IE.
+- Structure:
+  1. One sentence: we put together a site score snapshot for {name} based on their website.
+  2. Two sentences: what it covers (local SEO visibility, mobile experience, booking/enquiry flow, trust signals).
+  3. One sentence: if the gaps look familiar, JGDevs builds mobile-friendly sites with local SEO and enquiry flows.
+  4. Sign-off: Best regards,\\nThe JGDevs Team
+- Max 140 words.
+- Do NOT include URLs in the body — the snapshot and examples buttons are added separately.
+- Return ONLY the email body text."""
+
+
+_JGDEVS_SNAPSHOT_FALLBACK_BODY = """\
+We put together a short site score snapshot for {name} based on your website — no signup needed to view it.
+
+It covers local SEO visibility, mobile experience, booking and enquiry flows, and trust signals that affect how customers choose a business online.
+
+If the gaps look familiar, JGDevs builds professional websites for European small businesses with local SEO and enquiry flows built in.
+
+Best regards,
+The JGDevs Team"""
+
+JGDEVS_SNAPSHOT_SUBJECT_PROMPT = _JGDEVS_SNAPSHOT_SUBJECT_PROMPT
+JGDEVS_SNAPSHOT_BODY_PROMPT = _JGDEVS_SNAPSHOT_BODY_PROMPT
+JGDEVS_SNAPSHOT_FALLBACK_BODY = _JGDEVS_SNAPSHOT_FALLBACK_BODY
+JGDEVS_SNAPSHOT_FALLBACK_SUBJECT_A = "Site score snapshot for {name}?"
+JGDEVS_SNAPSHOT_FALLBACK_SUBJECT_B = "{name} — online gaps worth a look"
+
+
+JGDEVS = CampaignConfig(
+    id="jgdevs",
+    label="JGDevs (websites & SEO → UK & European small businesses)",
+    sender_signature="The JGDevs Team",
+    website="https://jgdev.co.uk",
+    default_from_name_env="JGDEVS_OUTREACH_FROM_NAME",
+    default_from_email_env="JGDEVS_OUTREACH_FROM_EMAIL",
+    smtp_host_env="JGDEVS_SMTP_HOST",
+    smtp_user_env="JGDEVS_SMTP_USER",
+    smtp_password_env="JGDEVS_SMTP_PASSWORD",
+    smtp_port_env="JGDEVS_SMTP_PORT",
+    countries=("UK", "IE", "DE", "FR", "ES", "IT", "NL", "BE", "AT", "PT", "PL", "SE", "DK"),
+    queries=_JGDEVS_QUERIES,
+    subject_prompt=_JGDEVS_SUBJECT_PROMPT,
+    body_prompt=_JGDEVS_BODY_PROMPT,
+    fallback_subject="Are customers finding you online?",
+    fallback_body_template=_JGDEVS_FALLBACK_BODY,
+    opt_out_footer=(
+        "You received this email because your business was found in a public directory. "
+        "To opt out, reply with <strong>STOP</strong> and we will never contact you again."
+    ),
+    cta_label="See how we can help",
+    cta_url_template="https://jgdev.co.uk/?utm_source=outreach&utm_medium=email&utm_campaign=jgdevs&p={prospect_id}",
+    accent_color="#2563EB",
+    trust_badges=("UK & EU small business sites", "Websites that convert", "SEO & booking systems"),
+    sector_angles=_JGDEVS_SECTOR_ANGLES,
+    follow_up_prompts=_JGDEVS_FOLLOWUP_PROMPTS,
+    skip_url_keywords=_JGDEVS_SKIP_KEYWORDS,
+)
+
+
 # ── Registry ────────────────────────────────────────────────────────────────
 
 CAMPAIGNS: dict[str, CampaignConfig] = {
     PESTTRACE.id: PESTTRACE,
     WEATHERS.id: WEATHERS,
+    JGDEVS.id: JGDEVS,
 }
 
 DEFAULT_CAMPAIGN_ID = PESTTRACE.id

@@ -294,6 +294,7 @@ def build_snapshot_payload(
     )
 
     return {
+        "snapshot_type": "audit",
         "version": 1,
         "company_name": name,
         "website": website,

@@ -23,6 +23,7 @@ import { getSupabaseAdmin } from "@/lib/supabase-admin";
 const FALLBACK_DESTINATIONS: Record<string, string> = {
   pesttrace: "https://pesttrace.com/",
   weathers: "https://weatherspestsolutions.co.uk/",
+  jgdevs: "https://jgdev.co.uk/",
 };
 
 function safeRedirect(url: string): NextResponse {
