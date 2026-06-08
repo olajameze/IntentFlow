@@ -27,6 +27,7 @@ from supabase_client import get_supabase
 from tools.outreach_campaign_db import get_campaign, load_enabled_campaigns
 from tools.outreach_campaigns import CampaignConfig, DEFAULT_CAMPAIGN_ID
 from tools.lead_scoring import compute_lead_score, persist_lead_score
+from tools.audit_snapshot import generate_audit_snapshot
 from tools.outreach_email import generate_outreach_email
 from tools.prospect_research import research_and_persist
 from tools.prospect_scraper import scrape_prospects
@@ -86,6 +87,8 @@ def run_outreach(campaign: CampaignConfig | str | None = None) -> None:
                 if not isinstance(raw, dict):
                     raw = {}
                 prospect = {**prospect, "raw": {**raw, "research": research, "score": breakdown}, "lead_score": score}
+            if cfg.id == "pesttrace":
+                generate_audit_snapshot(prospect, research, campaign_id=cfg.id)
             if generate_outreach_email(prospect, campaign=cfg):
                 drafted += 1
             else:

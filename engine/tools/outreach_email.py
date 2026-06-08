@@ -43,6 +43,7 @@ from supabase_client import get_supabase
 from html import escape as html_escape
 
 from tools.copy_doctrine import OUTREACH_CONVERSION_DOCTRINE
+from tools.audit_snapshot import SNAPSHOT_URL_PLACEHOLDER, prospect_has_snapshot
 from tools.email_validator import normalize_outreach_body, validate_outreach_copy
 from tools.outreach_locale import locale_rules_for_country, normalize_outreach_country
 from tools.llm import generate_outreach_copy
@@ -50,6 +51,11 @@ from tools.outreach_campaign_db import get_campaign
 from tools.outreach_campaigns import (
     CampaignConfig,
     DEFAULT_CAMPAIGN_ID,
+    PESTTRACE_SNAPSHOT_BODY_PROMPT,
+    PESTTRACE_SNAPSHOT_FALLBACK_BODY,
+    PESTTRACE_SNAPSHOT_FALLBACK_SUBJECT_A,
+    PESTTRACE_SNAPSHOT_FALLBACK_SUBJECT_B,
+    PESTTRACE_SNAPSHOT_SUBJECT_PROMPT,
     render_fallback_body,
     sector_angle,
 )
@@ -293,20 +299,39 @@ def generate_outreach_email(
         f'"location": "{research_vars["location"]}", "industry": "{research_vars["industry"]}"}}'
     )
     lead = f"Prospect: {name}"
+    use_snapshot = cfg.id == "pesttrace" and prospect_has_snapshot(prospect)
 
     # ── Subject (A + B for Klaviyo-style A/B testing) ───────────────────────
-    subject_prompt = cfg.subject_prompt.format(**fmt)
-    subject_a, subject_b = _generate_validated_subjects(
-        business_context=business_context,
-        lead=lead,
-        subject_prompt=subject_prompt,
-        outreach_doctrine=outreach_doctrine,
-        fallback=cfg.fallback_subject,
-    )
+    if use_snapshot:
+        subject_prompt = PESTTRACE_SNAPSHOT_SUBJECT_PROMPT.format(**fmt)
+        fallback_a = PESTTRACE_SNAPSHOT_FALLBACK_SUBJECT_A.format(name=name)[:60]
+        fallback_b = PESTTRACE_SNAPSHOT_FALLBACK_SUBJECT_B.format(name=name)[:60]
+        subject_a, subject_b = _generate_validated_subjects(
+            business_context=business_context,
+            lead=lead,
+            subject_prompt=subject_prompt,
+            outreach_doctrine=outreach_doctrine,
+            fallback=fallback_a,
+        )
+        if subject_a == fallback_a and subject_b == fallback_a:
+            subject_b = fallback_b
+    else:
+        subject_prompt = cfg.subject_prompt.format(**fmt)
+        subject_a, subject_b = _generate_validated_subjects(
+            business_context=business_context,
+            lead=lead,
+            subject_prompt=subject_prompt,
+            outreach_doctrine=outreach_doctrine,
+            fallback=cfg.fallback_subject,
+        )
 
     # ── Body ─────────────────────────────────────────────────────────────────
-    body_prompt = cfg.body_prompt.format(**fmt)
-    fallback_body = render_fallback_body(cfg, name)
+    if use_snapshot:
+        body_prompt = PESTTRACE_SNAPSHOT_BODY_PROMPT.format(**fmt)
+        fallback_body = PESTTRACE_SNAPSHOT_FALLBACK_BODY.format(name=name)
+    else:
+        body_prompt = cfg.body_prompt.format(**fmt)
+        fallback_body = render_fallback_body(cfg, name)
     body_text = _generate_validated_copy(
         business_context=business_context,
         lead=lead,
@@ -324,7 +349,12 @@ def generate_outreach_email(
     # We render a placeholder CTA + pixel here so the email looks complete in
     # the dashboard preview. The send route swaps the placeholders for real
     # tracking URLs before delivery.
-    html_body = _render_html(body_text, cfg, prospect_id=str(pid))
+    html_body = _render_html(
+        body_text,
+        cfg,
+        prospect_id=str(pid),
+        snapshot_primary=use_snapshot,
+    )
 
     from tools.ab_winner import apply_ab_winner_subjects, load_ab_winner
 
@@ -351,7 +381,13 @@ def generate_outreach_email(
         return False
 
 
-def _render_html(plain_text: str, cfg: CampaignConfig, prospect_id: str = "") -> str:
+def _render_html(
+    plain_text: str,
+    cfg: CampaignConfig,
+    prospect_id: str = "",
+    *,
+    snapshot_primary: bool = False,
+) -> str:
     """Render the campaign's branded conversion-focused HTML email.
 
     Klaviyo steps 6 + 7: tailor to journey stage with ONE clear CTA button, trust badges
@@ -361,6 +397,9 @@ def _render_html(plain_text: str, cfg: CampaignConfig, prospect_id: str = "") ->
     without tracking). The send route in Next.js detects ``data-outreach-cta="true"`` on
     the anchor and ``<!-- OUTREACH_TRACKING_PIXEL -->`` in the markup and swaps them for
     a click-tracked redirector + a 1×1 open-tracking pixel at delivery time.
+
+    When ``snapshot_primary`` is True, the primary CTA points to ``__SNAPSHOT_URL__``
+    (replaced at send time) and a secondary trial CTA uses the campaign URL template.
     """
     paragraphs = [p.strip() for p in plain_text.split("\n\n") if p.strip()]
     body_html = "\n".join(
@@ -373,7 +412,23 @@ def _render_html(plain_text: str, cfg: CampaignConfig, prospect_id: str = "") ->
         f'<span style="color:#4a5568;">{b}</span>' for b in cfg.trust_badges
     )
 
-    cta_url = cfg.cta_url_template.format(prospect_id=prospect_id or "preview")
+    trial_url = cfg.cta_url_template.format(prospect_id=prospect_id or "preview")
+
+    if snapshot_primary:
+        primary_label = "View your snapshot"
+        primary_href = SNAPSHOT_URL_PLACEHOLDER
+        secondary_cta = f"""
+          <tr>
+            <td align="center" style="padding:0 24px 16px 24px;">
+              <a data-outreach-cta="true" href="{trial_url}" style="display:inline-block;background:#ffffff;color:{cfg.accent_color};text-decoration:none;padding:12px 24px;border-radius:8px;font-weight:600;font-size:14px;border:2px solid {cfg.accent_color};">
+                Start 7-day free trial
+              </a>
+            </td>
+          </tr>"""
+    else:
+        primary_label = cfg.cta_label
+        primary_href = trial_url
+        secondary_cta = ""
 
     return f"""<!DOCTYPE html>
 <html lang="en">
@@ -399,11 +454,12 @@ def _render_html(plain_text: str, cfg: CampaignConfig, prospect_id: str = "") ->
           </tr>
           <tr>
             <td align="center" style="padding:12px 24px 24px 24px;">
-              <a data-outreach-cta="true" href="{cta_url}" style="display:inline-block;background:{cfg.accent_color};color:#ffffff;text-decoration:none;padding:14px 28px;border-radius:8px;font-weight:600;font-size:15px;">
-                {cfg.cta_label}
+              <a data-outreach-cta="true" href="{primary_href}" style="display:inline-block;background:{cfg.accent_color};color:#ffffff;text-decoration:none;padding:14px 28px;border-radius:8px;font-weight:600;font-size:15px;">
+                {primary_label}
               </a>
             </td>
           </tr>
+          {secondary_cta}
           <tr>
             <td align="center" style="padding:0 24px 24px 24px;font-size:12px;color:#4a5568;">
               {badges_html}

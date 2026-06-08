@@ -141,6 +141,65 @@ The PestTrace Team
 https://pesttrace.com"""
 
 
+_PESTTRACE_SNAPSHOT_SUBJECT_PROMPT = """You are writing TWO cold B2B email subject line variants for PestTrace.com.
+
+The recipient has a personalized audit-readiness snapshot ready to view.
+Business: {name} ({website})
+Country: {country}
+
+Return EXACTLY two lines:
+Line 1 — variant A (question): "Audit readiness snapshot for {name}?" style — max 60 chars.
+Line 2 — variant B (statement): "{name} — compliance gaps worth a look" style — max 60 chars.
+
+Rules:
+- Do NOT mention PestTrace in the subject.
+- Do NOT mention UK unless country is UK.
+- No exclamation marks. No emojis.
+
+Return ONLY two lines — no labels, no quotes."""
+
+
+_PESTTRACE_SNAPSHOT_BODY_PROMPT = """You are writing a cold B2B email on behalf of PestTrace.com.
+
+We prepared a short audit-readiness snapshot for the recipient — no signup needed to view it.
+
+Recipient: {name}
+Website: {website}
+Country: {country}
+Location: {location}
+Sector angle: {sector_angle}
+Weakness to reference: {weakness}
+
+Write the email body. Rules:
+- Tone: calm authority, peer advice — not salesy.
+- Do NOT mention UK unless country is UK.
+- Structure:
+  1. One sentence: we put together a snapshot for {name} based on their website and market.
+  2. Two sentences: what it covers (documentation visibility, qualification tracking, market framework expectations).
+  3. One sentence: if gaps look familiar, PestTrace helps with digital treatment logs and audit-ready records.
+  4. Sign-off: Best regards,\\nThe PestTrace Team
+- Max 140 words.
+- Do NOT include URLs in the body — the snapshot and trial buttons are added separately.
+- Return ONLY the email body text."""
+
+
+_PESTTRACE_SNAPSHOT_FALLBACK_BODY = """\
+We put together a short audit-readiness snapshot for {name} based on your website and market — no signup needed to view it.
+
+It covers documentation visibility, qualification tracking, and framework expectations for pest control operators in your region.
+
+If the gaps look familiar, PestTrace gives teams a digital logbook for treatments, photos, signatures, and audit-ready reports.
+
+Best regards,
+The PestTrace Team"""
+
+PESTTRACE_SNAPSHOT_SUBJECT_PROMPT = _PESTTRACE_SNAPSHOT_SUBJECT_PROMPT
+PESTTRACE_SNAPSHOT_BODY_PROMPT = _PESTTRACE_SNAPSHOT_BODY_PROMPT
+PESTTRACE_SNAPSHOT_FALLBACK_BODY = _PESTTRACE_SNAPSHOT_FALLBACK_BODY
+PESTTRACE_SNAPSHOT_FALLBACK_SUBJECT_A = "Audit readiness snapshot for {name}?"
+PESTTRACE_SNAPSHOT_FALLBACK_SUBJECT_B = "{name} — compliance gaps worth a look"
+
+
 _PESTTRACE_QUERIES: dict[str, list[SearchQuery]] = {
     "UK": [
         ("pest control London site:.co.uk",         "London"),

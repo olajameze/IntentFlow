@@ -12,6 +12,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { plainTextFromHtml, stripAiMetaFromHtml, stripAiMetaPreamble } from "@/lib/outreach/email-validator";
+import { parseProspectSnapshotMeta } from "@/lib/outreach/snapshot-types";
 
 /** Client-side Actions URL when `NEXT_PUBLIC_GITHUB_REPO` is set (token may still be missing). */
 function githubOutreachWorkflowUrl(): string | null {
@@ -421,6 +422,8 @@ function ProspectCard({
     ? String((research.weaknesses as string[])[0] || "")
     : "";
   const campaign: Campaign = prospect.campaign === "weathers" ? "weathers" : "pesttrace";
+  const snapshotMeta =
+    campaign === "pesttrace" ? parseProspectSnapshotMeta(raw.snapshot) : null;
   const fromLabel = `${CAMPAIGN_META[campaign].label} <${CAMPAIGN_META[campaign].fromEmail}>`;
 
   const [subject, setSubject] = useState(String(prospect.email_subject ?? ""));
@@ -621,6 +624,15 @@ function ProspectCard({
                     Score {leadScore}
                   </Badge>
                 )}
+                {snapshotMeta && (
+                  <Badge
+                    variant="outline"
+                    className="shrink-0 text-[10px] border-teal-600/30 bg-teal-600/10 text-teal-400"
+                    title="Audit readiness snapshot score"
+                  >
+                    Snapshot {snapshotMeta.overall_score}/100
+                  </Badge>
+                )}
                 {mode === "sent" && engagementTier === "hot" && !bookedAt && (
                   <Badge className="shrink-0 border-orange-600/30 bg-orange-600/15 text-[10px] text-orange-400">
                     <Flame className="mr-0.5 h-3 w-3" />
@@ -649,6 +661,18 @@ function ProspectCard({
               {verify && verify.ok === false && (
                 <p className="mt-1 text-[10px] text-amber-500">
                   Verification: {verify.reason || "failed — fix before send"}
+                </p>
+              )}
+              {snapshotMeta && (
+                <p className="mt-1 text-[10px]">
+                  <a
+                    href={`/r/${snapshotMeta.token}`}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="text-teal-600 underline-offset-2 hover:underline"
+                  >
+                    Preview snapshot
+                  </a>
                 </p>
               )}
               {mode === "sent" && (openedAt || clickedAt || repliedAt || bookedAt || subjectVariant) && (

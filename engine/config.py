@@ -58,6 +58,8 @@ def _apply_web_env_local_overrides() -> None:
         "WEATHERS_SMTP_PASSWORD",
         "WEATHERS_OUTREACH_FROM_NAME",
         "WEATHERS_OUTREACH_FROM_EMAIL",
+        "OUTREACH_PUBLIC_BASE_URL",
+        "OUTREACH_SNAPSHOT_ENABLED",
     ):
         raw = vals.get(key)
         if raw is None:
@@ -246,6 +248,10 @@ def outreach_scrape_limit() -> int:
 def outreach_countries() -> list[str]:
     raw = os.getenv("OUTREACH_COUNTRIES", "UK,US,CA,AU").strip()
     return [c.strip().upper() for c in raw.split(",") if c.strip()]
+
+
+def outreach_public_base_url() -> str:
+    return _env_first("OUTREACH_PUBLIC_BASE_URL", "NEXT_PUBLIC_SITE_URL").rstrip("/")
 
 
 google_api_key.cache_clear()

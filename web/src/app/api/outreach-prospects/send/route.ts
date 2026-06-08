@@ -17,6 +17,7 @@ import { validateEmailForSend } from "@/lib/outreach/send-validation";
 import { sendOutreachEmail, verifySmtpForCampaign } from "@/lib/outreach/send-mail";
 import { smtpTroubleshootingHint } from "@/lib/outreach/smtp-errors";
 import { injectTracking } from "@/lib/outreach/tracking";
+import { applySnapshotUrlToHtml } from "@/lib/outreach/snapshot-send";
 import { withSupabaseRoute } from "@/lib/with-supabase-route";
 
 function normalizeCampaign(raw: unknown): string {
@@ -114,8 +115,20 @@ export async function POST(req: Request) {
         prospect.email_subject_b,
         preferredWinner,
       );
-      const trackedHtml = injectTracking(
+      const snapshotResolved = applySnapshotUrlToHtml(
         stripAiMetaFromHtml(prospect.email_body),
+        prospect.raw,
+        baseUrl,
+      );
+      if (snapshotResolved.error) {
+        return {
+          ok: false as const,
+          status: 422,
+          error: snapshotResolved.error,
+        };
+      }
+      const trackedHtml = injectTracking(
+        snapshotResolved.html,
         prospect.id,
         baseUrl,
       );
