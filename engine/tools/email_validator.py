@@ -31,6 +31,26 @@ AI_LEAK_PHRASES: tuple[str, ...] = (
     "uk english",
 )
 
+AI_PREAMBLE_META_PATTERNS: tuple[re.Pattern[str], ...] = (
+    re.compile(r"^here is the (professional|draft|cold|b2b|outreach)", re.I),
+    re.compile(r"^here are (the|two|both|some|following)", re.I),
+    re.compile(r"^below is (the|a) (draft|email|professional)", re.I),
+    re.compile(r"^below are (the|two|following)", re.I),
+    re.compile(r"^following is (the|a)", re.I),
+    re.compile(r"^following are (the|two)", re.I),
+)
+
+AI_PREAMBLE_LINE_PHRASES: tuple[str, ...] = (
+    "i'd be happy to",
+    "i would be happy to",
+    "i hope this email finds you well",
+    "just reaching out",
+    "i wanted to touch base",
+    "circling back",
+    "as instructed",
+    "as requested",
+)
+
 WORD_LIMITS: dict[str, int] = {"initial": 260, "followup": 100}
 
 _MARKDOWN_PATTERNS = [
@@ -94,7 +114,18 @@ def _contains_ai_phrase_in_body(body: str) -> str | None:
     leak = _contains_blocked_phrase(body, AI_LEAK_PHRASES)
     if leak:
         return leak
-    return _contains_blocked_phrase(_body_preamble_text(body), AI_PHRASE_BLOCKLIST)
+    preamble = _body_preamble_text(body)
+    for line in preamble.split("\n"):
+        trimmed = line.strip()
+        if not trimmed:
+            continue
+        for pattern in AI_PREAMBLE_META_PATTERNS:
+            if pattern.search(trimmed):
+                return trimmed[:40]
+        line_hit = _contains_blocked_phrase(trimmed, AI_PREAMBLE_LINE_PHRASES)
+        if line_hit:
+            return line_hit
+    return None
 
 
 def validate_outreach_copy(
@@ -155,12 +186,12 @@ def _is_meta_preamble_line(line: str) -> bool:
     t = line.strip()
     if not t:
         return True
-    low = t.lower()
-    if re.match(r"^(here (is|are)|below (is|are)|following (is|are))\b", low):
-        return True
+    for pattern in AI_PREAMBLE_META_PATTERNS:
+        if pattern.search(t):
+            return True
     if re.search(r"professional.*(b2b\s*)?outreach.*email", t, re.I) and len(t) < 160:
         return True
-    if _contains_blocked_phrase(t, AI_PHRASE_BLOCKLIST):
+    if _contains_blocked_phrase(t, AI_PREAMBLE_LINE_PHRASES):
         return True
     return False
 

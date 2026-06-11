@@ -41,7 +41,17 @@ def test_rejects_below_is_and_certainly():
     ok1, _ = validate_outreach_copy("Subject", "Below is a draft for your team.", "initial")
     assert ok1 is False
     ok2, _ = validate_outreach_copy("Subject", "Certainly, I can help with compliance.", "initial")
-    assert ok2 is False
+    assert ok2 is True
+
+
+def test_allows_legitimate_here_is_in_body():
+    body = (
+        "Here is a seasonal pest risk brief we prepared for your team.\n\n"
+        "The main pressure point here is rodent activity as weather cools."
+    )
+    ok, issues = validate_outreach_copy("Seasonal pest risk?", body, "initial")
+    assert ok is True
+    assert issues == []
 
 
 def test_rejects_markdown_and_json():

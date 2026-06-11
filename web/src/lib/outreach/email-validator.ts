@@ -25,8 +25,30 @@ const AI_LEAK_PHRASES: readonly string[] = [
   "uk english",
 ];
 
-const SPAM_TRIGGERS: readonly string[] = blocklistData.spam_triggers;
+const AI_PREAMBLE_META_PATTERNS: readonly RegExp[] = [
+  /^here is the (professional|draft|cold|b2b|outreach)/i,
+  /^here are (the|two|both|some|following)/i,
+  /^below is (the|a) (draft|email|professional)/i,
+  /^below are (the|two|following)/i,
+  /^following is (the|a)/i,
+  /^following are (the|two)/i,
+];
 
+/** Preamble-only phrases — not matched mid-sentence (e.g. "the gap here is …"). */
+const AI_PREAMBLE_LINE_PHRASES: readonly string[] = [
+  "i'd be happy to",
+  "i would be happy to",
+  "i hope this email finds you well",
+  "just reaching out",
+  "i wanted to touch base",
+  "circling back",
+  "as instructed",
+  "as requested",
+];
+
+const AI_SUBJECT_PHRASES: readonly string[] = [...AI_PHRASE_BLOCKLIST];
+
+const SPAM_TRIGGERS: readonly string[] = blocklistData.spam_triggers;
 const WORD_LIMITS: Record<OutreachCopyKind, number> = {
   /** LLM drafts often run slightly over prompt limits; allow headroom at send time. */
   initial: 260,
@@ -93,8 +115,20 @@ function bodyPreambleText(body: string): string {
 function containsAiPhraseInBody(body: string): string | null {
   const leak = containsBlockedPhrase(body, AI_LEAK_PHRASES);
   if (leak) return leak;
+
   const preamble = bodyPreambleText(body);
-  return containsBlockedPhrase(preamble, AI_PHRASE_BLOCKLIST);
+  for (const line of preamble.split("\n")) {
+    const trimmed = line.trim();
+    if (!trimmed) continue;
+    for (const pattern of AI_PREAMBLE_META_PATTERNS) {
+      if (pattern.test(trimmed)) {
+        return trimmed.slice(0, 40);
+      }
+    }
+    const lineHit = containsBlockedPhrase(trimmed, AI_PREAMBLE_LINE_PHRASES);
+    if (lineHit) return lineHit;
+  }
+  return null;
 }
 
 /** Validate outreach email subject + body before send or after LLM generation. */
@@ -116,7 +150,7 @@ export function validateOutreachCopy(
     const aiPhrase =
       field === bod
         ? containsAiPhraseInBody(bod)
-        : containsBlockedPhrase(field, AI_PHRASE_BLOCKLIST);
+        : containsBlockedPhrase(field, AI_SUBJECT_PHRASES);
     if (aiPhrase) issues.push(`AI assistant phrase detected: "${aiPhrase}"`);
 
     const spam = containsBlockedPhrase(field, SPAM_TRIGGERS);
@@ -205,9 +239,11 @@ function isMetaPreambleLine(line: string): boolean {
   const t = line.trim();
   if (!t) return true;
   const low = t.toLowerCase();
-  if (/^(here (is|are)|below (is|are)|following (is|are))\b/.test(low)) return true;
+  for (const pattern of AI_PREAMBLE_META_PATTERNS) {
+    if (pattern.test(t)) return true;
+  }
   if (/professional.*(b2b\s*)?outreach.*email/i.test(t) && t.length < 160) return true;
-  if (containsBlockedPhrase(t, AI_PHRASE_BLOCKLIST)) return true;
+  if (containsBlockedPhrase(t, AI_PREAMBLE_LINE_PHRASES)) return true;
   return false;
 }
 

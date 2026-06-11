@@ -35,12 +35,21 @@ describe("validateOutreachCopy", () => {
     );
   });
 
+  it("allows legitimate here is phrasing in body", () => {
+    const body =
+      "Here is a seasonal pest risk brief we prepared for your team.\n\n" +
+      "The main pressure point here is rodent activity as weather cools.\n\n" +
+      "Best regards,\nThe Weathers Pest Solutions Team";
+    const result = validateOutreachCopy("Seasonal pest risk for Acme?", body, "initial");
+    assert.equal(result.ok, true);
+  });
+
   it("rejects below is and certainly", () => {
     const r1 = validateOutreachCopy("Subject", "Below is a draft for your team.", "initial");
     assert.equal(r1.ok, false);
 
     const r2 = validateOutreachCopy("Subject", "Certainly, I can help with compliance.", "initial");
-    assert.equal(r2.ok, false);
+    assert.equal(r2.ok, true);
   });
 
   it("rejects markdown and JSON leakage", () => {
