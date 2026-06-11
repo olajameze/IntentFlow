@@ -10,12 +10,27 @@ export type ValidationResult = {
 /** AI assistant / meta-commentary phrases that must never appear in sent emails. */
 export const AI_PHRASE_BLOCKLIST: readonly string[] = blocklistData.phrases;
 
+/** LLM task-leak phrases — reject anywhere in the message body. */
+const AI_LEAK_PHRASES: readonly string[] = [
+  "professional outreach email",
+  "professional b2b outreach email",
+  "b2b outreach email",
+  "draft email",
+  "as requested",
+  "as instructed",
+  "following are",
+  "target audience:",
+  "strategy:",
+  "return json",
+  "uk english",
+];
+
 const SPAM_TRIGGERS: readonly string[] = blocklistData.spam_triggers;
 
 const WORD_LIMITS: Record<OutreachCopyKind, number> = {
-  /** HTML templates add footer/unsubscribe copy; plain-text extract runs slightly over LLM word count. */
-  initial: 220,
-  followup: 90,
+  /** LLM drafts often run slightly over prompt limits; allow headroom at send time. */
+  initial: 260,
+  followup: 100,
 };
 
 const MARKDOWN_PATTERNS = [
@@ -70,6 +85,18 @@ function containsBlockedPhrase(text: string, phrases: readonly string[]): string
   return null;
 }
 
+function bodyPreambleText(body: string): string {
+  const lines = body.replace(/\r\n/g, "\n").split("\n");
+  return lines.slice(0, 2).join("\n").slice(0, 320);
+}
+
+function containsAiPhraseInBody(body: string): string | null {
+  const leak = containsBlockedPhrase(body, AI_LEAK_PHRASES);
+  if (leak) return leak;
+  const preamble = bodyPreambleText(body);
+  return containsBlockedPhrase(preamble, AI_PHRASE_BLOCKLIST);
+}
+
 /** Validate outreach email subject + body before send or after LLM generation. */
 export function validateOutreachCopy(
   subject: string,
@@ -86,7 +113,10 @@ export function validateOutreachCopy(
   if (sub.startsWith("[Draft")) issues.push("Subject is a draft placeholder");
 
   for (const field of [sub, bod]) {
-    const aiPhrase = containsBlockedPhrase(field, AI_PHRASE_BLOCKLIST);
+    const aiPhrase =
+      field === bod
+        ? containsAiPhraseInBody(bod)
+        : containsBlockedPhrase(field, AI_PHRASE_BLOCKLIST);
     if (aiPhrase) issues.push(`AI assistant phrase detected: "${aiPhrase}"`);
 
     const spam = containsBlockedPhrase(field, SPAM_TRIGGERS);
@@ -137,7 +167,7 @@ export function plainTextFromHtml(html: string): string {
 }
 
 /** Extract LLM message paragraphs only — excludes CTA buttons, trust badges, and opt-out footer. */
-export function messagePlainTextFromHtml(html: string): string {
+function extractMessageParagraphs(html: string): string {
   const tagged = Array.from(
     html.matchAll(/<p[^>]*data-outreach-body="true"[^>]*>([\s\S]*?)<\/p>/gi),
   );
@@ -150,6 +180,23 @@ export function messagePlainTextFromHtml(html: string): string {
   );
   if (legacy.length > 0) {
     return plainTextFromHtml(legacy.map((m) => `<p>${m[1]}</p>`).join(""));
+  }
+
+  return "";
+}
+
+export function messagePlainTextFromHtml(html: string): string {
+  const fromTaggedOrLegacy = extractMessageParagraphs(html);
+  if (fromTaggedOrLegacy) return fromTaggedOrLegacy;
+
+  const contentCell = html.match(
+    /<td[^>]*padding:\s*28px\s+28px\s+8px\s+28px[^>]*>([\s\S]*?)<\/td>/i,
+  );
+  if (contentCell?.[1]) {
+    const fromCell = extractMessageParagraphs(contentCell[1]);
+    if (fromCell) return fromCell;
+    const cellPlain = plainTextFromHtml(contentCell[1]).trim();
+    if (cellPlain) return cellPlain;
   }
 
   return plainTextFromHtml(html);
@@ -186,7 +233,7 @@ export function stripAiMetaFromHtml(html: string): string {
     const match = out.match(/<p[^>]*>[\s\S]*?<\/p>/i);
     if (!match) break;
     const inner = plainTextFromHtml(match[0]);
-    if (!isMetaPreambleLine(inner) && !containsBlockedPhrase(inner, AI_PHRASE_BLOCKLIST)) break;
+    if (!isMetaPreambleLine(inner)) break;
     out = out.replace(match[0], "");
   }
   return out.trim();

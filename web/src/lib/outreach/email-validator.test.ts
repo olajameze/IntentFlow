@@ -28,7 +28,11 @@ describe("validateOutreachCopy", () => {
       "initial",
     );
     assert.equal(result.ok, false);
-    assert.ok(result.issues.some((i) => i.includes("here is")));
+    assert.ok(
+      result.issues.some(
+        (i) => i.includes("here is") || i.includes("professional outreach email"),
+      ),
+    );
   });
 
   it("rejects below is and certainly", () => {
@@ -53,10 +57,27 @@ describe("validateOutreachCopy", () => {
   });
 
   it("enforces follow-up word limit", () => {
-    const longBody = Array(100).fill("word").join(" ");
+    const longBody = Array(101).fill("word").join(" ");
     const result = validateOutreachCopy("Follow up", longBody, "followup");
     assert.equal(result.ok, false);
     assert.ok(result.issues.some((i) => i.includes("word limit")));
+  });
+
+  it("allows natural phrasing later in the body", () => {
+    const body =
+      "We put together a site score snapshot for your team.\n\n" +
+      "We can certainly help if local SEO is a priority. Let me know if the gaps look familiar.\n\n" +
+      "Best regards,\nThe JGDevs Team";
+    const result = validateOutreachCopy("Site score for Acme?", body, "initial");
+    assert.equal(result.ok, true);
+  });
+
+  it("allows free trial mention in message copy", () => {
+    const body =
+      "If the gaps look familiar, PestTrace offers a 7-day free trial for audit-ready logbooks.\n\n" +
+      "Best regards,\nThe PestTrace Team";
+    const result = validateOutreachCopy("Audit snapshot for Acme?", body, "initial");
+    assert.equal(result.ok, true);
   });
 
   it("allows short acronyms and unsubscribe STOP in HTML email footers", () => {

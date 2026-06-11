@@ -34,7 +34,7 @@ def test_rejects_here_is():
         "initial",
     )
     assert ok is False
-    assert any("here is" in i for i in issues)
+    assert any("here is" in i or "professional outreach email" in i for i in issues)
 
 
 def test_rejects_below_is_and_certainly():
@@ -57,7 +57,7 @@ def test_rejects_draft_placeholder():
 
 
 def test_followup_word_limit():
-    long_body = " ".join(["word"] * 100)
+    long_body = " ".join(["word"] * 101)
     ok, issues = validate_outreach_copy("Follow up", long_body, "followup")
     assert ok is False
     assert any("word limit" in i for i in issues)

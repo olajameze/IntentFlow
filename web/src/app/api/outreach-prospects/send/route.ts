@@ -335,6 +335,6 @@ export async function POST(req: Request) {
         { status: allValidation ? 422 : 502 },
       );
     }
-    return NextResponse.json({ ok: true, sent, failed, limit, campaign, firstError });
+    return NextResponse.json({ ok: true, sent, failed, limit, campaign, firstError, firstIssues });
   });
 }

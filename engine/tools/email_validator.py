@@ -17,7 +17,21 @@ with _BLOCKLIST_PATH.open(encoding="utf-8") as f:
 AI_PHRASE_BLOCKLIST: tuple[str, ...] = tuple(_BLOCKLIST["phrases"])
 SPAM_TRIGGERS: tuple[str, ...] = tuple(_BLOCKLIST["spam_triggers"])
 
-WORD_LIMITS: dict[str, int] = {"initial": 220, "followup": 90}
+AI_LEAK_PHRASES: tuple[str, ...] = (
+    "professional outreach email",
+    "professional b2b outreach email",
+    "b2b outreach email",
+    "draft email",
+    "as requested",
+    "as instructed",
+    "following are",
+    "target audience:",
+    "strategy:",
+    "return json",
+    "uk english",
+)
+
+WORD_LIMITS: dict[str, int] = {"initial": 260, "followup": 100}
 
 _MARKDOWN_PATTERNS = [
     re.compile(r"\*\*[^*]+\*\*"),
@@ -71,6 +85,18 @@ def _contains_blocked_phrase(text: str, phrases: tuple[str, ...]) -> str | None:
     return None
 
 
+def _body_preamble_text(body: str) -> str:
+    lines = body.replace("\r\n", "\n").split("\n")
+    return "\n".join(lines[:2])[:320]
+
+
+def _contains_ai_phrase_in_body(body: str) -> str | None:
+    leak = _contains_blocked_phrase(body, AI_LEAK_PHRASES)
+    if leak:
+        return leak
+    return _contains_blocked_phrase(_body_preamble_text(body), AI_PHRASE_BLOCKLIST)
+
+
 def validate_outreach_copy(
     subject: str,
     body: str,
@@ -91,7 +117,7 @@ def validate_outreach_copy(
         issues.append("Subject is a draft placeholder")
 
     for field in (sub, bod):
-        ai = _contains_blocked_phrase(field, AI_PHRASE_BLOCKLIST)
+        ai = _contains_ai_phrase_in_body(bod) if field == bod else _contains_blocked_phrase(field, AI_PHRASE_BLOCKLIST)
         if ai:
             issues.append(f'AI assistant phrase detected: "{ai}"')
         spam = _contains_blocked_phrase(field, SPAM_TRIGGERS)

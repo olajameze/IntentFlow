@@ -1081,17 +1081,20 @@ export function OutreachScreen() {
       const sent = typeof data.sent === "number" ? data.sent : 0;
       const failed = typeof data.failed === "number" ? data.failed : 0;
       const firstError = typeof data.firstError === "string" ? data.firstError : null;
+      const firstIssues = Array.isArray(data.firstIssues)
+        ? `\n${(data.firstIssues as string[]).join("\n")}`
+        : "";
       if (sent === 0 && failed > 0) {
         // All sends failed — surface as an error toast with the underlying SMTP reason
         // so the operator can act (commonly: Brevo IP allowlist, unverified sender, expired creds).
         toast.error(
-          `0 emails sent, ${failed} failed${firstError ? `:\n${firstError}` : ""}`,
+          `0 emails sent, ${failed} failed${firstError ? `:\n${firstError}` : ""}${firstIssues}`,
           { duration: 15000 },
         );
       } else if (failed > 0) {
         // Partial failure — show as warning-style toast with the reason for the failed ones
         toast.error(
-          `Sent ${sent}, but ${failed} failed${firstError ? ` (${firstError})` : ""}`,
+          `Sent ${sent}, but ${failed} failed${firstError ? ` (${firstError})` : ""}${firstIssues}`,
           { duration: 12000 },
         );
       } else {
