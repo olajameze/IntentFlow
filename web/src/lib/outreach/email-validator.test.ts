@@ -131,6 +131,13 @@ describe("validateEmailForSend", () => {
     const result = validateEmailForSend("Audit snapshot for Acme?", html, "initial");
     assert.equal(result.ok, true);
   });
+
+  it("strips markdown emphasis from LLM drafts before validation", () => {
+    const html = `<p data-outreach-body="true" style="margin:0 0 16px 0">We prepared a **seasonal risk brief** for your team.</p>
+      <p data-outreach-body="true" style="margin:0 0 16px 0">It covers rodent and insect pressure this quarter.</p>`;
+    const result = validateEmailForSend("Seasonal pest risk brief for Acme?", html, "initial");
+    assert.equal(result.ok, true);
+  });
 });
 
 describe("plainTextFromHtml", () => {

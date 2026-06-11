@@ -176,8 +176,17 @@ def strip_ai_meta_preamble(text: str) -> str:
     return re.sub(r"\n{3,}", "\n\n", joined).strip()
 
 
+def strip_markdown_formatting(text: str) -> str:
+    text = re.sub(r"\*\*\*([^*]+)\*\*\*", r"\1", text)
+    text = re.sub(r"\*\*([^*]+)\*\*", r"\1", text)
+    text = re.sub(r"(?<![*])\*(?![*])([^*\n]+)\*(?![*])", r"\1", text)
+    text = re.sub(r"^#{1,6}\s+", "", text, flags=re.M)
+    text = re.sub(r"`([^`]+)`", r"\1", text)
+    return re.sub(r"\[([^\]]+)\]\(([^)]+)\)", r"\1", text)
+
+
 def normalize_outreach_body(body: str) -> str:
-    return strip_ai_meta_preamble(re.sub(r"\n{3,}", "\n\n", body).strip())
+    return strip_markdown_formatting(strip_ai_meta_preamble(re.sub(r"\n{3,}", "\n\n", body).strip()))
 
 
 def plain_text_from_html(html: str) -> str:

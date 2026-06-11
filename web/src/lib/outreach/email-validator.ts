@@ -239,6 +239,19 @@ export function stripAiMetaFromHtml(html: string): string {
 }
 
 /** Normalize body text before validation (strip meta + collapse excess newlines). */
+export function stripMarkdownFormatting(text: string): string {
+  return text
+    .replace(/\*\*\*([^*]+)\*\*\*/g, "$1")
+    .replace(/\*\*([^*]+)\*\*/g, "$1")
+    .replace(/(?<![*])\*(?![*])([^*\n]+)\*(?![*])/g, "$1")
+    .replace(/^#{1,6}\s+/gm, "")
+    .replace(/`([^`]+)`/g, "$1")
+    .replace(/\[([^\]]+)\]\(([^)]+)\)/g, "$1");
+}
+
+/** Normalize body text before validation (strip meta + collapse excess newlines). */
 export function normalizeOutreachBody(body: string): string {
-  return stripAiMetaPreamble(body.replace(/\n{3,}/g, "\n\n").trim());
+  return stripMarkdownFormatting(
+    stripAiMetaPreamble(body.replace(/\n{3,}/g, "\n\n").trim()),
+  );
 }

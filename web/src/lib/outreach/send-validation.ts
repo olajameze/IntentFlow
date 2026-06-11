@@ -3,6 +3,7 @@ import {
   plainTextFromHtml,
   stripAiMetaFromHtml,
   stripAiMetaPreamble,
+  stripMarkdownFormatting,
   validateOutreachCopy,
   type OutreachCopyKind,
 } from "@/lib/outreach/email-validator";
@@ -18,7 +19,9 @@ export function validateEmailForSend(
   kind: OutreachCopyKind = "initial",
 ): SendValidationResult {
   const cleanedHtml = stripAiMetaFromHtml(htmlBody);
-  const messagePlain = stripAiMetaPreamble(messagePlainTextFromHtml(cleanedHtml));
+  const messagePlain = stripMarkdownFormatting(
+    stripAiMetaPreamble(messagePlainTextFromHtml(cleanedHtml)),
+  );
   const result = validateOutreachCopy(subject, messagePlain, kind);
   if (!result.ok) {
     return { ok: false, issues: result.issues };
