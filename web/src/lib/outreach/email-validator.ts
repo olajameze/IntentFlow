@@ -238,7 +238,6 @@ export function messagePlainTextFromHtml(html: string): string {
 function isMetaPreambleLine(line: string): boolean {
   const t = line.trim();
   if (!t) return true;
-  const low = t.toLowerCase();
   for (const pattern of AI_PREAMBLE_META_PATTERNS) {
     if (pattern.test(t)) return true;
   }
