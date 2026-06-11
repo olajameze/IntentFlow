@@ -455,7 +455,7 @@ def _render_html(
     """
     paragraphs = [p.strip() for p in plain_text.split("\n\n") if p.strip()]
     body_html = "\n".join(
-        f'<p style="margin:0 0 16px 0;font-size:15px;line-height:1.55;color:#1a1a1a;">'
+        f'<p data-outreach-body="true" style="margin:0 0 16px 0;font-size:15px;line-height:1.55;color:#1a1a1a;">'
         f"{html_escape(p).replace(chr(10), '<br>')}</p>"
         for p in paragraphs
     )

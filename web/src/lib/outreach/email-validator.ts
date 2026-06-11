@@ -136,6 +136,23 @@ export function plainTextFromHtml(html: string): string {
     .trim();
 }
 
+/** Extract LLM message paragraphs only — excludes CTA buttons, trust badges, and opt-out footer. */
+export function messagePlainTextFromHtml(html: string): string {
+  const tagged = [...html.matchAll(/<p[^>]*data-outreach-body="true"[^>]*>([\s\S]*?)<\/p>/gi)];
+  if (tagged.length > 0) {
+    return plainTextFromHtml(tagged.map((m) => `<p>${m[1]}</p>`).join(""));
+  }
+
+  const legacy = [
+    ...html.matchAll(/<p[^>]*style="margin:0 0 16px 0;[^"]*"[^>]*>([\s\S]*?)<\/p>/gi),
+  ];
+  if (legacy.length > 0) {
+    return plainTextFromHtml(legacy.map((m) => `<p>${m[1]}</p>`).join(""));
+  }
+
+  return plainTextFromHtml(html);
+}
+
 function isMetaPreambleLine(line: string): boolean {
   const t = line.trim();
   if (!t) return true;

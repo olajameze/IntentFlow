@@ -1,4 +1,5 @@
 import {
+  messagePlainTextFromHtml,
   plainTextFromHtml,
   stripAiMetaFromHtml,
   stripAiMetaPreamble,
@@ -10,17 +11,18 @@ export type SendValidationResult =
   | { ok: true; subject: string; plainBody: string }
   | { ok: false; issues: string[] };
 
-/** Final gate before SMTP/Resend — validates subject + plain body extracted from HTML. */
+/** Final gate before SMTP/Resend — validates subject + message body (not template footer/CTAs). */
 export function validateEmailForSend(
   subject: string,
   htmlBody: string,
   kind: OutreachCopyKind = "initial",
 ): SendValidationResult {
   const cleanedHtml = stripAiMetaFromHtml(htmlBody);
-  const plainBody = stripAiMetaPreamble(plainTextFromHtml(cleanedHtml));
-  const result = validateOutreachCopy(subject, plainBody, kind);
+  const messagePlain = stripAiMetaPreamble(messagePlainTextFromHtml(cleanedHtml));
+  const result = validateOutreachCopy(subject, messagePlain, kind);
   if (!result.ok) {
     return { ok: false, issues: result.issues };
   }
-  return { ok: true, subject: subject.trim(), plainBody };
+  const fullPlain = stripAiMetaPreamble(plainTextFromHtml(cleanedHtml));
+  return { ok: true, subject: subject.trim(), plainBody: fullPlain };
 }

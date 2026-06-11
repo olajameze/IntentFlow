@@ -3,10 +3,12 @@ import { describe, it } from "node:test";
 import {
   validateOutreachCopy,
   plainTextFromHtml,
+  messagePlainTextFromHtml,
   normalizeOutreachBody,
   stripAiMetaFromHtml,
   stripAiMetaPreamble,
 } from "./email-validator";
+import { validateEmailForSend } from "./send-validation";
 
 describe("validateOutreachCopy", () => {
   const cleanSubject = "Audit readiness for your pest control operation";
@@ -61,6 +63,43 @@ describe("validateOutreachCopy", () => {
     const body =
       "Hi team,\n\nBPCA members often need audit-ready records. PestTrace helps.\n\nReply STOP to opt out.";
     const result = validateOutreachCopy(cleanSubject, body, "initial");
+    assert.equal(result.ok, true);
+  });
+});
+
+describe("messagePlainTextFromHtml", () => {
+  it("extracts only message paragraphs, not footer or CTAs", () => {
+    const html = `<table>
+      <p data-outreach-body="true" style="margin:0 0 16px 0">We put together a snapshot for Acme based on your website.</p>
+      <p data-outreach-body="true" style="margin:0 0 16px 0">It covers documentation visibility and audit readiness.</p>
+      <a href="#">View your snapshot</a>
+      <a href="#">Start 7-day free trial</a>
+      <span>BPCA Certified</span>
+      <td>You received this email because your business was found in a public directory. To opt out, reply with STOP.</td>
+    </table>`;
+    const message = messagePlainTextFromHtml(html);
+    assert.ok(message.includes("snapshot for Acme"));
+    assert.ok(!message.includes("View your snapshot"));
+    assert.ok(!message.includes("public directory"));
+  });
+
+  it("falls back to legacy body paragraph style", () => {
+    const html =
+      '<p style="margin:0 0 16px 0;font-size:15px">Hello from the team.</p>' +
+      '<p style="margin:0 0 16px 0;font-size:15px">Short follow-up copy.</p>' +
+      '<td style="font-size:11px">Long opt-out footer with many words that should not count toward the limit.</td>';
+    const message = messagePlainTextFromHtml(html);
+    assert.equal(message, "Hello from the team.\n\nShort follow-up copy.");
+  });
+});
+
+describe("validateEmailForSend", () => {
+  it("passes when message body is under limit but full HTML exceeds it", () => {
+    const bodyCopy = Array(130).fill("word").join(" ");
+    const html = `<p data-outreach-body="true" style="margin:0 0 16px 0">${bodyCopy}</p>
+      <a>View your snapshot</a>
+      <td>${Array(50).fill("footer").join(" ")}</td>`;
+    const result = validateEmailForSend("Audit snapshot for Acme?", html, "initial");
     assert.equal(result.ok, true);
   });
 });
