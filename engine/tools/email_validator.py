@@ -57,9 +57,9 @@ def _count_urls(text: str) -> int:
     return len(re.findall(r"https?://[^\s]+|www\.[^\s]+", text, re.I))
 
 
-def _has_all_caps_words(text: str) -> bool:
-    # Allow short acronyms (BPCA, STOP) in footers; flag 5+ letter shouty words.
-    return bool(re.search(r"\b[A-Z]{5,}\b", text))
+def _has_shouty_all_caps_words(text: str) -> bool:
+    # Subjects only — bodies may cite BRCGS, HACCP, HTTPS, etc.
+    return bool(re.search(r"\b[A-Z]{6,}\b", text))
 
 
 def _has_duplicate_sentence(text: str) -> bool:
@@ -138,10 +138,8 @@ def validate_outreach_copy(
         issues.append("Body contains duplicated sentences")
     if _count_urls(bod) > 2:
         issues.append("Body contains too many URLs")
-    if _has_all_caps_words(sub):
+    if _has_shouty_all_caps_words(sub):
         issues.append("Subject contains excessive capitalization")
-    if _has_all_caps_words(bod):
-        issues.append("Body contains excessive capitalization")
     if "!" in sub:
         issues.append("Subject contains exclamation mark")
 

@@ -80,6 +80,14 @@ describe("validateOutreachCopy", () => {
     assert.equal(result.ok, true);
   });
 
+  it("allows compliance acronyms in body copy", () => {
+    const body =
+      "Operators in your market often face BRCGS and HACCP documentation expectations.\n\n" +
+      "PestTrace keeps treatment logs audit-ready.\n\nBest regards,\nThe PestTrace Team";
+    const result = validateOutreachCopy("Audit snapshot for Acme?", body, "initial");
+    assert.equal(result.ok, true);
+  });
+
   it("allows short acronyms and unsubscribe STOP in HTML email footers", () => {
     const body =
       "Hi team,\n\nBPCA members often need audit-ready records. PestTrace helps.\n\nReply STOP to opt out.";

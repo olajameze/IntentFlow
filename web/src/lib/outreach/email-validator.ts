@@ -57,9 +57,9 @@ function countUrls(text: string): number {
   return matches?.length ?? 0;
 }
 
-/** Flag shouty words (5+ letters); allow short acronyms e.g. BPCA, STOP in footers. */
-function hasAllCapsWords(text: string): boolean {
-  return /\b[A-Z]{5,}\b/.test(text);
+/** Flag shouty words (6+ letters) in subjects; bodies may cite BRCGS, HACCP, HTTPS, etc. */
+function hasShoutyAllCapsWords(text: string): boolean {
+  return /\b[A-Z]{6,}\b/.test(text);
 }
 
 function hasDuplicateSentence(text: string): boolean {
@@ -139,8 +139,7 @@ export function validateOutreachCopy(
 
   if (hasDuplicateSentence(bod)) issues.push("Body contains duplicated sentences");
   if (countUrls(bod) > 2) issues.push("Body contains too many URLs");
-  if (hasAllCapsWords(sub)) issues.push("Subject contains excessive capitalization");
-  if (hasAllCapsWords(bod)) issues.push("Body contains excessive capitalization");
+  if (hasShoutyAllCapsWords(sub)) issues.push("Subject contains excessive capitalization");
   if (sub.includes("!")) issues.push("Subject contains exclamation mark");
 
   const limit = WORD_LIMITS[kind];
