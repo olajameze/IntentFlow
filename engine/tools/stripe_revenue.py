@@ -76,4 +76,5 @@ def fetch_stripe_revenue(stripe_key: str, date_range: tuple[datetime, datetime] 
         "total_net": round(net, 2),
         "balance": balance,
         "mrr": mrr.get("mrr_estimate", 0),
+        "transaction_rows": txs,
     }

@@ -11,6 +11,11 @@ import { Textarea } from "@/components/ui/textarea";
 import { Switch } from "@/components/ui/switch";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
+import {
+  REVENUE_BRAND_GUIDE,
+  STRIPE_RAK_DOCS,
+  revenueSourceMode,
+} from "@/lib/revenue-setup";
 
 type Biz = {
   id: string;
@@ -456,6 +461,8 @@ export function SettingsScreen() {
   const [businesses, setBusinesses] = useState<Biz[]>([]);
   /** Per-business draft for Umami id (portfolio table edits). */
   const [umamiDraft, setUmamiDraft] = useState<Record<string, string>>({});
+  /** Per-business draft Stripe secret (never pre-filled from server). */
+  const [stripeDraft, setStripeDraft] = useState<Record<string, string>>({});
   const [form, setForm] = useState({
     name: "",
     type: "local_service",
@@ -566,6 +573,35 @@ export function SettingsScreen() {
     }
     toast.success("Umami website id saved");
     setUmamiDraft((d) => {
+      const next = { ...d };
+      delete next[biz.id];
+      return next;
+    });
+    load();
+  };
+
+  const saveStripeKey = async (biz: Biz) => {
+    const key = (biz.id in stripeDraft ? stripeDraft[biz.id] : "").trim();
+    if (!key) {
+      toast.error("Enter a Stripe secret key");
+      return;
+    }
+    const res = await fetch("/api/businesses", {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ id: biz.id, stripe_secret_key: key }),
+    });
+    if (!res.ok) {
+      const data = await res.json().catch(() => ({}));
+      const msg =
+        typeof data?.error === "string"
+          ? data.error
+          : data?.hint ?? "Could not save Stripe key";
+      toast.error(String(msg));
+      return;
+    }
+    toast.success(`Stripe key saved for ${biz.name}`);
+    setStripeDraft((d) => {
       const next = { ...d };
       delete next[biz.id];
       return next;
@@ -689,7 +725,42 @@ export function SettingsScreen() {
                       </Button>
                     </div>
                   </TableCell>
-                  <TableCell>{biz.has_stripe ? "Vaulted" : "—"}</TableCell>
+                  <TableCell>
+                    {revenueSourceMode(biz.id, biz.name) === "manual" ? (
+                      <span className="text-xs text-muted-foreground">
+                        No Stripe — use Revenue → manual / CSV
+                      </span>
+                    ) : (
+                      <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
+                        <Input
+                          type="password"
+                          autoComplete="off"
+                          aria-label={`Stripe key for ${biz.name}`}
+                          className="h-9 min-w-[12rem] font-mono text-xs"
+                          placeholder={biz.has_stripe ? "Replace restricted key…" : "New rk_live_… key"}
+                          value={biz.id in stripeDraft ? stripeDraft[biz.id] : ""}
+                          onChange={(e) =>
+                            setStripeDraft((d) => ({
+                              ...d,
+                              [biz.id]: e.target.value,
+                            }))
+                          }
+                        />
+                        <Button
+                          type="button"
+                          variant="secondary"
+                          size="sm"
+                          className="h-9 shrink-0"
+                          onClick={() => void saveStripeKey(biz)}
+                        >
+                          Save
+                        </Button>
+                        {biz.has_stripe ? (
+                          <span className="text-xs text-muted-foreground shrink-0">Vaulted</span>
+                        ) : null}
+                      </div>
+                    )}
+                  </TableCell>
                   <TableCell className="text-right">
                     <Switch checked={biz.active} onCheckedChange={(v) => toggleActive(biz, v)} aria-label={`Toggle ${biz.name}`} />
                   </TableCell>
@@ -701,6 +772,31 @@ export function SettingsScreen() {
       </Card>
 
       <OutreachPortfolioCard businesses={businesses} />
+
+      <Card>
+        <CardHeader>
+          <CardTitle className="text-base">Revenue by brand</CardTitle>
+        </CardHeader>
+        <CardContent className="space-y-3 text-sm text-muted-foreground">
+          <p>
+            Stripe never shows an existing secret key again — you must{" "}
+            <a href={STRIPE_RAK_DOCS} className="text-foreground underline underline-offset-2" target="_blank" rel="noreferrer">
+              create a new restricted key
+            </a>{" "}
+            and paste it once in Active portfolio above.
+          </p>
+          <ul className="space-y-2">
+            {REVENUE_BRAND_GUIDE.map((row) => (
+              <li key={row.id}>
+                <span className="font-medium text-foreground">{row.label}</span>
+                {" — "}
+                {row.detail}
+              </li>
+            ))}
+          </ul>
+        </CardContent>
+      </Card>
+
       <OutreachWebhookCard />
 
       <Card>

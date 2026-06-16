@@ -23,7 +23,9 @@
     "engine:full": "cd ../engine && python main.py full",
     "engine:revenue": "cd ../engine && python main.py revenue",
     "setup:conversion": "node scripts/setup-marketing-conversion.mjs",
-    "setup:conversion:sql": "node scripts/open-migration-sql-editor.mjs"
+    "setup:conversion:sql": "node scripts/open-migration-sql-editor.mjs",
+    "setup:revenue-migration": "node scripts/apply-revenue-migration.mjs",
+    "vault:stripe-keys": "node scripts/vault-stripe-keys.mjs"
   },
   "dependencies": {
     "@base-ui/react": "^1.4.1",

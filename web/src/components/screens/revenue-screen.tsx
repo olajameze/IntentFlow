@@ -26,6 +26,7 @@ import {
   chartTooltipLabelStyle,
 } from "@/lib/chart-tooltip";
 import { useChartSvgColors } from "@/lib/use-chart-svg-colors";
+import { REVENUE_BRAND_GUIDE, STRIPE_RAK_DOCS } from "@/lib/revenue-setup";
 
 export function RevenueScreen() {
   const svg = useChartSvgColors();
@@ -318,8 +319,28 @@ export function RevenueScreen() {
           <CardHeader>
             <CardTitle className="text-base">Stripe pairing</CardTitle>
           </CardHeader>
-          <CardContent className="text-sm text-muted-foreground space-y-2">
-            <p>Add the restricted key under Settings → Businesses. RevenueTracker syncs every six hours via GitHub Actions.</p>
+          <CardContent className="text-sm text-muted-foreground space-y-3">
+            <p>
+              Only PestTrace and JGDevs use Stripe sync. Weathers has no Stripe — use Import / manual for cash, bank, and invoice revenue.
+            </p>
+            <ul className="space-y-1.5">
+              {REVENUE_BRAND_GUIDE.map((row) => (
+                <li key={row.id}>
+                  <span className="font-medium text-foreground">{row.label}:</span>{" "}
+                  {row.mode === "stripe" ? (
+                    <>
+                      create a{" "}
+                      <a href={STRIPE_RAK_DOCS} className="text-foreground underline underline-offset-2" target="_blank" rel="noreferrer">
+                        new restricted key
+                      </a>
+                      , save in Settings, then run <code className="text-xs">npm run engine:revenue</code>.
+                    </>
+                  ) : (
+                    "manual entry or CSV import on this page."
+                  )}
+                </li>
+              ))}
+            </ul>
             <div className="min-w-0 overflow-hidden rounded-lg border bg-muted/40 p-4">
               <ResponsiveContainer width="100%" height={160}>
                 <BarChart

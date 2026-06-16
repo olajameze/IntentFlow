@@ -39,7 +39,7 @@ def main() -> None:
 
     from agents.orchestrator import run_all, run_traffic_only
     from tools.stripe_revenue import fetch_stripe_revenue
-    from tools.persistence import save_revenue_snapshot
+    from tools.persistence import persist_stripe_revenue
 
     if args.mode == "outreach":
         from agents.outreach import run_all_campaigns, run_outreach
@@ -69,8 +69,8 @@ def main() -> None:
             if not key:
                 continue
             rev = fetch_stripe_revenue(key, (start, end))
-            save_revenue_snapshot(b["id"], rev, snapshot_source="stripe_api")
-            print(f"Saved revenue snapshot for {b.get('name')}")
+            entries = persist_stripe_revenue(b["id"], rev, snapshot_source="stripe_api")
+            print(f"Saved revenue snapshot for {b.get('name')} ({entries} entries synced)")
 
 
 if __name__ == "__main__":

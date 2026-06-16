@@ -27,9 +27,9 @@ from crypto_util import decrypt_stripe_secret
 from supabase_client import get_supabase
 from tools.copy_doctrine import JGDEVS_MARKETING_FOCUS, PESTTRACE_B2B_FOCUS, WEATHERS_SEASONAL_FOCUS
 from tools.llm import generate_personalised_copy, gemini_error_should_use_groq, groq_only_after_gemini_auth_failure
-from tools.persistence import save_revenue_snapshot, save_traffic_snapshot
+from tools.persistence import persist_stripe_revenue, save_traffic_snapshot, sync_stripe_revenue_entries
 from tools.similarweb import scrape_similarweb_traffic
-from tools.stripe_revenue import fetch_stripe_revenue
+from tools.stripe_revenue import fetch_stripe_revenue, fetch_stripe_transactions
 from tools.umami import fetch_umami_stats
 
 
@@ -190,7 +190,12 @@ def run_traffic_only() -> None:
         if key:
             try:
                 rev = fetch_stripe_revenue(key, (start, end))
-                save_revenue_snapshot(b["id"], rev, snapshot_source="stripe_api")
+                persist_stripe_revenue(b["id"], rev, snapshot_source="stripe_api")
+                # Backfill revenue_entries with a longer window (idempotent upsert).
+                entry_start = end - timedelta(days=30)
+                if entry_start < start:
+                    txs = fetch_stripe_transactions(key, entry_start, end)
+                    sync_stripe_revenue_entries(b["id"], txs)
             except Exception as exc:  # noqa: BLE001
                 print(f"Stripe error for {b.get('name')}: {exc}")
 
@@ -258,12 +263,13 @@ def _persist_snapshots_for_window(row: dict[str, Any], start: datetime, end: dat
     if key:
         try:
             rev = fetch_stripe_revenue(key, (start, end))
-            save_revenue_snapshot(bid, rev, snapshot_source="stripe_api")
+            entries = persist_stripe_revenue(bid, rev, snapshot_source="stripe_api")
             rev_summary = (
                 "Stripe: snapshot saved — "
                 f"net={rev.get('total_net') or rev.get('net_revenue')}, "
                 f"gross={rev.get('total_gross') or rev.get('total_revenue')}, "
-                f"transactions={rev.get('transactions') or rev.get('transaction_count')}"
+                f"transactions={rev.get('transactions') or rev.get('transaction_count')}, "
+                f"entries_synced={entries}"
             )
         except Exception as exc:  # noqa: BLE001
             rev_summary = f"Stripe: error ({exc})"
