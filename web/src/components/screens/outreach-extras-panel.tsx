@@ -5,6 +5,7 @@ import { toast } from "sonner";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
+import styles from "./outreach-extras-panel.module.css";
 
 type Campaign = "pesttrace" | "weathers" | "jgdevs";
 
@@ -133,10 +134,11 @@ export function OutreachExtrasPanel({ campaign }: { campaign: Campaign }) {
                   <span>{stage.label}</span>
                   <span className="tabular-nums font-medium">{stage.count}</span>
                 </div>
-                <div className="h-2 rounded-full bg-muted">
-                  <div
-                    className="h-2 rounded-full bg-primary transition-all"
-                    style={{ width: `${Math.round((stage.count / maxFunnel) * 100)}%` }}
+                <div className={styles.funnelTrack}>
+                  <progress
+                    value={stage.count}
+                    max={maxFunnel}
+                    aria-label={`${stage.label}: ${stage.count}`}
                   />
                 </div>
               </div>
