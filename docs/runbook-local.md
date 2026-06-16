@@ -14,6 +14,7 @@ Use this checklist the first time (or after a clean clone) before reporting “n
    - `20260608000000_outreach_event_types.sql` (allows `sent`, `delivered`, `meeting_booked`, …)
    - `20260608100000_outreach_webhook_subscriptions.sql` (outbound integrator webhooks)
    - `20260609000000_outreach_campaign_stats_rpc.sql` (single-query KPI RPC + deliverability fields)
+   - `20260617000000_outreach_platform_v2.sql` (inbox messages, suppression, alerts, nurture, HubSpot, timeline, LinkedIn tasks, operator auth tables)
 4. Confirm `businesses` exists and optionally seed rows. `GET /api/health` should report `outreachSchemaReady: true` and `outreachStatsRpcReady: true`.
 
 ## 2. Environment
@@ -108,8 +109,26 @@ cd engine && python -c "import config; print('Groq:', 'yes' if config.groq_api_k
    - `outreach-followups.yml` → `POST /api/outreach-prospects/send-followups`
    - `outreach-ab-winner.yml` daily → `POST /api/outreach-prospects/ab-winner`
    - `outreach-poll-replies.yml` → `POST /api/outreach-poll-replies` (IMAP fallback)
+   - `outreach-nurture.yml` → `POST /api/outreach-nurture/send` (post-conversion nurture)
+   - `outreach-intent-sync.yml` → `POST /api/outreach/intent-sync` (Umami site intent)
+   - `outreach-send-stats.yml` → `POST /api/outreach/send-stats` (smart send-time buckets)
 10. **Settings → Outbound webhook subscriptions** — register Zapier/CRM endpoints without exposing service keys.
-11. Monitor **Outreach** KPI strip — benchmark targets: open 40–60%, click 5–15%, reply 2–8%, bounce &lt; 3%. Hot leads and `booked_at` fill from clicks + conversion webhooks. Deliverability row shows `delivery_rate`, in-flight, and verify failures.
+11. **Settings → Outreach email alerts / Suppression centre / HubSpot** — configure email-only hot-lead alerts, DNC list, and HubSpot sync (`HUBSPOT_ACCESS_TOKEN`).
+12. **Outreach → Inbox** — unified reply threads, LLM suggest reply, Weathers job log, customer timeline.
+13. Monitor **Outreach** KPI strip — benchmark targets: open 40–60%, click 5–15%, reply 2–8%, bounce &lt; 3%. Hot leads and `booked_at` fill from clicks + conversion webhooks. Deliverability row shows `delivery_rate`, in-flight, and verify failures.
+
+### Outreach platform v2 env vars
+
+Add to `web/.env.local` / Vercel as needed:
+
+- `HUBSPOT_ACCESS_TOKEN` — HubSpot private app token
+- `HUBSPOT_PIPELINE_ID` — optional deal pipeline
+- `HUBSPOT_WEBHOOK_SECRET` — verify inbound HubSpot webhooks
+- `CALENDLY_WEBHOOK_SECRET` — verify Calendly signing secret
+- `OUTREACH_ALERT_FROM_EMAIL` — alert sender (defaults to campaign from address)
+- `OUTREACH_ALERT_TO_EMAIL` — fallback ops inbox when no alert rules exist
+- `OUTREACH_SMART_SEND=1` — snap follow-up sends to top UTC hours from `outreach_send_stats`
+- `OUTREACH_REQUIRE_AUTH=1` — require Supabase login for dashboard (cron uses `CRON_SECRET` Bearer bypass)
 
 Run all enabled campaigns:
 

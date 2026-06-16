@@ -16,7 +16,7 @@ import { getPublicBaseUrl } from "@/lib/outreach/public-base-url";
 import { isConfiguredForCampaign } from "@/lib/outreach/campaign-env";
 import { validateEmailForSend } from "@/lib/outreach/send-validation";
 import { sendOutreachEmail } from "@/lib/outreach/send-mail";
-import { canSendThisHour, sendJitterMs } from "@/lib/outreach/send-pacing";
+import { canSendThisHour, sendJitterMs, adjustSendTimeForSmartSend } from "@/lib/outreach/send-pacing";
 import { injectTracking } from "@/lib/outreach/tracking";
 import { withSupabaseRoute } from "@/lib/with-supabase-route";
 
@@ -154,7 +154,10 @@ export async function POST(req: Request) {
 
         const newCount = (p.followup_count ?? 0) + 1;
         const sentAtIso = String(p.sent_at);
-        const nextSend = nextFollowUpAt(sentAtIso, newCount);
+        const baseNext = nextFollowUpAt(sentAtIso, newCount);
+        const nextSend = baseNext
+          ? await adjustSendTimeForSmartSend(sb, campaign, baseNext, String(p.country ?? "INT"))
+          : null;
         const raw = (p.raw && typeof p.raw === "object" ? p.raw : {}) as Record<string, unknown>;
 
         await sb

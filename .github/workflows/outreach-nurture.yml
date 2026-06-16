@@ -1,0 +1,33 @@
+name: Outreach Nurture (Daily)
+
+on:
+  workflow_dispatch: {}
+  schedule:
+    - cron: "0 10 * * *"
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  nurture:
+    runs-on: ubuntu-latest
+    env:
+      DASHBOARD_URL: ${{ secrets.OUTREACH_DASHBOARD_URL }}
+      CRON_SECRET: ${{ secrets.CRON_SECRET }}
+    steps:
+      - name: POST nurture send
+        run: |
+          set -e
+          if [ -z "${DASHBOARD_URL:-}" ]; then
+            echo "::error::Secret OUTREACH_DASHBOARD_URL is empty"
+            exit 1
+          fi
+          AUTH=""
+          if [ -n "${CRON_SECRET:-}" ]; then
+            AUTH="-H \"Authorization: Bearer ${CRON_SECRET}\""
+          fi
+          eval curl -fsSL -X POST $AUTH "${DASHBOARD_URL}/api/outreach-nurture/send" -w "\nHTTP %{http_code}\n"

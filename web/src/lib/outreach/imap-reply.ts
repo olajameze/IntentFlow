@@ -109,7 +109,8 @@ export async function pollImapReplies(
   const { data: prospectPool } = await sb
     .from("outreach_prospects")
     .select("id, campaign, email, raw")
-    .in("status", ["sent", "replied"])
+    .in("status", ["sent"])
+    .not("sent_at", "is", null)
     .order("updated_at", { ascending: false })
     .limit(500);
 

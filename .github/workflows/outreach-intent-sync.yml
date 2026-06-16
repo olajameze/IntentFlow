@@ -1,0 +1,29 @@
+name: Outreach Intent Sync (Daily)
+
+on:
+  workflow_dispatch: {}
+  schedule:
+    - cron: "15 6 * * *"
+
+permissions:
+  contents: read
+
+jobs:
+  intent-sync:
+    runs-on: ubuntu-latest
+    env:
+      DASHBOARD_URL: ${{ secrets.OUTREACH_DASHBOARD_URL }}
+      CRON_SECRET: ${{ secrets.CRON_SECRET }}
+    steps:
+      - name: POST Umami intent ingest
+        run: |
+          set -e
+          if [ -z "${DASHBOARD_URL:-}" ]; then
+            echo "::error::Secret OUTREACH_DASHBOARD_URL is empty"
+            exit 1
+          fi
+          AUTH=""
+          if [ -n "${CRON_SECRET:-}" ]; then
+            AUTH="-H \"Authorization: Bearer ${CRON_SECRET}\""
+          fi
+          eval curl -fsSL -X POST $AUTH "${DASHBOARD_URL}/api/outreach/intent-sync" -w "\nHTTP %{http_code}\n"

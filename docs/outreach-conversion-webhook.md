@@ -137,3 +137,21 @@ Register subscriptions via `POST /api/outreach-webhooks/subscriptions` (service 
 ```
 
 IntentFlow signs payloads with `X-IntentFlow-Signature` (HMAC-SHA256). Events fire on reply, conversion webhook, and first hot-tier click.
+
+## Calendly booking (Weathers)
+
+When a prospect books via Calendly, configure a webhook to:
+
+```
+POST https://<your-intentflow-dashboard>/api/outreach-webhooks/calendly
+```
+
+Set `CALENDLY_WEBHOOK_SECRET` in the dashboard env. Calendly sends `invitee.created` events; IntentFlow maps invitee email → prospect and emits `meeting_booked` / conversion via the same pipeline as `/api/outreach-conversion`.
+
+Ensure booking links preserve `?p={prospect_id}` from outreach CTAs so attribution survives even when using Calendly directly.
+
+## HubSpot CRM sync
+
+- **Outbound:** Contacts and deals sync automatically on reply and conversion when `HUBSPOT_ACCESS_TOKEN` is set. Manual batch: **Settings → HubSpot → Sync recent replies**.
+- **Inbound:** Register HubSpot workflow webhook → `POST /api/outreach-webhooks/hubspot` to pause sequences when deals are won/lost.
+- Env: `HUBSPOT_ACCESS_TOKEN`, optional `HUBSPOT_PIPELINE_ID`, `HUBSPOT_WEBHOOK_SECRET`.

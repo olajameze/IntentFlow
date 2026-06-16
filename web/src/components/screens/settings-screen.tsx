@@ -12,6 +12,11 @@ import { Switch } from "@/components/ui/switch";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import {
+  OutreachAlertRulesCard,
+  SuppressionListCard,
+  HubSpotConnectionCard,
+} from "@/components/screens/outreach-settings-cards";
+import {
   REVENUE_BRAND_GUIDE,
   STRIPE_RAK_DOCS,
   revenueSourceMode,
@@ -798,6 +803,12 @@ export function SettingsScreen() {
       </Card>
 
       <OutreachWebhookCard />
+
+      <OutreachAlertRulesCard />
+
+      <SuppressionListCard />
+
+      <HubSpotConnectionCard />
 
       <Card>
         <CardHeader>

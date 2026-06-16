@@ -1,7 +1,11 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
+import { syncProspectToHubSpot } from "@/lib/integrations/hubspot";
 import { engagementUpdateFields } from "@/lib/outreach/engagement";
 import { invalidateOutreachStats } from "@/lib/outreach/campaign-stats";
 import { emitOutreachWebhooks } from "@/lib/outreach/emit-webhook";
+import { insertOutreachMessage, logTimelineEvent } from "@/lib/outreach/messages";
+import { sendOutreachAlerts } from "@/lib/outreach/send-alert";
+import { addToSuppressionList } from "@/lib/outreach/suppression";
 
 const STOP_PATTERNS = [
   /\bstop\b/i,
@@ -23,9 +27,11 @@ export type ReplyHandlerInput = {
   fromEmail: string;
   bodyText: string;
   subject?: string;
+  messageId?: string;
+  inReplyTo?: string;
 };
 
-/** Process inbound reply — stop sequence, log event, optional unsubscribe. */
+/** Process inbound reply — stop sequence, log event, persist message, alert ops. */
 export async function handleInboundReply(
   sb: SupabaseClient,
   input: ReplyHandlerInput,
@@ -40,6 +46,18 @@ export async function handleInboundReply(
     .maybeSingle();
 
   if (!prospect) return { ok: false, unsubscribed: false };
+
+  const isFirstReply = !prospect.replied_at;
+
+  await insertOutreachMessage(sb, {
+    prospectId: input.prospectId,
+    direction: "inbound",
+    subject: input.subject,
+    bodyText: input.bodyText,
+    messageId: input.messageId,
+    inReplyTo: input.inReplyTo,
+    occurredAt: now,
+  });
 
   const tierFields = engagementUpdateFields({
     ...prospect,
@@ -57,21 +75,56 @@ export async function handleInboundReply(
 
   if (unsubscribed) {
     updates.status = "unsubscribed";
+    await addToSuppressionList(sb, input.fromEmail || prospect.email, "unsubscribe", input.campaign);
   }
 
   await sb.from("outreach_prospects").update(updates).eq("id", input.prospectId);
 
-  await sb.from("outreach_email_events").insert({
-    prospect_id: input.prospectId,
-    campaign: input.campaign,
-    event_type: unsubscribed ? "unsubscribe" : "reply",
+  if (isFirstReply) {
+    await sb.from("outreach_email_events").insert({
+      prospect_id: input.prospectId,
+      campaign: input.campaign,
+      event_type: unsubscribed ? "unsubscribe" : "reply",
+    });
+  }
+
+  await logTimelineEvent(sb, {
+    prospectId: input.prospectId,
+    businessId: prospect.business_id,
+    eventType: unsubscribed ? "unsubscribe" : "reply",
+    title: unsubscribed ? "Prospect unsubscribed" : "Prospect replied",
+    detail: { subject: input.subject, preview: input.bodyText.slice(0, 200) },
+    occurredAt: now,
   });
 
   await emitOutreachWebhooks(sb, {
     event: unsubscribed ? "unsubscribe" : "reply",
     campaign: input.campaign,
     prospectId: input.prospectId,
-    email: input.fromEmail,
+    email: input.fromEmail || prospect.email,
+  });
+
+  if (isFirstReply && !unsubscribed) {
+    await sendOutreachAlerts(sb, "reply", {
+      prospectId: input.prospectId,
+      campaign: input.campaign,
+      prospectName: prospect.name,
+      prospectEmail: prospect.email,
+    });
+  }
+
+  void syncProspectToHubSpot(sb, {
+    id: prospect.id,
+    email: prospect.email,
+    name: prospect.name,
+    campaign: prospect.campaign,
+    phone: prospect.phone,
+    city: prospect.city,
+    country: prospect.country,
+    interested_at: prospect.interested_at,
+    meeting_booked_at: prospect.meeting_booked_at,
+    booked_at: prospect.booked_at ?? now,
+    converted_at: prospect.converted_at,
   });
 
   invalidateOutreachStats(input.campaign);

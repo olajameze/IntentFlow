@@ -1,13 +1,20 @@
+import Link from "next/link";
 import { OutreachScreen } from "@/components/screens/outreach-screen";
+import { Button } from "@/components/ui/button";
 
 export default function OutreachPage() {
   return (
     <div className="min-w-0 space-y-4">
-      <div>
-        <h1 className="text-2xl font-semibold tracking-tight">PestTrace Outreach</h1>
-        <p className="text-sm text-muted-foreground">
-          B2B email pipeline — compliance-focused emails to pest control businesses across UK, USA, Canada, and Australia.
-        </p>
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <div>
+          <h1 className="text-2xl font-semibold tracking-tight">Outreach</h1>
+          <p className="text-sm text-muted-foreground">
+            Multi-campaign email pipeline — PestTrace, Weathers, JGDevs.
+          </p>
+        </div>
+        <Button asChild variant="outline" size="sm">
+          <Link href="/outreach/inbox">Open inbox →</Link>
+        </Button>
       </div>
       <OutreachScreen />
     </div>

@@ -1,0 +1,29 @@
+name: Outreach Send Stats (Nightly)
+
+on:
+  workflow_dispatch: {}
+  schedule:
+    - cron: "30 2 * * *"
+
+permissions:
+  contents: read
+
+jobs:
+  send-stats:
+    runs-on: ubuntu-latest
+    env:
+      DASHBOARD_URL: ${{ secrets.OUTREACH_DASHBOARD_URL }}
+      CRON_SECRET: ${{ secrets.CRON_SECRET }}
+    steps:
+      - name: POST send-time aggregation
+        run: |
+          set -e
+          if [ -z "${DASHBOARD_URL:-}" ]; then
+            echo "::error::Secret OUTREACH_DASHBOARD_URL is empty"
+            exit 1
+          fi
+          AUTH=""
+          if [ -n "${CRON_SECRET:-}" ]; then
+            AUTH="-H \"Authorization: Bearer ${CRON_SECRET}\""
+          fi
+          eval curl -fsSL -X POST $AUTH "${DASHBOARD_URL}/api/outreach/send-stats" -w "\nHTTP %{http_code}\n"

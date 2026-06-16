@@ -3,6 +3,7 @@ import { NextResponse } from "next/server";
 import { invalidateOutreachStats } from "@/lib/outreach/campaign-stats";
 import { handleInboundReply } from "@/lib/outreach/reply-handler";
 import { outreachLog } from "@/lib/outreach/logger";
+import { addToSuppressionList } from "@/lib/outreach/suppression";
 import { withSupabaseRoute } from "@/lib/with-supabase-route";
 
 type BrevoEvent = {
@@ -110,6 +111,7 @@ export async function POST(req: Request) {
           event_type: "delivered",
         });
       } else if (eventType === "hard_bounce" || eventType === "soft_bounce" || eventType === "blocked") {
+        if (email) await addToSuppressionList(sb, email, "bounce", campaign);
         await sb
           .from("outreach_prospects")
           .update({ status: "bounced", updated_at: now })
@@ -120,6 +122,7 @@ export async function POST(req: Request) {
           event_type: "bounce",
         });
       } else if (eventType === "spam" || eventType === "invalid") {
+        if (email) await addToSuppressionList(sb, email, "complaint", campaign);
         await sb
           .from("outreach_prospects")
           .update({ status: "unsubscribed", updated_at: now })
@@ -130,12 +133,19 @@ export async function POST(req: Request) {
           event_type: "unsubscribe",
         });
       } else if (eventType === "inbound_email" || eventType === "reply") {
+        const bodyText =
+          (event as { html?: string; text?: string }).text ||
+          (event as { html?: string }).html?.replace(/<[^>]+>/g, " ") ||
+          event.reason ||
+          event.subject ||
+          "";
         await handleInboundReply(sb, {
           prospectId,
           campaign,
           fromEmail: email || "",
-          bodyText: event.reason || event.subject || "",
+          bodyText,
           subject: event.subject,
+          messageId: event["message-id"],
         });
       }
 

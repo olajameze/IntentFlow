@@ -1,7 +1,11 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
+import { syncProspectToHubSpot } from "@/lib/integrations/hubspot";
 import { engagementUpdateFields } from "@/lib/outreach/engagement";
 import { invalidateOutreachStats } from "@/lib/outreach/campaign-stats";
 import { emitOutreachWebhooks } from "@/lib/outreach/emit-webhook";
+import { logTimelineEvent } from "@/lib/outreach/messages";
+import { enrollInNurture } from "@/lib/outreach/nurture";
+import { sendOutreachAlerts } from "@/lib/outreach/send-alert";
 
 export type ConversionEventType =
   | "booking_started"
@@ -182,6 +186,43 @@ export async function recordOutreachConversion(
         });
       }
     }
+
+    await logTimelineEvent(sb, {
+      prospectId: prospect.id,
+      businessId: prospect.business_id,
+      eventType: "converted",
+      title: "Conversion recorded",
+      detail: { event: params.event, amount: params.amount, currency: params.currency },
+      occurredAt: now,
+    });
+
+    await sendOutreachAlerts(sb, "booked", {
+      prospectId: prospect.id,
+      campaign: prospect.campaign,
+      prospectName: prospect.name,
+      prospectEmail: prospect.email,
+      extra: params.event,
+    });
+    if (updates.converted_at) {
+      await sendOutreachAlerts(sb, "converted", {
+        prospectId: prospect.id,
+        campaign: prospect.campaign,
+        prospectName: prospect.name,
+        prospectEmail: prospect.email,
+      });
+    }
+
+    await enrollInNurture(sb, prospect.id, prospect.campaign);
+    void syncProspectToHubSpot(sb, {
+      id: prospect.id,
+      email: prospect.email,
+      name: prospect.name,
+      campaign: prospect.campaign,
+      interested_at: (updates.interested_at as string) ?? prospect.interested_at,
+      meeting_booked_at: (updates.meeting_booked_at as string) ?? prospect.meeting_booked_at,
+      booked_at: now,
+      converted_at: (updates.converted_at as string) ?? prospect.converted_at,
+    });
 
     invalidateOutreachStats(prospect.campaign);
     return { booked: true, duplicate: false };

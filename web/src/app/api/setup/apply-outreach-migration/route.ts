@@ -57,6 +57,9 @@ export async function POST(req: Request) {
         "20260608000000_outreach_event_types",
         "20260608100000_outreach_webhook_subscriptions",
         "20260609000000_outreach_campaign_stats_rpc",
+        "20260610000000_outreach_snapshots",
+        "20260611000000_outreach_jgdevs_campaign",
+        "20260617000000_outreach_platform_v2",
       ],
     });
   } catch (e) {

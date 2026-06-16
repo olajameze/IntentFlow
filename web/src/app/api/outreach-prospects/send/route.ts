@@ -11,13 +11,16 @@ import { verifyOutreachEmail } from "@/lib/outreach/email-verify";
 import { nextFollowUpAt } from "@/lib/outreach/followup-schedule";
 import { outreachLog } from "@/lib/outreach/logger";
 import { getPublicBaseUrl } from "@/lib/outreach/public-base-url";
-import { canSendThisHour, sendJitterMs } from "@/lib/outreach/send-pacing";
+import { canSendThisHour, sendJitterMs, adjustSendTimeForSmartSend } from "@/lib/outreach/send-pacing";
 import { stripAiMetaFromHtml } from "@/lib/outreach/email-validator";
 import { validateEmailForSend } from "@/lib/outreach/send-validation";
 import { sendOutreachEmail, verifySmtpForCampaign } from "@/lib/outreach/send-mail";
 import { smtpTroubleshootingHint } from "@/lib/outreach/smtp-errors";
 import { injectTracking } from "@/lib/outreach/tracking";
 import { applySnapshotUrlToHtml } from "@/lib/outreach/snapshot-send";
+import { checkSuppressionBeforeSend } from "@/lib/outreach/suppression";
+import { insertOutreachMessage } from "@/lib/outreach/messages";
+import { createLinkedInTaskIfNeeded } from "@/lib/outreach/nurture";
 import { withSupabaseRoute } from "@/lib/with-supabase-route";
 
 function normalizeCampaign(raw: unknown): string {
@@ -85,6 +88,15 @@ export async function POST(req: Request) {
       raw?: Record<string, unknown> | null;
     }) => {
       const campaign = normalizeCampaign(prospect.campaign);
+
+      const suppressed = await checkSuppressionBeforeSend(sb, prospect.email, campaign);
+      if (suppressed.blocked) {
+        return {
+          ok: false as const,
+          status: 422,
+          error: `Email suppressed (${suppressed.reason ?? "listed"})`,
+        };
+      }
 
       const hourly = await canSendThisHour(sb, campaign);
       if (!hourly.ok) {
@@ -172,7 +184,10 @@ export async function POST(req: Request) {
 
       const now = new Date();
       const nowIso = now.toISOString();
-      const nextSendAt = nextFollowUpAt(nowIso, 0);
+      const baseNextSend = nextFollowUpAt(nowIso, 0);
+      const nextSendAt = baseNextSend
+        ? await adjustSendTimeForSmartSend(sb, campaign, baseNextSend, String(prospect.country ?? "INT"))
+        : null;
       const raw = (prospect.raw && typeof prospect.raw === "object" ? prospect.raw : {}) as Record<
         string,
         unknown
@@ -205,6 +220,18 @@ export async function POST(req: Request) {
         campaign,
         event_type: "sent",
       });
+
+      await insertOutreachMessage(sb, {
+        prospectId: prospect.id,
+        direction: "outbound",
+        subject: validation.subject,
+        bodyHtml: trackedHtml,
+        bodyText: validation.plainBody,
+        messageId: sendResult.messageId,
+        occurredAt: nowIso,
+      });
+
+      await createLinkedInTaskIfNeeded(sb, prospect.id, campaign);
 
       invalidateOutreachStats(campaign);
 

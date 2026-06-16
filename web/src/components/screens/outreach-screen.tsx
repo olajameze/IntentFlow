@@ -13,6 +13,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { plainTextFromHtml, stripAiMetaFromHtml, stripAiMetaPreamble } from "@/lib/outreach/email-validator";
 import { parseProspectSnapshotMeta, snapshotBadgeLabel } from "@/lib/outreach/snapshot-types";
+import { OutreachExtrasPanel } from "@/components/screens/outreach-extras-panel";
 
 /** Client-side Actions URL when `NEXT_PUBLIC_GITHUB_REPO` is set (token may still be missing). */
 function githubOutreachWorkflowUrl(): string | null {
@@ -1165,6 +1166,7 @@ export function OutreachScreen() {
 
       {/* KPI panel — conversion funnel + hot leads + webhook revenue */}
       <StatsPanel stats={stats} updating={statsUpdating} />
+      <OutreachExtrasPanel campaign={campaign} />
       {(stats?.hot_leads ?? 0) > 0 && (
         <div className="rounded-lg border border-orange-500/30 bg-orange-500/10 px-3 py-2 text-xs text-orange-200">
           <span className="font-medium text-orange-100">{stats?.hot_leads} hot lead(s)</span>

@@ -53,3 +53,62 @@ export async function canSendThisHour(
   }
   return { ok: true };
 }
+
+export function isSmartSendEnabled(): boolean {
+  return process.env.OUTREACH_SMART_SEND === "1";
+}
+
+/** Top UTC hours by clicks for campaign (optionally filtered by country). */
+export async function getPreferredSendHours(
+  sb: SupabaseClient,
+  campaign: string,
+  country = "INT",
+): Promise<number[]> {
+  const { data } = await sb
+    .from("outreach_send_stats")
+    .select("hour_utc, clicks, opens")
+    .eq("campaign", campaign)
+    .eq("country", country)
+    .order("clicks", { ascending: false })
+    .limit(5);
+
+  if (!data?.length) {
+    const { data: fallback } = await sb
+      .from("outreach_send_stats")
+      .select("hour_utc, clicks, opens")
+      .eq("campaign", campaign)
+      .order("clicks", { ascending: false })
+      .limit(3);
+    return (fallback ?? []).map((r) => r.hour_utc).filter((h) => typeof h === "number");
+  }
+
+  return data.map((r) => r.hour_utc).filter((h) => typeof h === "number");
+}
+
+/** Snap a target ISO timestamp to the next preferred UTC hour when smart send is on. */
+export async function adjustSendTimeForSmartSend(
+  sb: SupabaseClient,
+  campaign: string,
+  targetIso: string,
+  country?: string | null,
+): Promise<string> {
+  if (!isSmartSendEnabled()) return targetIso;
+
+  const bucket = country && country !== "all" ? country : "INT";
+  const hours = await getPreferredSendHours(sb, campaign, bucket);
+  if (!hours.length) return targetIso;
+
+  const target = new Date(targetIso);
+  const preferred = new Set(hours.slice(0, 2));
+
+  for (let dayOffset = 0; dayOffset < 14; dayOffset += 1) {
+    for (const hour of [...preferred].sort((a, b) => a - b)) {
+      const candidate = new Date(target);
+      candidate.setUTCDate(candidate.getUTCDate() + dayOffset);
+      candidate.setUTCHours(hour, 15, 0, 0);
+      if (candidate >= target) return candidate.toISOString();
+    }
+  }
+
+  return targetIso;
+}

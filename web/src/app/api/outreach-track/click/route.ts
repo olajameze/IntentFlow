@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { computeEngagementTier, engagementUpdateFields } from "@/lib/outreach/engagement";
 import { invalidateOutreachStats } from "@/lib/outreach/campaign-stats";
 import { emitOutreachWebhooks } from "@/lib/outreach/emit-webhook";
+import { sendOutreachAlerts } from "@/lib/outreach/send-alert";
 import { getSupabaseAdmin } from "@/lib/supabase-admin";
 
 /**
@@ -99,6 +100,11 @@ export async function GET(req: Request) {
           campaign: camp,
           prospectId: prospect.id,
           email: prospect.email ?? undefined,
+        });
+        await sendOutreachAlerts(sb, "hot_lead", {
+          prospectId: prospect.id,
+          campaign: camp,
+          prospectEmail: prospect.email,
         });
       }
     }
