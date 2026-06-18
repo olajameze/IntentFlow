@@ -73,8 +73,45 @@ def _word_count(text: str) -> int:
     return len([w for w in text.strip().split() if w])
 
 
+_PORTFOLIO_URL_HOSTS = (
+    "pesttrace.com",
+    "weatherspestsolutions.co.uk",
+    "jgdev.co.uk",
+)
+
+
+def _is_template_or_portfolio_url(raw: str) -> bool:
+    trimmed = raw.strip().rstrip(".,;:!?)")
+    try:
+        href = f"https://{trimmed}" if trimmed.lower().startswith("www.") else trimmed
+        from urllib.parse import urlparse
+
+        parsed = urlparse(href)
+        host = (parsed.hostname or "").lower().removeprefix("www.")
+        if any(host == d or host.endswith(f".{d}") for d in _PORTFOLIO_URL_HOSTS):
+            return True
+        path = (parsed.path or "").lower()
+        if path.startswith("/r/") or path.startswith("/q/") or "/api/outreach-track/" in path:
+            return True
+    except Exception:  # noqa: BLE001
+        return False
+    return False
+
+
+def _strip_signoff_url_lines(text: str) -> str:
+    lines = []
+    for line in text.split("\n"):
+        t = line.strip()
+        if re.fullmatch(r"https?://\S+", t, re.I) or re.fullmatch(r"www\.\S+", t, re.I):
+            continue
+        lines.append(line)
+    return "\n".join(lines)
+
+
 def _count_urls(text: str) -> int:
-    return len(re.findall(r"https?://[^\s]+|www\.[^\s]+", text, re.I))
+    cleaned = _strip_signoff_url_lines(text)
+    matches = re.findall(r"https?://[^\s<>\"']+|www\.[^\s<>\"']+", cleaned, re.I)
+    return sum(1 for m in matches if not _is_template_or_portfolio_url(m))
 
 
 def _has_shouty_all_caps_words(text: str) -> bool:

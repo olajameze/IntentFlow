@@ -140,12 +140,7 @@ export async function POST(req: Request) {
           error: snapshotResolved.error,
         };
       }
-      const trackedHtml = injectTracking(
-        snapshotResolved.html,
-        prospect.id,
-        baseUrl,
-      );
-      const validation = validateEmailForSend(subject, trackedHtml, "initial");
+      const validation = validateEmailForSend(subject, snapshotResolved.html, "initial");
       if (!validation.ok) {
         return {
           ok: false as const,
@@ -154,6 +149,11 @@ export async function POST(req: Request) {
           issues: validation.issues,
         };
       }
+      const trackedHtml = injectTracking(
+        snapshotResolved.html,
+        prospect.id,
+        baseUrl,
+      );
 
       let sendResult;
       try {

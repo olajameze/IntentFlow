@@ -74,9 +74,47 @@ function wordCount(text: string): number {
   return text.trim().split(/\s+/).filter(Boolean).length;
 }
 
+/** Brand sites + snapshot/tracking links are rendered as buttons — not raw body spam. */
+const PORTFOLIO_URL_HOSTS = [
+  "pesttrace.com",
+  "weatherspestsolutions.co.uk",
+  "jgdev.co.uk",
+];
+
+function isTemplateOrPortfolioUrl(raw: string): boolean {
+  const trimmed = raw.trim().replace(/[.,;:!?)]+$/, "");
+  try {
+    const href = trimmed.startsWith("www.") ? `https://${trimmed}` : trimmed;
+    const u = new URL(href);
+    const host = u.hostname.replace(/^www\./, "").toLowerCase();
+    if (PORTFOLIO_URL_HOSTS.some((d) => host === d || host.endsWith(`.${d}`))) {
+      return true;
+    }
+    const path = u.pathname.toLowerCase();
+    if (path.startsWith("/r/") || path.startsWith("/q/") || path.includes("/api/outreach-track/")) {
+      return true;
+    }
+  } catch {
+    /* not a parseable URL */
+  }
+  return false;
+}
+
+/** Drop sign-off lines that are only a URL (CTA buttons carry links). */
+function stripSignOffUrlLines(text: string): string {
+  return text
+    .split("\n")
+    .filter((line) => {
+      const t = line.trim();
+      return !/^https?:\/\/\S+$/i.test(t) && !/^www\.\S+$/i.test(t);
+    })
+    .join("\n");
+}
+
 function countUrls(text: string): number {
-  const matches = text.match(/https?:\/\/[^\s]+|www\.[^\s]+/gi);
-  return matches?.length ?? 0;
+  const cleaned = stripSignOffUrlLines(text);
+  const matches = cleaned.match(/https?:\/\/[^\s<>"']+|www\.[^\s<>"']+/gi) ?? [];
+  return matches.filter((m) => !isTemplateOrPortfolioUrl(m)).length;
 }
 
 /** Flag shouty words (6+ letters) in subjects; bodies may cite BRCGS, HACCP, HTTPS, etc. */

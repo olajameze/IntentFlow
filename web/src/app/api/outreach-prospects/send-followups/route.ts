@@ -129,18 +129,14 @@ export async function POST(req: Request) {
       const branding = brandingFromSettings(settings, campaign);
       const ctaTemplate = settings?.cta_url_template || branding.ctaUrl;
       const ctaUrl = ctaTemplate.replace("{prospect_id}", p.id);
-      const html = injectTracking(
-        renderFollowUpHtmlForProspect(branding, bodyText, p.id, ctaUrl),
-        p.id,
-        baseUrl,
-      );
-
-      const validation = validateEmailForSend(subject, html, "followup");
+      const htmlBody = renderFollowUpHtmlForProspect(branding, bodyText, p.id, ctaUrl);
+      const validation = validateEmailForSend(subject, htmlBody, "followup");
       if (!validation.ok) {
         failed++;
         errors.push(`${p.email}: validation failed — ${validation.issues.join("; ")}`);
         continue;
       }
+      const html = injectTracking(htmlBody, p.id, baseUrl);
 
       try {
         const sendResult = await sendOutreachEmail(

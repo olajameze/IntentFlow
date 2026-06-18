@@ -97,6 +97,23 @@ describe("validateOutreachCopy", () => {
     assert.equal(result.ok, true);
   });
 
+  it("allows brand sign-off URLs and snapshot links in message copy", () => {
+    const body =
+      "We put together a snapshot for Acme.\n\n" +
+      "See https://pesttrace.com for more.\n\n" +
+      "Best regards,\nThe PestTrace Team\nhttps://pesttrace.com";
+    const result = validateOutreachCopy("Audit snapshot for Acme?", body, "initial");
+    assert.equal(result.ok, true);
+  });
+
+  it("rejects excessive third-party URLs in message copy", () => {
+    const body =
+      "Compare https://example-a.com and https://example-b.com and https://example-c.com for options.";
+    const result = validateOutreachCopy("Quick question", body, "initial");
+    assert.equal(result.ok, false);
+    assert.ok(result.issues.some((i) => i.includes("too many URLs")));
+  });
+
   it("allows short acronyms and unsubscribe STOP in HTML email footers", () => {
     const body =
       "Hi team,\n\nBPCA members often need audit-ready records. PestTrace helps.\n\nReply STOP to opt out.";
