@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { toast } from "sonner";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -159,15 +159,15 @@ export function SuppressionListCard() {
   const [email, setEmail] = useState("");
   const [reason, setReason] = useState("manual");
 
-  const load = async () => {
+  const load = useCallback(async () => {
     const params = q ? `?q=${encodeURIComponent(q)}` : "";
     const res = await fetch(`/api/suppression-list${params}`);
     if (res.ok) setRows(await res.json());
-  };
+  }, [q]);
 
   useEffect(() => {
     void load();
-  }, [q]);
+  }, [load]);
 
   const add = async () => {
     if (!email.trim()) return;

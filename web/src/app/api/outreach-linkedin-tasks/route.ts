@@ -6,7 +6,7 @@ export async function GET(req: Request) {
   const status = searchParams.get("status") || "pending";
   const campaign = searchParams.get("campaign")?.trim().toLowerCase();
   return withSupabaseRoute(async (sb) => {
-    let q = sb
+    const q = sb
       .from("outreach_linkedin_tasks")
       .select("*, outreach_prospects(name, email, campaign, website_url)")
       .eq("status", status)

@@ -10,8 +10,8 @@ export default function OutreachInboxPage() {
           <h1 className="text-2xl font-semibold tracking-tight">Outreach Inbox</h1>
           <p className="text-sm text-muted-foreground">Replies, hot leads, and operator responses.</p>
         </div>
-        <Button asChild variant="outline" size="sm">
-          <Link href="/outreach">← Pipeline</Link>
+        <Button render={<Link href="/outreach" />} variant="outline" size="sm">
+          ← Pipeline
         </Button>
       </div>
       <OutreachInboxScreen />

@@ -102,7 +102,7 @@ export async function adjustSendTimeForSmartSend(
   const preferred = new Set(hours.slice(0, 2));
 
   for (let dayOffset = 0; dayOffset < 14; dayOffset += 1) {
-    for (const hour of [...preferred].sort((a, b) => a - b)) {
+    for (const hour of Array.from(preferred).sort((a, b) => a - b)) {
       const candidate = new Date(target);
       candidate.setUTCDate(candidate.getUTCDate() + dayOffset);
       candidate.setUTCHours(hour, 15, 0, 0);

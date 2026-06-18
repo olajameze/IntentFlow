@@ -85,6 +85,7 @@ export async function POST(req: Request) {
       email_subject_b: string | null;
       email_body: string;
       campaign: string | null;
+      country?: string | null;
       raw?: Record<string, unknown> | null;
     }) => {
       const campaign = normalizeCampaign(prospect.campaign);

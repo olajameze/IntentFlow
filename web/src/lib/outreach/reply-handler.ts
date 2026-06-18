@@ -113,19 +113,21 @@ export async function handleInboundReply(
     });
   }
 
-  void syncProspectToHubSpot(sb, {
-    id: prospect.id,
-    email: prospect.email,
-    name: prospect.name,
-    campaign: prospect.campaign,
-    phone: prospect.phone,
-    city: prospect.city,
-    country: prospect.country,
-    interested_at: prospect.interested_at,
-    meeting_booked_at: prospect.meeting_booked_at,
-    booked_at: prospect.booked_at ?? now,
-    converted_at: prospect.converted_at,
-  });
+  if (prospect.email) {
+    void syncProspectToHubSpot(sb, {
+      id: prospect.id,
+      email: prospect.email,
+      name: prospect.name,
+      campaign: prospect.campaign,
+      phone: prospect.phone,
+      city: prospect.city,
+      country: prospect.country,
+      interested_at: prospect.interested_at,
+      meeting_booked_at: prospect.meeting_booked_at,
+      booked_at: prospect.booked_at ?? now,
+      converted_at: prospect.converted_at,
+    });
+  }
 
   invalidateOutreachStats(input.campaign);
 

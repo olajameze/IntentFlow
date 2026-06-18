@@ -28,7 +28,7 @@ export async function GET(req: Request) {
     if (error) return NextResponse.json({ error: error.message }, { status: 500 });
 
     const ids = (data ?? []).map((p) => p.id);
-    let previews: Record<string, string> = {};
+    const previews: Record<string, string> = {};
     if (ids.length) {
       const { data: msgs } = await sb
         .from("outreach_messages")

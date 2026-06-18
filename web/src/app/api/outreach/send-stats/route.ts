@@ -32,7 +32,7 @@ export async function POST(req: Request) {
     }
 
     let upserted = 0;
-    for (const [key, counts] of buckets) {
+    for (const [key, counts] of Array.from(buckets.entries())) {
       const [campaign, country, hour, dow] = key.split("|");
       await sb.from("outreach_send_stats").upsert(
         {

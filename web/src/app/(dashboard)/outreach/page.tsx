@@ -12,8 +12,8 @@ export default function OutreachPage() {
             Multi-campaign email pipeline — PestTrace, Weathers, JGDevs.
           </p>
         </div>
-        <Button asChild variant="outline" size="sm">
-          <Link href="/outreach/inbox">Open inbox →</Link>
+        <Button render={<Link href="/outreach/inbox" />} variant="outline" size="sm">
+          Open inbox →
         </Button>
       </div>
       <OutreachScreen />

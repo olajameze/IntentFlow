@@ -12,7 +12,7 @@ function mockSb(existingId: string | null) {
         return {
           select() {
             return {
-              eq(_col: string, _val: string) {
+              eq() {
                 return {
                   async maybeSingle() {
                     return { data: existingId ? { id: existingId } : null };

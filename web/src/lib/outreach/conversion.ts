@@ -213,16 +213,18 @@ export async function recordOutreachConversion(
     }
 
     await enrollInNurture(sb, prospect.id, prospect.campaign);
-    void syncProspectToHubSpot(sb, {
-      id: prospect.id,
-      email: prospect.email,
-      name: prospect.name,
-      campaign: prospect.campaign,
-      interested_at: (updates.interested_at as string) ?? prospect.interested_at,
-      meeting_booked_at: (updates.meeting_booked_at as string) ?? prospect.meeting_booked_at,
-      booked_at: now,
-      converted_at: (updates.converted_at as string) ?? prospect.converted_at,
-    });
+    if (prospect.email) {
+      void syncProspectToHubSpot(sb, {
+        id: prospect.id,
+        email: prospect.email,
+        name: prospect.name,
+        campaign: prospect.campaign,
+        interested_at: (updates.interested_at as string) ?? prospect.interested_at,
+        meeting_booked_at: (updates.meeting_booked_at as string) ?? prospect.meeting_booked_at,
+        booked_at: now,
+        converted_at: (updates.converted_at as string) ?? prospect.converted_at,
+      });
+    }
 
     invalidateOutreachStats(prospect.campaign);
     return { booked: true, duplicate: false };
