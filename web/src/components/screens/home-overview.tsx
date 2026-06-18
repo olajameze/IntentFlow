@@ -55,7 +55,6 @@ export function HomeOverview() {
   const [businesses, setBusinesses] = useState<Business[]>([]);
   const [snapshots, setSnapshots] = useState<Record<string, unknown>[]>([]);
   const [revenue, setRevenue] = useState<Record<string, unknown>[]>([]);
-  const [pending, setPending] = useState<Record<string, unknown>[]>([]);
   const [leads, setLeads] = useState<Record<string, unknown>[]>([]);
   const [loading, setLoading] = useState(true);
   const [dispatching, setDispatching] = useState(false);
@@ -63,11 +62,10 @@ export function HomeOverview() {
   useEffect(() => {
     async function load() {
       try {
-        const [bRes, aRes, rRes, pRes, lRes] = await Promise.all([
+        const [bRes, aRes, rRes, lRes] = await Promise.all([
           fetch("/api/businesses"),
           fetch("/api/analytics-snapshots"),
           fetch("/api/revenue-entries"),
-          fetch("/api/pending-posts?status=pending"),
           fetch(`/api/leads?from=${new Date().toISOString().slice(0, 10)}`),
         ]);
         if (!bRes.ok) {
@@ -81,8 +79,6 @@ export function HomeOverview() {
         else parts.push(`Analytics: ${await formatApiFailure(aRes)}`);
         if (rRes.ok) setRevenue(await rRes.json());
         else parts.push(`Revenue: ${await formatApiFailure(rRes)}`);
-        if (pRes.ok) setPending(await pRes.json());
-        else parts.push(`Pending posts: ${await formatApiFailure(pRes)}`);
         if (lRes.ok) setLeads(await lRes.json());
         else parts.push(`Leads: ${await formatApiFailure(lRes)}`);
 
@@ -178,9 +174,6 @@ export function HomeOverview() {
         <div className="flex flex-wrap gap-2">
           <Badge variant="secondary" className="rounded-full px-3 py-1">
             {businesses.filter((b) => b.active).length} active brands
-          </Badge>
-          <Badge variant="outline" className="rounded-full px-3 py-1">
-            {pending.length} approvals waiting
           </Badge>
         </div>
         <Button

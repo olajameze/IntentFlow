@@ -46,10 +46,10 @@ def agents_for_type(btype: str) -> list[AgentProfile]:
             "You are a local SEO and lead-gen expert for owner-operated trades.",
         ),
         AgentProfile(
-            "SocialPostingAgent",
-            "SocialPostingAgent",
-            "Queue Facebook/LinkedIn posts (text-first) for human approval.",
-            "You write punchy community posts with emergency and trust cues when needed.",
+            "OutreachStrategist",
+            "OutreachStrategist",
+            "Recommend email sequences, follow-up timing, and reply-handling playbooks.",
+            "You specialise in B2B outbound email, deliverability, and conversion tracking.",
         ),
         AgentProfile(
             "SEOMonitor",

@@ -804,6 +804,22 @@ export function SettingsScreen() {
 
       <OutreachWebhookCard />
 
+      <Card>
+        <CardHeader>
+          <CardTitle className="text-base">Outreach essentials</CardTitle>
+        </CardHeader>
+        <CardContent className="space-y-2 text-sm text-muted-foreground">
+          <p>
+            Email outreach, inbox, nurture, suppression, and alerts work with your existing SMTP or Resend credentials
+            per campaign — no HubSpot, Calendly, or other signups required.
+          </p>
+          <p>
+            LinkedIn tasks are a manual copy-and-paste queue (no LinkedIn API). Groq powers optional AI reply suggestions
+            when <code className="text-xs">GROQ_API_KEY</code> is set; static fallbacks apply otherwise.
+          </p>
+        </CardContent>
+      </Card>
+
       <OutreachAlertRulesCard />
 
       <SuppressionListCard />

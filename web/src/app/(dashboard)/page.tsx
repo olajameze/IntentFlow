@@ -6,7 +6,7 @@ export default function HomePage() {
       <div>
         <h1 className="text-2xl font-semibold tracking-tight">Command centre</h1>
         <p className="text-sm text-muted-foreground">
-          Live portfolio view across every active business — traffic (Umami), revenue, and approvals.
+          Live portfolio view across every active business — traffic (Umami), revenue, and outreach.
         </p>
       </div>
       <HomeOverview />

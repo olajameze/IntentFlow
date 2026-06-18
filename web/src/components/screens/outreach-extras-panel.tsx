@@ -179,7 +179,7 @@ export function OutreachExtrasPanel({ campaign }: { campaign: Campaign }) {
       {signals.length ? (
         <Card>
           <CardHeader className="pb-2">
-            <CardTitle className="text-sm">Social listening signals</CardTitle>
+            <CardTitle className="text-sm">Imported prospect signals</CardTitle>
           </CardHeader>
           <CardContent className="max-h-40 space-y-2 overflow-y-auto">
             {signals.map((s) => (

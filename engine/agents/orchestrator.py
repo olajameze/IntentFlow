@@ -21,7 +21,6 @@ from crewai import LLM
 from crewai.tools import tool
 
 from agents.factory import agents_for_type
-from agents.tasks import build_social_generation_task
 from config import active_llm_summary, google_api_key, groq_api_key, llm_skip_google, ollama_fallback_enabled
 from crypto_util import decrypt_stripe_secret
 from supabase_client import get_supabase
@@ -207,23 +206,6 @@ def _pick_specialist_agent(agents: list[Agent]) -> Agent | None:
     return None
 
 
-def _social_copy_agent(agent_by_role: dict[str, Agent]) -> Agent | None:
-    """First rostered agent that can call `generate_personalised_copy_tool` for social-style output."""
-    for key in (
-        "SocialPostingAgent",
-        "AuthorityBuilder",
-        "SaaSOutreach",
-        "ContentGenerator",
-        "LocalResearcher",
-        "CaseStudyGenerator",
-        "Networker",
-    ):
-        hit = agent_by_role.get(key)
-        if hit:
-            return hit
-    return None
-
-
 def _domain_from_url(url: str | None) -> str:
     if not url:
         return ""
@@ -277,73 +259,6 @@ def _persist_snapshots_for_window(row: dict[str, Any], start: datetime, end: dat
     return {"umami": umami_summary, "revenue": rev_summary}
 
 
-def enqueue_three_pending_posts_direct(row: dict[str, Any]) -> None:
-    """Insert three drafts into pending_posts without Crew tools (Groq tool calls are unreliable)."""
-    bid = row.get("id")
-    if not bid:
-        return
-    ctx = _ctx(row)
-    brand = row.get("name") or "Brand"
-    specs: list[tuple[str, str]] = [
-        (
-            "facebook",
-            "Facebook Page post #1: warm, trustworthy, community-operator tone. "
-            "Mandatory structure: Target Audience -> Strategy -> Content (Headline, The Problem, The Solution) -> closing CTA line with domain/URL from JSON. "
-            "The Problem must be a specific real-world pain point happening now for the audience; The Solution must clearly position this business as the fix. "
-            "No generic promotional copy. Max 400 words. Conversational UK English. "
-            "Strictly no TikTok/video references; keep format suitable for text/image/carousel/article and no hashtag spam.",
-        ),
-        (
-            "facebook",
-            "Facebook Page post #2: different angle from post #1; focus on a different concrete audience pain point (or seasonal trigger if relevant). "
-            "Use the same mandatory structure and explicit problem -> solution logic; avoid repeating post #1's angle. "
-            "Max 400 words. UK English. Strictly no TikTok/video references; format must suit text/image/carousel/article.",
-        ),
-        (
-            "linkedin",
-            "LinkedIn: authoritative professional voice. Strictly follow mandatory Target Audience -> Strategy -> "
-            "Content (Headline, The Problem, The Solution, then closing line with domain/URL from JSON). "
-            "Lead with one specific business pain point and its consequence; then present this business as the practical solution. "
-            "Under 2200 characters. Credible and professional. Strictly no TikTok/video references; no hashtag spam.",
-        ),
-    ]
-    sb = get_supabase()
-    extra = _extra_copy_doctrine_for_row(row)
-    # Collapse instructional LLM-missing bodies from `generate_personalised_copy` into a short queue placeholder.
-    _llm_key_hint_markers = (
-        "Configure GOOGLE_API_KEY",
-        "Set GROQ_API_KEY",
-        "Configure GROQ_API_KEY",
-        "[Draft — configure LLM fallback]",
-        "[Draft — LLM fallback failed]",
-        "[Draft — LLM error]",
-    )
-    for platform, template in specs:
-        body = ""
-        try:
-            body = generate_personalised_copy(ctx, lead=f"Brand: {brand}", template=template, extra_doctrine=extra)
-        except Exception as exc:  # noqa: BLE001
-            print(f"enqueue_three_pending_posts_direct ({platform}) LLM error: {exc}")
-            body = (
-                f"[Draft — LLM error] Could not generate {platform} post for {brand}. "
-                f"Check GROQ_API_KEY (primary) and ENGINE_USE_OLLAMA_FALLBACK=1 (fallback). "
-                f"({type(exc).__name__})"
-            )
-        if not body.strip() or any(marker in body for marker in _llm_key_hint_markers):
-            body = f"[Draft — add LLM keys] Short {platform} update for {brand}."
-        try:
-            sb.table("pending_posts").insert(
-                {
-                    "business_id": bid,
-                    "platform": platform,
-                    "content": body[:12000],
-                    "status": "pending",
-                }
-            ).execute()
-        except Exception as exc:  # noqa: BLE001
-            print(f"enqueue_three_pending_posts_direct ({platform}) insert failed: {exc}")
-
-
 def run_crew_for_business(row: dict[str, Any]) -> str:
     profiles = agents_for_type(row.get("type") or "generic")
 
@@ -367,7 +282,7 @@ def run_crew_for_business(row: dict[str, Any]) -> str:
         "LocalResearcher": copy_tools,
         "SaaSOutreach": copy_tools,
         "AuthorityBuilder": copy_tools,
-        "SocialPostingAgent": copy_tools,
+        "OutreachStrategist": copy_tools,
         "CaseStudyGenerator": copy_tools,
         "Networker": copy_tools,
         "SocialListener": copy_tools,
@@ -446,25 +361,13 @@ def run_crew_for_business(row: dict[str, Any]) -> str:
                 "Write in your own words (no tools). Each idea should align with problem→solution positioning. "
             )
         spec_lines.append(
-            "The approvals queue is filled separately by the engine using the same doctrine."
+            "Focus on outreach-ready ideas: email angles, follow-up timing, and reply handling — not social posting."
         )
         tasks.append(
             Task(
                 description="".join(spec_lines),
                 agent=specialist,
                 expected_output="Three Ideas bullets + channel + KPI to watch.",
-            )
-        )
-    social_agent = _social_copy_agent(agent_by_role)
-    if social_agent:
-        tasks.append(
-            build_social_generation_task(
-                social_agent,
-                business_name=str(row.get("name") or "Brand"),
-                target_audience=str(row.get("target_audience") or ""),
-                website_url=str(row.get("website_url") or ""),
-                business_context_json=ctx,
-                use_copy_tool=tools_ok,
             )
         )
     if dash:
@@ -488,37 +391,31 @@ def run_crew_for_business(row: dict[str, Any]) -> str:
     crew = Crew(agents=agents, tasks=tasks, process=Process.sequential, verbose=True)
     result = ""
     try:
-        try:
-            result = _crew_kickoff_with_groq_rate_limit_retries(crew, label="primary")
-        except Exception as first_exc:  # noqa: BLE001
-            if gemini_error_should_use_groq(first_exc):
-                print(
-                    "Crew: Gemini failed (quota, auth, or rate limit) — retrying once with Groq. "
-                    "Tip: set ENGINE_USE_GROQ_ONLY=1 (and GROQ_API_KEY) to skip Gemini entirely."
-                )
-                groq_llm = _groq_llm()
-                # CrewAI keeps agent.agent_executor after a failed kickoff; it never refreshes
-                # executor.llm when we mutate agent.llm — clear so Groq is used on retry.
-                for ag in agents:
-                    ag.llm = groq_llm
-                    ag.function_calling_llm = groq_llm
-                    ag.agent_executor = None
-                    ag.tools = []
-                crew = Crew(
-                    agents=agents,
-                    tasks=tasks,
-                    process=Process.sequential,
-                    verbose=True,
-                    chat_llm=groq_llm,
-                )
-                result = _crew_kickoff_with_groq_rate_limit_retries(crew, label="groq-retry")
-            else:
-                raise
-    finally:
-        try:
-            enqueue_three_pending_posts_direct(row)
-        except Exception as exc:  # noqa: BLE001
-            print(f"pending_posts direct enqueue failed: {exc}")
+        result = _crew_kickoff_with_groq_rate_limit_retries(crew, label="primary")
+    except Exception as first_exc:  # noqa: BLE001
+        if gemini_error_should_use_groq(first_exc):
+            print(
+                "Crew: Gemini failed (quota, auth, or rate limit) — retrying once with Groq. "
+                "Tip: set ENGINE_USE_GROQ_ONLY=1 (and GROQ_API_KEY) to skip Gemini entirely."
+            )
+            groq_llm = _groq_llm()
+            # CrewAI keeps agent.agent_executor after a failed kickoff; it never refreshes
+            # executor.llm when we mutate agent.llm — clear so Groq is used on retry.
+            for ag in agents:
+                ag.llm = groq_llm
+                ag.function_calling_llm = groq_llm
+                ag.agent_executor = None
+                ag.tools = []
+            crew = Crew(
+                agents=agents,
+                tasks=tasks,
+                process=Process.sequential,
+                verbose=True,
+                chat_llm=groq_llm,
+            )
+            result = _crew_kickoff_with_groq_rate_limit_retries(crew, label="groq-retry")
+        else:
+            raise
     return result
 
 

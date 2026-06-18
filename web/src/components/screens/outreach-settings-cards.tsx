@@ -260,12 +260,14 @@ export function SuppressionListCard() {
 export function HubSpotConnectionCard() {
   const [status, setStatus] = useState<{ ok?: boolean; account?: string; error?: string } | null>(null);
   const [syncing, setSyncing] = useState(false);
+  const [tested, setTested] = useState(false);
 
   const test = async () => {
+    setTested(true);
     const res = await fetch("/api/integrations/hubspot/sync");
     setStatus(await res.json());
     if (res.ok) toast.success("HubSpot connected");
-    else toast.error("HubSpot connection failed — check HUBSPOT_ACCESS_TOKEN");
+    else toast.message("HubSpot not configured — outreach still works without it");
   };
 
   const syncBatch = async () => {
@@ -287,23 +289,21 @@ export function HubSpotConnectionCard() {
     }
   };
 
-  useEffect(() => {
-    void test();
-  }, []);
-
   return (
     <Card>
       <CardHeader>
-        <CardTitle className="text-base">HubSpot CRM</CardTitle>
+        <CardTitle className="text-base">Optional — HubSpot CRM</CardTitle>
       </CardHeader>
       <CardContent className="space-y-3 text-sm">
         <p className="text-muted-foreground">
-          Set <code className="text-xs">HUBSPOT_ACCESS_TOKEN</code> in Vercel. Contacts and deals sync on reply and conversion.
-          Inbound webhook: <code className="text-xs">POST /api/outreach-webhooks/hubspot</code> stops sequences on deal won/lost.
+          Only if you already use HubSpot: add <code className="text-xs">HUBSPOT_ACCESS_TOKEN</code> to sync contacts
+          on reply and conversion. No new account is required for core outreach — your existing SMTP or Resend setup is enough.
         </p>
-        {status ? (
-          <p className={status.ok ? "text-emerald-600" : "text-destructive"}>
-            {status.ok ? `Connected${status.account ? ` — ${status.account}` : ""}` : status.error ?? "Not connected"}
+        {tested && status ? (
+          <p className={status.ok ? "text-emerald-600" : "text-muted-foreground"}>
+            {status.ok ?
+              `Connected${status.account ? ` — ${status.account}` : ""}`
+            : "Not configured — optional"}
           </p>
         ) : null}
         <div className="flex gap-2">

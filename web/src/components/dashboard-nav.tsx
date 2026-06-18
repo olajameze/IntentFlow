@@ -4,7 +4,6 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import {
   BarChart3,
-  CheckCircle2,
   Home,
   LineChart,
   Mail,
@@ -18,7 +17,6 @@ const items = [
   { href: "/", label: "Home",     mobileLabel: "Home",     icon: Home },
   { href: "/traffic",   label: "Traffic",   mobileLabel: "Traffic",  icon: TrendingUp },
   { href: "/revenue",   label: "Revenue",   mobileLabel: "Revenue",  icon: Wallet },
-  { href: "/approvals", label: "Approvals", mobileLabel: "Posts",    icon: CheckCircle2 },
   { href: "/outreach",  label: "Outreach",  mobileLabel: "Email",    icon: Mail },
   { href: "/analytics", label: "Analytics", mobileLabel: "Stats",    icon: LineChart },
   { href: "/settings",  label: "Settings",  mobileLabel: "Settings", icon: Settings },
@@ -31,7 +29,7 @@ export function DashboardNav() {
       <aside className="hidden md:flex md:w-56 md:flex-col md:border-r md:bg-card md:px-3 md:py-4">
         <div className="mb-6 px-2">
           <div className="text-lg font-semibold tracking-tight">IntentFlow</div>
-          <p className="text-xs text-muted-foreground">Omni-Channel Engine</p>
+          <p className="text-xs text-muted-foreground">Outreach & growth engine</p>
         </div>
         <nav className="flex flex-1 flex-col gap-1" aria-label="Primary">
           {items.map((item) => {
@@ -61,7 +59,7 @@ export function DashboardNav() {
         </div>
       </aside>
 
-      {/* Mobile bottom nav — 7 items, short labels to fit */}
+      {/* Mobile bottom nav — 6 items, short labels to fit */}
       <nav
         className="fixed inset-x-0 bottom-0 z-40 flex border-t bg-background/95 pb-[env(safe-area-inset-bottom)] backdrop-blur md:hidden"
         aria-label="Mobile primary"

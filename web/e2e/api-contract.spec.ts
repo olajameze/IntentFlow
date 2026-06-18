@@ -45,16 +45,6 @@ test.describe("Tier D — Route Handlers", () => {
     }
   });
 
-  test("POST /api/publish-approved rejects missing body id", async ({ request }) => {
-    const res = await request.post("/api/publish-approved", {
-      data: {},
-      headers: { "Content-Type": "application/json" },
-    });
-    expect(res.status()).toBe(400);
-    const json = await res.json();
-    expect(json.error).toBeTruthy();
-  });
-
   test("GET /api/trigger-engine exposes GitHub PAT + repo booleans safely", async ({ request }) => {
     const res = await request.get("/api/trigger-engine");
     expect(res.ok()).toBeTruthy();

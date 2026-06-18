@@ -5,7 +5,7 @@ const dashboardPaths = [
   { path: "/traffic", heading: /Traffic intelligence/i },
   { path: "/revenue", heading: /Revenue intelligence/i },
   { path: "/analytics", heading: /Portfolio analytics/i },
-  { path: "/approvals", heading: /Pending approvals/i },
+  { path: "/outreach", heading: /^Outreach$/i },
   { path: "/settings", heading: /^Settings$/i },
 ] as const;
 
