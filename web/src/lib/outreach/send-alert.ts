@@ -8,7 +8,8 @@ export type AlertEvent =
   | "converted"
   | "interested"
   | "meeting_booked"
-  | "bounce_rate_high";
+  | "bounce_rate_high"
+  | "call_task";
 
 type AlertContext = {
   prospectId?: string;

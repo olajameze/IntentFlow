@@ -1,0 +1,12 @@
+.header {
+  border-top-width: 4px;
+  border-top-color: var(--qualify-accent, #2f855a);
+}
+
+.ctaButton {
+  background-color: var(--qualify-accent, #2f855a);
+}
+
+.ctaButton:hover {
+  background-color: color-mix(in srgb, var(--qualify-accent, #2f855a) 85%, black);
+}

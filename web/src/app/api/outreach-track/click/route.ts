@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { computeEngagementTier, engagementUpdateFields } from "@/lib/outreach/engagement";
 import { invalidateOutreachStats } from "@/lib/outreach/campaign-stats";
 import { emitOutreachWebhooks } from "@/lib/outreach/emit-webhook";
+import { createCallTaskIfNeeded } from "@/lib/outreach/call-tasks";
 import { sendOutreachAlerts } from "@/lib/outreach/send-alert";
 import { getSupabaseAdmin } from "@/lib/supabase-admin";
 
@@ -60,7 +61,7 @@ export async function GET(req: Request) {
 
     const { data: prospect } = await sb
       .from("outreach_prospects")
-      .select("id, campaign, email, clicked_at, click_count, opened_at, open_count, booked_at, engagement_tier")
+      .select("id, campaign, email, phone, clicked_at, click_count, opened_at, open_count, booked_at, engagement_tier")
       .eq("id", prospectId)
       .maybeSingle();
 
@@ -106,6 +107,10 @@ export async function GET(req: Request) {
           campaign: camp,
           prospectEmail: prospect.email,
         });
+      }
+
+      if (tierFields.engagement_tier === "hot" && String(prospect.phone || "").trim()) {
+        await createCallTaskIfNeeded(sb, prospect.id, "click", { req, skipAlert: prevTier === "hot" });
       }
     }
   } catch {

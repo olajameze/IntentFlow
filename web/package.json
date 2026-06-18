@@ -24,6 +24,7 @@
     "engine:revenue": "cd ../engine && python main.py revenue",
     "setup:conversion": "node scripts/setup-marketing-conversion.mjs",
     "setup:outreach-v2": "node scripts/apply-outreach-platform-v2.mjs",
+    "setup:call-tasks": "node scripts/apply-call-tasks-migration.mjs",
     "setup:conversion:sql": "node scripts/open-migration-sql-editor.mjs",
     "setup:revenue-migration": "node scripts/apply-revenue-migration.mjs",
     "vault:stripe-keys": "node scripts/vault-stripe-keys.mjs"

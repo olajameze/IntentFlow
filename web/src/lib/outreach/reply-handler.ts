@@ -4,6 +4,7 @@ import { engagementUpdateFields } from "@/lib/outreach/engagement";
 import { invalidateOutreachStats } from "@/lib/outreach/campaign-stats";
 import { emitOutreachWebhooks } from "@/lib/outreach/emit-webhook";
 import { insertOutreachMessage, logTimelineEvent } from "@/lib/outreach/messages";
+import { createCallTaskIfNeeded, hasCallIntent } from "@/lib/outreach/call-tasks";
 import { sendOutreachAlerts } from "@/lib/outreach/send-alert";
 import { addToSuppressionList } from "@/lib/outreach/suppression";
 
@@ -111,6 +112,9 @@ export async function handleInboundReply(
       prospectName: prospect.name,
       prospectEmail: prospect.email,
     });
+
+    const callTrigger = hasCallIntent(input.bodyText) ? "call_intent" : "reply";
+    await createCallTaskIfNeeded(sb, input.prospectId, callTrigger);
   }
 
   if (prospect.email) {
