@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
-import { Button } from "@/components/ui/button";
+import { Button, buttonVariants } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import styles from "./qualify-chat.module.css";
 
@@ -141,11 +141,14 @@ export function QualifyChat({ token }: { token: string }) {
       {done && bookingUrl ? (
         <div className="mt-4 rounded-lg border p-4 text-center">
           <p className="mb-3 text-sm">You are all set — use the link below to continue.</p>
-          <Button asChild className={styles.ctaButton}>
-            <a href={bookingUrl} target="_blank" rel="noopener noreferrer">
-              Continue to booking
-            </a>
-          </Button>
+          <a
+            href={bookingUrl}
+            target="_blank"
+            rel="noopener noreferrer"
+            className={cn(buttonVariants(), styles.ctaButton)}
+          >
+            Continue to booking
+          </a>
         </div>
       ) : (
         <form

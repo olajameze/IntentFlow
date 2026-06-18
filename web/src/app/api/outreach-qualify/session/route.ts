@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { brandingFromSettings, loadOutreachSettings } from "@/lib/outreach/campaign-config";
+import { relatedRow } from "@/lib/supabase-relation";
 import { withSupabaseRoute } from "@/lib/with-supabase-route";
 
 const UUID_RE =
@@ -24,7 +25,12 @@ export async function GET(req: Request) {
 
     if (!task) return NextResponse.json({ error: "Not found" }, { status: 404 });
 
-    const prospect = task.outreach_prospects as { name?: string | null; campaign?: string } | null;
+    const prospect = relatedRow(
+      task.outreach_prospects as
+        | { name?: string | null; campaign?: string }
+        | { name?: string | null; campaign?: string }[]
+        | null,
+    );
     const campaign = prospect?.campaign || "pesttrace";
     const settings = await loadOutreachSettings(sb, campaign);
     const branding = brandingFromSettings(settings, campaign);

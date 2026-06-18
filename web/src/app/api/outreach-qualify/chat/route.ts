@@ -5,6 +5,7 @@ import {
 } from "@/lib/outreach/llm-call-prep";
 import { logTimelineEvent } from "@/lib/outreach/messages";
 import { sendOutreachAlerts } from "@/lib/outreach/send-alert";
+import { relatedRow } from "@/lib/supabase-relation";
 import { withSupabaseRoute } from "@/lib/with-supabase-route";
 
 const UUID_RE =
@@ -43,13 +44,22 @@ export async function POST(req: Request) {
       });
     }
 
-    const prospect = task.outreach_prospects as {
-      id: string;
-      name?: string | null;
-      email?: string | null;
-      campaign?: string | null;
-      business_id?: string | null;
-    } | null;
+    const prospect = relatedRow(task.outreach_prospects as
+      | {
+          id: string;
+          name?: string | null;
+          email?: string | null;
+          campaign?: string | null;
+          business_id?: string | null;
+        }
+      | {
+          id: string;
+          name?: string | null;
+          email?: string | null;
+          campaign?: string | null;
+          business_id?: string | null;
+        }[]
+      | null);
 
     const campaign = prospect?.campaign || "pesttrace";
     const transcript = (Array.isArray(task.chat_transcript)

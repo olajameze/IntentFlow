@@ -8,6 +8,7 @@ import { generateCallPrep } from "@/lib/outreach/llm-call-prep";
 import { loadOutreachSettings } from "@/lib/outreach/campaign-config";
 import { logTimelineEvent } from "@/lib/outreach/messages";
 import { sendOutreachAlerts } from "@/lib/outreach/send-alert";
+import { relatedRow } from "@/lib/supabase-relation";
 import { withSupabaseRoute } from "@/lib/with-supabase-route";
 
 export async function GET(req: Request) {
@@ -27,12 +28,13 @@ export async function GET(req: Request) {
 
     if (error) return NextResponse.json({ error: error.message }, { status: 500 });
 
-    const rows = (data ?? []).filter(
-      (t) =>
-        !campaign ||
-        campaign === "all" ||
-        (t.outreach_prospects as { campaign?: string } | null)?.campaign === campaign,
-    );
+    const rows = (data ?? []).filter((t) => {
+      if (!campaign || campaign === "all") return true;
+      const p = relatedRow(
+        t.outreach_prospects as { campaign?: string } | { campaign?: string }[] | null,
+      );
+      return p?.campaign === campaign;
+    });
 
     const withUrls = rows.map((row) => ({
       ...row,
@@ -159,13 +161,24 @@ export async function PATCH(req: Request) {
 
     if (error) return NextResponse.json({ error: error.message }, { status: 500 });
 
-    const prospect = task.outreach_prospects as {
-      id: string;
-      name?: string | null;
-      email?: string | null;
-      campaign?: string | null;
-      business_id?: string | null;
-    } | null;
+    const prospect = relatedRow(
+      task.outreach_prospects as
+        | {
+            id: string;
+            name?: string | null;
+            email?: string | null;
+            campaign?: string | null;
+            business_id?: string | null;
+          }
+        | {
+            id: string;
+            name?: string | null;
+            email?: string | null;
+            campaign?: string | null;
+            business_id?: string | null;
+          }[]
+        | null,
+    );
 
     if (body.status === "done" && prospect) {
       await logTimelineEvent(sb, {
