@@ -370,11 +370,20 @@ export async function POST(req: Request) {
     let failed = 0;
     let validationFailed = 0;
     let skippedUnconfigured = 0;
+    let rateLimitSkipped = 0;
+    const cappedCampaigns = new Set<string>();
     let firstError: string | null = null;
     let firstIssues: string[] | undefined;
     for (const prospect of prospects) {
       if (!prospect.email || (!prospect.email_subject && !prospect.email_subject_b) || !prospect.email_body)
         continue;
+
+      const prospectCampaign = normalizeCampaign(prospect.campaign);
+      if (isAllCampaigns(campaign) && cappedCampaigns.has(prospectCampaign)) {
+        rateLimitSkipped++;
+        continue;
+      }
+
       const result = await sendOne(prospect);
       if (result.ok) {
         sent++;
@@ -389,7 +398,13 @@ export async function POST(req: Request) {
           firstError = result.error;
           if ("issues" in result && Array.isArray(result.issues)) firstIssues = result.issues;
         }
-        if (result.status === 429) break;
+        if (result.status === 429) {
+          if (isAllCampaigns(campaign)) {
+            cappedCampaigns.add(prospectCampaign);
+          } else {
+            break;
+          }
+        }
       }
     }
 
@@ -410,6 +425,7 @@ export async function POST(req: Request) {
           failed,
           validationFailed,
           skippedUnconfigured,
+          rateLimitSkipped,
           limit,
           campaign,
           error: errMsg,
@@ -425,6 +441,8 @@ export async function POST(req: Request) {
       sent,
       failed,
       skippedUnconfigured,
+      rateLimitSkipped,
+      cappedCampaigns: cappedCampaigns.size ? Array.from(cappedCampaigns) : undefined,
       limit,
       campaign,
       firstError,

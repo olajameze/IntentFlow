@@ -43,6 +43,13 @@ from supabase_client import get_supabase
 from html import escape as html_escape
 
 from tools.copy_doctrine import BREAZY_MARKETING_FOCUS, JGDEVS_MARKETING_FOCUS, OUTREACH_CONVERSION_DOCTRINE
+
+# Public sender addresses when campaign-specific env vars are unset (matches web campaign-env.ts).
+CAMPAIGN_DEFAULT_FROM_EMAIL: dict[str, str] = {
+    "weathers": "WeathersPestSolutions@hotmail.com",
+    "jgdevs": "hello@jgdev.co.uk",
+    "breazy": "breazyproductions7@gmail.com",
+}
 from tools.audit_snapshot import SNAPSHOT_URL_PLACEHOLDER, prospect_has_snapshot
 from tools.email_validator import normalize_outreach_body, validate_outreach_copy
 from tools.outreach_locale import locale_rules_for_country, normalize_outreach_country
@@ -561,7 +568,11 @@ def _campaign_smtp(cfg: CampaignConfig) -> dict[str, Any]:
         from_email = _e(cfg.default_from_email_env) or outreach_from_email() or user
     else:
         from_name = _e(cfg.default_from_name_env) or cfg.sender_signature
-        from_email = _e(cfg.default_from_email_env) or user
+        from_email = (
+            _e(cfg.default_from_email_env)
+            or user
+            or CAMPAIGN_DEFAULT_FROM_EMAIL.get(cfg.id, "")
+        )
     return {
         "host": host,
         "port": port,

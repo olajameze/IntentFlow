@@ -49,6 +49,13 @@ export const CAMPAIGN_ENV = {
 
 export type LegacyCampaignId = keyof typeof CAMPAIGN_ENV;
 
+/** Public sender addresses per brand — used when env vars are unset (e.g. Vercel missing JGDEVS_*). */
+const CAMPAIGN_DEFAULT_FROM_EMAIL: Partial<Record<LegacyCampaignId, string>> = {
+  weathers: "WeathersPestSolutions@hotmail.com",
+  jgdevs: "hello@jgdev.co.uk",
+  breazy: "breazyproductions7@gmail.com",
+};
+
 export type EmailProvider = "smtp" | "resend" | "auto";
 
 function envVal(name: string): string | undefined {
@@ -84,6 +91,7 @@ export function getBaseConfig(campaign: string, overrides?: { fromName?: string 
   const fromEmail =
     envVal(keys.fromEmail) ||
     envVal(keys.smtpUser) ||
+    CAMPAIGN_DEFAULT_FROM_EMAIL[key] ||
     (isPesttrace ? envVal(CAMPAIGN_ENV.pesttrace.fromEmail) ?? envVal("SMTP_USER") : undefined);
   const replyTo =
     envVal(keys.replyTo) || (isPesttrace ? envVal(CAMPAIGN_ENV.pesttrace.replyTo) : undefined);

@@ -1150,18 +1150,27 @@ export function OutreachScreen() {
       const failed = typeof data.failed === "number" ? data.failed : 0;
       const skippedUnconfigured =
         typeof data.skippedUnconfigured === "number" ? data.skippedUnconfigured : 0;
+      const rateLimitSkipped =
+        typeof data.rateLimitSkipped === "number" ? data.rateLimitSkipped : 0;
+      const cappedCampaigns = Array.isArray(data.cappedCampaigns)
+        ? (data.cappedCampaigns as string[]).join(", ")
+        : "";
       const firstError = typeof data.firstError === "string" ? data.firstError : null;
       const firstIssues = Array.isArray(data.firstIssues)
         ? `\n${(data.firstIssues as string[]).join("\n")}`
         : "";
+      const rateLimitNote =
+        rateLimitSkipped > 0
+          ? ` · ${rateLimitSkipped} skipped (rate cap${cappedCampaigns ? `: ${cappedCampaigns}` : ""}) — wait ~20 min or raise OUTREACH_HOURLY_SEND_LIMIT`
+          : "";
       if (sent === 0 && failed > 0) {
         toast.error(
           `0 emails sent, ${failed} failed${skippedUnconfigured ? ` (${skippedUnconfigured} unconfigured)` : ""}${firstError ? `:\n${firstError}` : ""}${firstIssues}`,
           { duration: 15000 },
         );
-      } else if (failed > 0) {
+      } else if (failed > 0 || rateLimitSkipped > 0) {
         toast.error(
-          `Sent ${sent}, but ${failed} failed${skippedUnconfigured ? ` (${skippedUnconfigured} unconfigured)` : ""}${firstError ? ` (${firstError})` : ""}${firstIssues}`,
+          `Sent ${sent}${failed ? `, but ${failed} failed` : ""}${rateLimitNote}${skippedUnconfigured ? ` (${skippedUnconfigured} unconfigured)` : ""}${firstError && !rateLimitSkipped ? ` (${firstError})` : ""}${firstIssues}`,
           { duration: 12000 },
         );
       } else {
