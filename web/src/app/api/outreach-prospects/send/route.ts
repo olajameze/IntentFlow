@@ -224,9 +224,10 @@ export async function POST(req: Request) {
           error: msg,
         });
         if (msg.toLowerCase().includes("recipient") || msg.toLowerCase().includes("address")) {
+          const bouncedAt = new Date().toISOString();
           await sb
             .from("outreach_prospects")
-            .update({ status: "bounced", updated_at: new Date().toISOString() })
+            .update({ status: "bounced", sent_at: bouncedAt, updated_at: bouncedAt })
             .eq("id", prospect.id);
         }
         return { ok: false as const, status: 502, error: `Send failed: ${msg}` };

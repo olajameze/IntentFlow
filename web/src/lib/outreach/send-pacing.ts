@@ -24,12 +24,13 @@ export async function countSendsInWindow(
 ): Promise<number> {
   const windowMs = getSendWindowMinutes() * 60 * 1000;
   const since = new Date(Date.now() - windowMs).toISOString();
-  // Count actual sends by sent_at (not updated_at — avoids false positives from edits).
+  // Count SMTP attempts by sent_at (not updated_at — avoids false positives from edits).
+  // Include bounced: provider quota is consumed even when delivery fails later.
   const { count, error } = await sb
     .from("outreach_prospects")
     .select("id", { count: "exact", head: true })
     .eq("campaign", campaign)
-    .eq("status", "sent")
+    .in("status", ["sent", "bounced"])
     .gte("sent_at", since);
 
   if (error) {
