@@ -77,6 +77,7 @@ _PORTFOLIO_URL_HOSTS = (
     "pesttrace.com",
     "weatherspestsolutions.co.uk",
     "jgdev.co.uk",
+    "jordans-e-website.vercel.app",
 )
 
 

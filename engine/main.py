@@ -31,7 +31,7 @@ def main() -> None:
         default=None,
         help=(
             "Outreach campaign id (only used with mode=outreach). "
-            "Options: 'pesttrace', 'weathers', 'jgdevs', or 'all' to run every campaign. "
+            "Options: 'pesttrace', 'weathers', 'jgdevs', 'breazy', or 'all' to run every campaign. "
             "Defaults to 'pesttrace' for backwards compatibility."
         ),
     )

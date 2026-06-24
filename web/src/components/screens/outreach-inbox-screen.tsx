@@ -137,6 +137,7 @@ export function OutreachInboxScreen() {
                 <SelectItem value="pesttrace">PestTrace</SelectItem>
                 <SelectItem value="weathers">Weathers</SelectItem>
                 <SelectItem value="jgdevs">JGDevs</SelectItem>
+                <SelectItem value="breazy">Breazy Productions</SelectItem>
               </SelectContent>
             </Select>
             <Select value={filter} onValueChange={(v) => setFilter(typeof v === "string" ? v : "needs_reply")}>

@@ -26,6 +26,7 @@ const FALLBACK_DESTINATIONS: Record<string, string> = {
   pesttrace: "https://pesttrace.com/",
   weathers: "https://weatherspestsolutions.co.uk/",
   jgdevs: "https://jgdev.co.uk/",
+  breazy: "https://jordans-e-website.vercel.app/book",
 };
 
 function safeRedirect(url: string): NextResponse {

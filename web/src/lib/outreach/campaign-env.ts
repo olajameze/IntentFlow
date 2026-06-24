@@ -34,6 +34,17 @@ export const CAMPAIGN_ENV = {
     resendApiKey: "JGDEVS_RESEND_API_KEY",
     defaultFromName: "JGDevs",
   },
+  breazy: {
+    fromName: "BREAZY_OUTREACH_FROM_NAME",
+    fromEmail: "BREAZY_OUTREACH_FROM_EMAIL",
+    replyTo: "BREAZY_REPLY_TO",
+    smtpHost: "BREAZY_SMTP_HOST",
+    smtpUser: "BREAZY_SMTP_USER",
+    smtpPassword: "BREAZY_SMTP_PASSWORD",
+    smtpPort: "BREAZY_SMTP_PORT",
+    resendApiKey: "BREAZY_RESEND_API_KEY",
+    defaultFromName: "Breazy Productions",
+  },
 } as const;
 
 export type LegacyCampaignId = keyof typeof CAMPAIGN_ENV;
@@ -45,11 +56,12 @@ function envVal(name: string): string | undefined {
   return v ? v : undefined;
 }
 
-/** Map any campaign slug to legacy env profile (custom slugs use PestTrace SMTP). */
+/** Map campaign slug to env profile (unknown slugs use PestTrace defaults). */
 export function resolveCampaignEnvKey(campaign: string): LegacyCampaignId {
   const slug = campaign.trim().toLowerCase();
   if (slug === "weathers") return "weathers";
   if (slug === "jgdevs") return "jgdevs";
+  if (slug === "breazy") return "breazy";
   return "pesttrace";
 }
 
@@ -59,37 +71,43 @@ export function getEmailProvider(): EmailProvider {
   return "auto";
 }
 
-export function getBaseConfig(campaign: string) {
+export function getBaseConfig(campaign: string, overrides?: { fromName?: string }) {
   const key = resolveCampaignEnvKey(campaign);
   const keys = CAMPAIGN_ENV[key];
+  const isPesttrace = key === "pesttrace";
   const fromName =
-    envVal(keys.fromName) ?? envVal(CAMPAIGN_ENV.pesttrace.fromName) ?? keys.defaultFromName;
+    overrides?.fromName?.trim() ||
+    envVal(keys.fromName) ||
+    (isPesttrace ? envVal(CAMPAIGN_ENV.pesttrace.fromName) : undefined) ||
+    keys.defaultFromName;
   const fromEmail =
-    envVal(keys.fromEmail) ??
-    envVal(CAMPAIGN_ENV.pesttrace.fromEmail) ??
-    envVal(keys.smtpUser) ??
-    envVal("SMTP_USER");
-  const replyTo = envVal(keys.replyTo) ?? envVal(CAMPAIGN_ENV.pesttrace.replyTo);
+    envVal(keys.fromEmail) ||
+    envVal(keys.smtpUser) ||
+    (isPesttrace ? envVal(CAMPAIGN_ENV.pesttrace.fromEmail) ?? envVal("SMTP_USER") : undefined);
+  const replyTo =
+    envVal(keys.replyTo) || (isPesttrace ? envVal(CAMPAIGN_ENV.pesttrace.replyTo) : undefined);
   return { fromName, fromEmail, replyTo, envKey: key };
 }
 
-export function getSmtpConfig(campaign: string) {
+export function getSmtpConfig(campaign: string, overrides?: { fromName?: string }) {
   const key = resolveCampaignEnvKey(campaign);
   const keys = CAMPAIGN_ENV[key];
-  const host = envVal(keys.smtpHost) ?? envVal("SMTP_HOST");
-  const user = envVal(keys.smtpUser) ?? envVal("SMTP_USER");
-  const password = envVal(keys.smtpPassword) ?? envVal("SMTP_PASSWORD");
-  const portRaw = envVal(keys.smtpPort) ?? envVal("SMTP_PORT") ?? "587";
+  const isPesttrace = key === "pesttrace";
+  const host = envVal(keys.smtpHost) || (isPesttrace ? envVal("SMTP_HOST") : undefined);
+  const user = envVal(keys.smtpUser) || (isPesttrace ? envVal("SMTP_USER") : undefined);
+  const password = envVal(keys.smtpPassword) || (isPesttrace ? envVal("SMTP_PASSWORD") : undefined);
+  const portRaw = envVal(keys.smtpPort) || (isPesttrace ? envVal("SMTP_PORT") : undefined) || "587";
   const port = parseInt(portRaw, 10);
-  const { fromName, fromEmail, replyTo } = getBaseConfig(campaign);
+  const { fromName, fromEmail, replyTo } = getBaseConfig(campaign, overrides);
   return { host, user, password, port, fromName, fromEmail, replyTo, configured: !!(host && user && password) };
 }
 
-export function getResendConfig(campaign: string) {
+export function getResendConfig(campaign: string, overrides?: { fromName?: string }) {
   const key = resolveCampaignEnvKey(campaign);
   const keys = CAMPAIGN_ENV[key];
-  const apiKey = envVal(keys.resendApiKey) ?? envVal("RESEND_API_KEY");
-  const { fromName, fromEmail, replyTo } = getBaseConfig(campaign);
+  const isPesttrace = key === "pesttrace";
+  const apiKey = envVal(keys.resendApiKey) || (isPesttrace ? envVal("RESEND_API_KEY") : undefined);
+  const { fromName, fromEmail, replyTo } = getBaseConfig(campaign, overrides);
   return { apiKey, fromName, fromEmail, replyTo, configured: !!(apiKey && fromEmail) };
 }
 
@@ -115,13 +133,13 @@ export function isConfiguredForCampaign(campaign: string): { ok: boolean; hint?:
 
   if (ok) return { ok: true };
 
-  const hint =
-    key === "weathers"
-      ? `Set WEATHERS SMTP credentials in web/.env.local: ${keys.smtpHost}, ${keys.smtpUser}, ${keys.smtpPassword}.`
-      : key === "jgdevs"
-        ? `Set JGDEVS SMTP credentials in web/.env.local: ${keys.smtpHost}, ${keys.smtpUser}, ${keys.smtpPassword}.`
-        : `Set SMTP_HOST, SMTP_USER, SMTP_PASSWORD (and OUTREACH_FROM_EMAIL) in web/.env.local.`;
-  return { ok: false, hint };
+  const hintByKey: Partial<Record<LegacyCampaignId, string>> = {
+    weathers: `Set WEATHERS SMTP credentials in web/.env.local: ${keys.smtpHost}, ${keys.smtpUser}, ${keys.smtpPassword}.`,
+    jgdevs: `Set JGDEVS SMTP credentials in web/.env.local: ${keys.smtpHost}, ${keys.smtpUser}, ${keys.smtpPassword}.`,
+    breazy: `Set BREAZY SMTP credentials in web/.env.local: ${keys.smtpHost}, ${keys.smtpUser}, ${keys.smtpPassword}.`,
+    pesttrace: `Set SMTP_HOST, SMTP_USER, SMTP_PASSWORD (and OUTREACH_FROM_EMAIL) in web/.env.local.`,
+  };
+  return { ok: false, hint: hintByKey[key] ?? hintByKey.pesttrace };
 }
 
 /** Pick A/B subject; when `preferredWinner` is set, send winner ~80% (challenger 20%). */

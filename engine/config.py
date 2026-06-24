@@ -64,6 +64,12 @@ def _apply_web_env_local_overrides() -> None:
         "JGDEVS_SMTP_PORT",
         "JGDEVS_SMTP_USER",
         "JGDEVS_SMTP_PASSWORD",
+        "BREAZY_OUTREACH_FROM_NAME",
+        "BREAZY_OUTREACH_FROM_EMAIL",
+        "BREAZY_SMTP_HOST",
+        "BREAZY_SMTP_PORT",
+        "BREAZY_SMTP_USER",
+        "BREAZY_SMTP_PASSWORD",
         "OUTREACH_PUBLIC_BASE_URL",
         "OUTREACH_SNAPSHOT_ENABLED",
     ):

@@ -42,7 +42,7 @@ from config import (
 from supabase_client import get_supabase
 from html import escape as html_escape
 
-from tools.copy_doctrine import JGDEVS_MARKETING_FOCUS, OUTREACH_CONVERSION_DOCTRINE
+from tools.copy_doctrine import BREAZY_MARKETING_FOCUS, JGDEVS_MARKETING_FOCUS, OUTREACH_CONVERSION_DOCTRINE
 from tools.audit_snapshot import SNAPSHOT_URL_PLACEHOLDER, prospect_has_snapshot
 from tools.email_validator import normalize_outreach_body, validate_outreach_copy
 from tools.outreach_locale import locale_rules_for_country, normalize_outreach_country
@@ -329,6 +329,8 @@ def generate_outreach_email(
     outreach_doctrine = f"{OUTREACH_CONVERSION_DOCTRINE}\n\n{locale_rules_for_country(country)}"
     if cfg.id == "jgdevs":
         outreach_doctrine = f"{outreach_doctrine}\n\n{JGDEVS_MARKETING_FOCUS}"
+    elif cfg.id == "breazy":
+        outreach_doctrine = f"{outreach_doctrine}\n\n{BREAZY_MARKETING_FOCUS}"
 
     website = (prospect.get("website_url") or cfg.website).strip()
     sector = str(prospect.get("sector") or "generic").strip().lower() or "generic"
@@ -540,21 +542,26 @@ class SmtpNotConfiguredError(RuntimeError):
 def _campaign_smtp(cfg: CampaignConfig) -> dict[str, Any]:
     """Resolve SMTP host/port/user/password + from-name/from-email for a campaign.
 
-    Falls back to the shared SMTP_* / OUTREACH_* env vars when campaign-specific overrides
-    are absent — this preserves the original PestTrace single-sender flow unchanged.
+    Campaign-specific env vars are used exclusively for non-pesttrace campaigns.
+    PestTrace may fall back to shared SMTP_* / OUTREACH_* env vars.
     """
     def _e(name: str) -> str:
         return os.getenv(name, "").strip().strip('"').strip("'")
 
-    host = _e(cfg.smtp_host_env) or (smtp_host() or "")
-    user = _e(cfg.smtp_user_env) or (smtp_user() or "")
-    password = _e(cfg.smtp_password_env) or (smtp_password() or "")
+    is_pesttrace = cfg.id == "pesttrace"
+    host = _e(cfg.smtp_host_env) or (smtp_host() if is_pesttrace else "")
+    user = _e(cfg.smtp_user_env) or (smtp_user() if is_pesttrace else "")
+    password = _e(cfg.smtp_password_env) or (smtp_password() if is_pesttrace else "")
     try:
         port = int(_e(cfg.smtp_port_env) or smtp_port())
     except ValueError:
         port = smtp_port()
-    from_name = _e(cfg.default_from_name_env) or outreach_from_name() or cfg.sender_signature
-    from_email = _e(cfg.default_from_email_env) or outreach_from_email() or user
+    if is_pesttrace:
+        from_name = _e(cfg.default_from_name_env) or outreach_from_name() or cfg.sender_signature
+        from_email = _e(cfg.default_from_email_env) or outreach_from_email() or user
+    else:
+        from_name = _e(cfg.default_from_name_env) or cfg.sender_signature
+        from_email = _e(cfg.default_from_email_env) or user
     return {
         "host": host,
         "port": port,

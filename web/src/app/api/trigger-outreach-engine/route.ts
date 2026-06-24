@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 
 const WORKFLOW_FILE = "outreach-engine.yml";
-const VALID_CAMPAIGNS = ["pesttrace", "weathers", "jgdevs", "all"] as const;
+const VALID_CAMPAIGNS = ["pesttrace", "weathers", "jgdevs", "breazy", "all"] as const;
 type Campaign = (typeof VALID_CAMPAIGNS)[number];
 
 function normalizeCampaign(raw: unknown): Campaign {

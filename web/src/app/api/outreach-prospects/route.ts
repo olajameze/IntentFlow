@@ -61,8 +61,38 @@ const patchSchema = z
     { message: "Provide at least one of: status, email_subject, email_body, replied, booked" },
   );
 
+const bulkApproveSchema = z.object({
+  bulkApprove: z.literal(true),
+  campaign: z.string().trim().min(1).optional(),
+});
+
 export async function PATCH(req: Request) {
-  const json = await req.json();
+  const json = await req.json().catch(() => ({}));
+
+  const bulkParsed = bulkApproveSchema.safeParse(json);
+  if (bulkParsed.success) {
+    const campaignRaw = bulkParsed.data.campaign?.trim().toLowerCase() ?? "all";
+    return withSupabaseRoute(async (sb) => {
+      const now = new Date().toISOString();
+      let query = sb
+        .from("outreach_prospects")
+        .update({ status: "approved", updated_at: now })
+        .eq("status", "draft_ready")
+        .select("id, campaign");
+
+      if (campaignRaw !== "all") {
+        query = query.eq("campaign", campaignRaw);
+      }
+
+      const { data, error } = await query;
+      if (error) return supabaseErrorResponse(error);
+      const rows = data ?? [];
+      const campaigns = Array.from(new Set(rows.map((r) => String(r.campaign ?? "pesttrace"))));
+      campaigns.forEach((c) => invalidateOutreachStats(c));
+      return NextResponse.json({ ok: true, approved: rows.length, campaign: campaignRaw });
+    });
+  }
+
   const parsed = patchSchema.safeParse(json);
   if (!parsed.success) return NextResponse.json({ error: parsed.error.flatten() }, { status: 400 });
 

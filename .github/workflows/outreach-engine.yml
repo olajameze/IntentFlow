@@ -8,12 +8,13 @@ name: Outreach Engine
 #   pesttrace — compliance SaaS → pest control firms (UK/US/CA/AU)
 #   weathers  — Weathers Pest Solutions services → UK West Midlands businesses
 #   jgdevs    — JGDevs web/SEO/booking → UK small businesses
+#   breazy    — Breazy Productions cinematic videography → UK venues, brands, artists
 #   all       — run every campaign in sequence
 on:
   workflow_dispatch:
     inputs:
       campaign:
-        description: "Outreach campaign to run (pesttrace, weathers, jgdevs, all)"
+        description: "Outreach campaign to run (pesttrace, weathers, jgdevs, breazy, all)"
         required: false
         default: "all"
         type: choice
@@ -21,6 +22,7 @@ on:
           - pesttrace
           - weathers
           - jgdevs
+          - breazy
           - all
 
 permissions:

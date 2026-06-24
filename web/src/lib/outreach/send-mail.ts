@@ -8,8 +8,8 @@ import { formatMailError } from "@/lib/outreach/smtp-errors";
 
 export type SendResult = { messageId?: string; provider: "smtp" | "resend" };
 
-function createSmtpTransporter(campaign: string) {
-  const cfg = getSmtpConfig(campaign);
+function createSmtpTransporter(campaign: string, overrides?: { fromName?: string }) {
+  const cfg = getSmtpConfig(campaign, overrides);
   if (!cfg.configured) throw new Error(`SMTP not configured for campaign '${campaign}'`);
 
   return {
@@ -46,9 +46,9 @@ async function sendEmailViaSmtp(
   subject: string,
   html: string,
   plain: string,
-  meta?: { prospectId?: string },
+  meta?: { prospectId?: string; fromName?: string },
 ): Promise<SendResult> {
-  const { cfg, transporter } = createSmtpTransporter(campaign);
+  const { cfg, transporter } = createSmtpTransporter(campaign, { fromName: meta?.fromName });
 
   const replyTo = cfg.replyTo ?? `${cfg.fromName} <${cfg.fromEmail}>`;
   const headers: Record<string, string> = {};
@@ -79,9 +79,9 @@ async function sendEmailViaResend(
   subject: string,
   html: string,
   plain: string,
-  meta?: { prospectId?: string },
+  meta?: { prospectId?: string; fromName?: string },
 ): Promise<SendResult> {
-  const cfg = getResendConfig(campaign);
+  const cfg = getResendConfig(campaign, { fromName: meta?.fromName });
   if (!cfg.configured) throw new Error(`Resend not configured for campaign '${campaign}'`);
 
   const payload: Record<string, unknown> = {
@@ -124,11 +124,11 @@ export async function sendOutreachEmail(
   subject: string,
   html: string,
   plain: string,
-  meta?: { prospectId?: string },
+  meta?: { prospectId?: string; fromName?: string },
 ): Promise<SendResult> {
   const provider = getEmailProvider();
-  const smtpConfigured = getSmtpConfig(campaign).configured;
-  const resendConfigured = getResendConfig(campaign).configured;
+  const smtpConfigured = getSmtpConfig(campaign, { fromName: meta?.fromName }).configured;
+  const resendConfigured = getResendConfig(campaign, { fromName: meta?.fromName }).configured;
 
   if (provider === "smtp") {
     return sendEmailViaSmtp(campaign, to, subject, html, plain, meta);

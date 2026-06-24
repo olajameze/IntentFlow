@@ -1022,12 +1022,198 @@ JGDEVS = CampaignConfig(
 )
 
 
+# ── Breazy Productions ───────────────────────────────────────────────────────
+# UK cinematic videography → wedding venues, events, cafes, musicians, brands.
+# Website: https://jordans-e-website.vercel.app
+
+_BREAZY_SUBJECT_PROMPT = """You are writing TWO cold B2B email subject line variants for Breazy Productions — UK cinematic videography (weddings, commercial, music videos).
+
+The recipient is a business owner or manager at: {name} ({website})
+Location: {location}, {country}
+Sector angle: {sector_angle}
+
+Return EXACTLY two lines:
+Line 1 — variant A (question style): one clear video/marketing visibility problem as a question.
+Line 2 — variant B (statement style): a plain statement about missed bookings, weak brand film, or couples not feeling the venue online — no question mark.
+
+Rules for BOTH:
+- Max 60 characters each.
+- Do NOT mention Breazy Productions in the subject.
+- UK English. No exclamation marks. No emojis.
+- Focus on: no recent promo film, phone footage vs cinematic quality, couples choosing venues they can visualise online, artists needing a music video.
+
+Examples:
+  Does your venue show well on film?
+  A stronger brand film could fill more dates
+  Still relying on phone clips for social?
+
+Return ONLY two lines — no labels, no quotes."""
+
+
+_BREAZY_BODY_PROMPT = """You are writing a cold B2B email on behalf of Breazy Productions (https://jordans-e-website.vercel.app).
+
+Breazy Productions is a UK cinematic videography studio offering:
+- Wedding videography — emotional, cinematic coverage of the day
+- Commercial and promotional films — brand storytelling for cafes, shops, and local businesses
+- Documentaries — compelling real stories told beautifully
+- Music videos — creative production for artists and bands
+
+Recipient: {name}
+Website: {website}
+Country: {country}
+Location: {location}
+Industry: {industry}
+Services: {services}
+Sector angle: {sector_angle}
+Weakness to reference naturally: {weakness}
+Opportunity: {opportunity}
+
+Write a professional, warm email. Rules:
+- Tone: cinematic and approachable — like a filmmaker who understands business goals, not a hard sell.
+- UK English only (this campaign targets UK businesses).
+- Mandatory structure (short paragraphs):
+  1) One-sentence hook using the sector angle — a problem they likely recognise (venue hard to visualise online, no recent promo film, social clips do not match the brand).
+  2) Two sentences on what that costs them (couples or customers choose competitors with stronger video, missed bookings, brand feels less premium).
+  3) Two sentences on how Breazy helps — wedding, commercial, event, or music video work in plain terms; you may reference portfolio style (Caféphilia promo, event coverage, FK3 Stallion promo) as examples of cinematic work — do not invent client testimonials.
+  4) Soft CTA: invite them to tap the button below to view work and book a consultation — do NOT paste URLs in the body.
+- Max 160 words.
+- Do NOT invent prices, awards, or client names beyond the portfolio examples above.
+- Do NOT use "I hope this finds you well", "just reaching out", or "touch base".
+- Sign off EXACTLY:
+  "Best regards,\\nThe Breazy Productions Team"
+- Return ONLY the email body — no subject, no meta-commentary."""
+
+
+_BREAZY_FALLBACK_BODY = """\
+Many businesses like {name} still lose enquiries because their story is hard to feel online — phone clips and dated footage rarely match the quality of the experience you deliver in person.
+
+When couples, customers, or fans compare options, they often choose whoever looks most cinematic and trustworthy in the first minute of video.
+
+Breazy Productions creates wedding films, commercial promos, documentaries, and music videos with a cinematic approach — the kind of work shown in our Caféphilia and event portfolio.
+
+If professional video is on your list this quarter, the link below shows our work and lets you book a no-obligation consultation.
+
+Best regards,
+The Breazy Productions Team"""
+
+
+_BREAZY_QUERIES: dict[str, list[SearchQuery]] = {
+    "UK": [
+        ("wedding venue Birmingham site:.co.uk", "Birmingham"),
+        ("wedding planner Manchester site:.co.uk", "Manchester"),
+        ("independent cafe London site:.co.uk", "London"),
+        ("cocktail bar Bristol site:.co.uk", "Bristol"),
+        ("music artist band Leeds site:.co.uk", "Leeds"),
+        ("event planner Edinburgh site:.co.uk", "Edinburgh"),
+        ("boutique shop Glasgow site:.co.uk", "Glasgow"),
+        ("independent brewery Nottingham site:.co.uk", "Nottingham"),
+        ("wedding venue Cardiff site:.co.uk", "Cardiff"),
+        ("restaurant Liverpool site:.co.uk", "Liverpool"),
+        ("recording artist Sheffield site:.co.uk", "Sheffield"),
+        ("hotel wedding venue Brighton site:.co.uk", "Brighton"),
+        ("independent roastery Cambridge site:.co.uk", "Cambridge"),
+        ("beauty salon Newcastle site:.co.uk", "Newcastle"),
+        ("event company Leicester site:.co.uk", "Leicester"),
+    ],
+}
+
+
+_BREAZY_SKIP_KEYWORDS: tuple[str, ...] = (
+    "videography", "video-production", "film-production", "wedding-videographer",
+    "production-company", "filmmaker", "video-agency", "media-production",
+)
+
+
+_BREAZY_SECTOR_ANGLES: dict[str, str] = {
+    "restaurant": "promotional films that capture atmosphere and artisan quality — like cinematic café brand storytelling",
+    "pub": "event and venue films that show the atmosphere couples and groups want before they book",
+    "bakery": "short brand films that make wholesale and walk-in customers feel the craft behind the product",
+    "hotel": "wedding and event showcase films that help couples visualise getting married at your venue",
+    "salon": "cinematic brand films for social and website that build trust before the first appointment",
+    "local_shop": "commercial promo video that explains your brand in seconds instead of static posts",
+    "professional": "polished video credibility before prospects call — beyond phone footage or stock clips",
+    "generic": "milestone events and brand visibility — cinematic coverage instead of phone footage",
+}
+
+
+_BREAZY_FOLLOWUP_PROMPTS = (
+    """You are writing a SHORT follow-up (max 90 words) from Breazy Productions to a UK business that did not reply three days ago.
+
+Recipient: {name} ({website})
+Location: {location}
+Industry: {industry}
+Sector angle: {sector_angle}
+
+Rules:
+- Mention you wrote earlier in one clause — no apology.
+- One new angle: wedding film, commercial promo, event coverage, or music video — tied to their sector.
+- UK English — warm and cinematic, not pushy.
+- Soft CTA: button below to view portfolio and book a consultation.
+- Sign off: "Best regards,\\nThe Breazy Productions Team"
+- Max 90 words.""",
+    """You are writing a follow-up (max 90 words) from Breazy Productions with a practical insight.
+
+Recipient: {name} ({website})
+Industry: {industry}
+
+Rules:
+- Share one credible insight: most customers and couples research visually before they enquire — strong video wins that moment.
+- Tie it to their sector without inventing client names.
+- Mention Breazy creates wedding, commercial, documentary, and music video work.
+- Soft CTA via button below.
+- Sign off: "Best regards,\\nThe Breazy Productions Team"
+- Max 90 words.""",
+    """You are writing the FINAL follow-up (max 60 words) from Breazy Productions.
+
+Recipient: {name} ({website})
+
+Rules:
+- Say you'll stop emailing after this — politely.
+- One sentence: Breazy Productions creates cinematic wedding, commercial, and music video work in the UK.
+- Soft CTA: portfolio and booking stay open via the button below.
+- Sign off: "Best regards,\\nThe Breazy Productions Team"
+- No emojis.""",
+)
+
+
+BREAZY = CampaignConfig(
+    id="breazy",
+    label="Breazy Productions (cinematic videography → UK venues, brands, artists)",
+    sender_signature="The Breazy Productions Team",
+    website="https://jordans-e-website.vercel.app",
+    default_from_name_env="BREAZY_OUTREACH_FROM_NAME",
+    default_from_email_env="BREAZY_OUTREACH_FROM_EMAIL",
+    smtp_host_env="BREAZY_SMTP_HOST",
+    smtp_user_env="BREAZY_SMTP_USER",
+    smtp_password_env="BREAZY_SMTP_PASSWORD",
+    smtp_port_env="BREAZY_SMTP_PORT",
+    countries=("UK",),
+    queries=_BREAZY_QUERIES,
+    subject_prompt=_BREAZY_SUBJECT_PROMPT,
+    body_prompt=_BREAZY_BODY_PROMPT,
+    fallback_subject="Does your brand show well on film?",
+    fallback_body_template=_BREAZY_FALLBACK_BODY,
+    opt_out_footer=(
+        "You received this email because your business was found in a public directory. "
+        "To opt out, reply with <strong>STOP</strong> and we will never contact you again."
+    ),
+    cta_label="Book a videography consultation",
+    cta_url_template="https://jordans-e-website.vercel.app/book?utm_source=outreach&utm_medium=email&utm_campaign=breazy&p={prospect_id}",
+    accent_color="#C9A227",
+    trust_badges=("Cinematic storytelling", "Wedding & commercial", "UK videography", "Featured portfolio work"),
+    sector_angles=_BREAZY_SECTOR_ANGLES,
+    follow_up_prompts=_BREAZY_FOLLOWUP_PROMPTS,
+    skip_url_keywords=_BREAZY_SKIP_KEYWORDS,
+)
+
+
 # ── Registry ────────────────────────────────────────────────────────────────
 
 CAMPAIGNS: dict[str, CampaignConfig] = {
     PESTTRACE.id: PESTTRACE,
     WEATHERS.id: WEATHERS,
     JGDEVS.id: JGDEVS,
+    BREAZY.id: BREAZY,
 }
 
 DEFAULT_CAMPAIGN_ID = PESTTRACE.id

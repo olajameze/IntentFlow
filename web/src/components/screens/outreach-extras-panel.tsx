@@ -7,7 +7,7 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import styles from "./outreach-extras-panel.module.css";
 
-type Campaign = "pesttrace" | "weathers" | "jgdevs";
+type Campaign = "pesttrace" | "weathers" | "jgdevs" | "breazy";
 
 type FunnelStage = { key: string; label: string; count: number };
 

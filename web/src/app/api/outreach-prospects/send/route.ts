@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { loadAbWinner } from "@/lib/outreach/ab-winner";
 import { invalidateOutreachStats } from "@/lib/outreach/campaign-stats";
 import {
+  getBaseConfig,
   getDailyLimit,
   getEmailProvider,
   isConfiguredForCampaign,
@@ -27,6 +28,10 @@ function normalizeCampaign(raw: unknown): string {
   return typeof raw === "string" && raw.trim() ? raw.trim().toLowerCase() : "pesttrace";
 }
 
+function isAllCampaigns(campaign: string): boolean {
+  return campaign === "all";
+}
+
 function sleep(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
@@ -43,10 +48,13 @@ export async function GET(req: Request) {
   const doVerify = url.searchParams.get("verify") === "1";
   const check = isConfiguredForCampaign(campaign);
 
+  const base = getBaseConfig(campaign);
   const payload: Record<string, unknown> = {
     campaign,
     provider: getEmailProvider(),
     configured: check.ok,
+    fromName: base.fromName,
+    fromEmail: base.fromEmail,
     ...(check.hint ? { configHint: check.hint } : {}),
   };
 
@@ -70,6 +78,26 @@ export async function POST(req: Request) {
 
   return withSupabaseRoute(async (sb) => {
     const winnerCache = new Map<string, "A" | "B" | null>();
+    const senderNameCache = new Map<string, string | null>();
+
+    const senderFromNameFor = async (campaign: string): Promise<string | undefined> => {
+      const key = campaign.trim().toLowerCase();
+      if (!senderNameCache.has(key)) {
+        const { data } = await sb
+          .from("business_outreach_settings")
+          .select("sender_from_name")
+          .eq("campaign_slug", key)
+          .maybeSingle();
+        const name =
+          typeof data?.sender_from_name === "string" && data.sender_from_name.trim()
+            ? data.sender_from_name.trim()
+            : null;
+        senderNameCache.set(key, name);
+      }
+      const cached = senderNameCache.get(key);
+      return cached ?? undefined;
+    };
+
     const abWinnerFor = async (campaign: string) => {
       const key = campaign.trim().toLowerCase();
       if (!winnerCache.has(key)) {
@@ -89,6 +117,19 @@ export async function POST(req: Request) {
       raw?: Record<string, unknown> | null;
     }) => {
       const campaign = normalizeCampaign(prospect.campaign);
+
+      const configCheck = isConfiguredForCampaign(campaign);
+      if (!configCheck.ok) {
+        return {
+          ok: false as const,
+          status: 400,
+          error: `Email sender is not configured for campaign '${campaign}'.`,
+          skippedUnconfigured: true,
+        };
+      }
+
+      const senderFromName = await senderFromNameFor(campaign);
+      const sendIdentity = getBaseConfig(campaign, { fromName: senderFromName });
 
       const suppressed = await checkSuppressionBeforeSend(sb, prospect.email, campaign);
       if (suppressed.blocked) {
@@ -157,13 +198,21 @@ export async function POST(req: Request) {
 
       let sendResult;
       try {
+        outreachLog({
+          level: "info",
+          event: "send_attempt",
+          prospectId: prospect.id,
+          campaign,
+          fromEmail: sendIdentity.fromEmail ?? "",
+          fromName: sendIdentity.fromName ?? "",
+        });
         sendResult = await sendOutreachEmail(
           campaign,
           prospect.email,
           validation.subject,
           trackedHtml,
           validation.plainBody,
-          { prospectId: prospect.id },
+          { prospectId: prospect.id, fromName: senderFromName },
         );
       } catch (err) {
         const msg = err instanceof Error ? err.message : "SMTP error";
@@ -257,15 +306,6 @@ export async function POST(req: Request) {
         return NextResponse.json({ error: "Missing email address, subject, or body." }, { status: 400 });
       }
 
-      const campaign = normalizeCampaign(prospect.campaign);
-      const check = isConfiguredForCampaign(campaign);
-      if (!check.ok) {
-        return NextResponse.json(
-          { error: `Email sender is not configured for campaign '${campaign}'.`, hint: check.hint },
-          { status: 400 },
-        );
-      }
-
       const result = await sendOne(prospect);
       if (!result.ok) {
         const extra =
@@ -289,23 +329,30 @@ export async function POST(req: Request) {
     }
 
     const campaign = normalizeCampaign(body.campaign);
-    const check = isConfiguredForCampaign(campaign);
-    if (!check.ok) {
-      return NextResponse.json(
-        { error: `Email sender is not configured for campaign '${campaign}'.`, hint: check.hint },
-        { status: 400 },
-      );
+    if (!isAllCampaigns(campaign)) {
+      const check = isConfiguredForCampaign(campaign);
+      if (!check.ok) {
+        return NextResponse.json(
+          { error: `Email sender is not configured for campaign '${campaign}'.`, hint: check.hint },
+          { status: 400 },
+        );
+      }
     }
 
     const limit = getDailyLimit();
-    const { data: prospects, error: listErr } = await sb
+    let query = sb
       .from("outreach_prospects")
       .select("*")
       .eq("status", "approved")
-      .eq("campaign", campaign)
       .order("lead_score", { ascending: false })
       .order("created_at", { ascending: true })
       .limit(limit);
+
+    if (!isAllCampaigns(campaign)) {
+      query = query.eq("campaign", campaign);
+    }
+
+    const { data: prospects, error: listErr } = await query;
 
     if (listErr) return NextResponse.json({ error: listErr.message }, { status: 500 });
     if (!prospects?.length) {
@@ -313,13 +360,16 @@ export async function POST(req: Request) {
         ok: true,
         sent: 0,
         campaign,
-        message: "No approved prospects to send for this campaign.",
+        message: isAllCampaigns(campaign)
+          ? "No approved prospects to send across all campaigns."
+          : "No approved prospects to send for this campaign.",
       });
     }
 
     let sent = 0;
     let failed = 0;
     let validationFailed = 0;
+    let skippedUnconfigured = 0;
     let firstError: string | null = null;
     let firstIssues: string[] | undefined;
     for (const prospect of prospects) {
@@ -331,7 +381,10 @@ export async function POST(req: Request) {
         await sleep(sendJitterMs());
       } else {
         failed++;
-        if (result.status === 422) validationFailed++;
+        if ("skippedUnconfigured" in result && result.skippedUnconfigured) skippedUnconfigured++;
+        if (result.status === 422 && !("skippedUnconfigured" in result && result.skippedUnconfigured)) {
+          validationFailed++;
+        }
         if (!firstError) {
           firstError = result.error;
           if ("issues" in result && Array.isArray(result.issues)) firstIssues = result.issues;
@@ -342,17 +395,21 @@ export async function POST(req: Request) {
 
     if (sent === 0 && failed > 0) {
       const allValidation = validationFailed === failed;
-      const errMsg = allValidation
-        ? `All ${failed} emails failed validation before send`
-        : `All ${failed} sends failed`;
+      const allUnconfigured = skippedUnconfigured === failed;
+      const errMsg = allUnconfigured
+        ? `All ${failed} emails skipped — SMTP not configured for one or more campaigns`
+        : allValidation
+          ? `All ${failed} emails failed validation before send`
+          : `All ${failed} sends failed`;
       const hint =
-        !allValidation && firstError ? smtpTroubleshootingHint(firstError) : undefined;
+        !allValidation && !allUnconfigured && firstError ? smtpTroubleshootingHint(firstError) : undefined;
       return NextResponse.json(
         {
           ok: false,
           sent,
           failed,
           validationFailed,
+          skippedUnconfigured,
           limit,
           campaign,
           error: errMsg,
@@ -360,9 +417,18 @@ export async function POST(req: Request) {
           firstIssues,
           ...(hint ? { hint } : {}),
         },
-        { status: allValidation ? 422 : 502 },
+        { status: allValidation ? 422 : allUnconfigured ? 400 : 502 },
       );
     }
-    return NextResponse.json({ ok: true, sent, failed, limit, campaign, firstError, firstIssues });
+    return NextResponse.json({
+      ok: true,
+      sent,
+      failed,
+      skippedUnconfigured,
+      limit,
+      campaign,
+      firstError,
+      firstIssues,
+    });
   });
 }

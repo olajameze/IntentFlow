@@ -101,7 +101,17 @@ function EmailPreviewModal({
 }
 
 type Prospect = Record<string, unknown>;
-type Campaign = "pesttrace" | "weathers" | "jgdevs";
+type Campaign = "pesttrace" | "weathers" | "jgdevs" | "breazy";
+
+const ALL_CAMPAIGNS: Campaign[] = ["pesttrace", "weathers", "jgdevs", "breazy"];
+
+function resolveCampaign(raw: unknown): Campaign {
+  const v = String(raw ?? "").toLowerCase();
+  if (v === "weathers") return "weathers";
+  if (v === "jgdevs") return "jgdevs";
+  if (v === "breazy") return "breazy";
+  return "pesttrace";
+}
 
 type CampaignStats = {
   campaign: Campaign;
@@ -377,6 +387,13 @@ const CAMPAIGN_META: Record<
     fromEmail: "hello@jgdev.co.uk",
     countries: "UK · IE · DE · FR · ES · IT · NL · BE · AT · PT · PL · SE · DK",
   },
+  breazy: {
+    label: "Breazy Productions",
+    short: "Breazy",
+    blurb: "Cinematic videography for UK wedding venues, cafes, event organisers, musicians, and brands — weddings, commercial, documentaries, music videos.",
+    fromEmail: "breazyproductions7@gmail.com",
+    countries: "UK only",
+  },
 };
 
 function countryBadgeClass(country: string) {
@@ -395,10 +412,12 @@ function ProspectCard({
   prospect,
   mode,
   onRefresh,
+  senderEmails,
 }: {
   prospect: Prospect;
   mode: "review" | "approved" | "sent" | "rejected";
   onRefresh: () => Promise<void>;
+  senderEmails?: Partial<Record<Campaign, string>>;
 }) {
   const id = String(prospect.id);
   const name = String(prospect.name ?? "Unknown");
@@ -429,14 +448,10 @@ function ProspectCard({
   const weaknessSnippet = Array.isArray(research.weaknesses)
     ? String((research.weaknesses as string[])[0] || "")
     : "";
-  const campaign: Campaign =
-    prospect.campaign === "weathers"
-      ? "weathers"
-      : prospect.campaign === "jgdevs"
-        ? "jgdevs"
-        : "pesttrace";
+  const campaign = resolveCampaign(prospect.campaign);
   const snapshotMeta = parseProspectSnapshotMeta(raw.snapshot);
-  const fromLabel = `${CAMPAIGN_META[campaign].label} <${CAMPAIGN_META[campaign].fromEmail}>`;
+  const fromEmail = senderEmails?.[campaign] ?? CAMPAIGN_META[campaign].fromEmail;
+  const fromLabel = `${CAMPAIGN_META[campaign].label} <${fromEmail}>`;
 
   const [subject, setSubject] = useState(String(prospect.email_subject ?? ""));
   const [previewVariantB, setPreviewVariantB] = useState(false);
@@ -618,7 +633,9 @@ function ProspectCard({
                       ? "border-amber-600/30 bg-amber-600/15 text-amber-400"
                       : campaign === "jgdevs"
                         ? "border-blue-600/30 bg-blue-600/15 text-blue-400"
-                        : "border-primary/30 bg-primary/10 text-primary"
+                        : campaign === "breazy"
+                          ? "border-yellow-600/30 bg-yellow-600/15 text-yellow-500"
+                          : "border-primary/30 bg-primary/10 text-primary"
                   }`}
                   title={`Campaign: ${CAMPAIGN_META[campaign].label}`}
                 >
@@ -931,8 +948,11 @@ export function OutreachScreen() {
   campaignRef.current = campaign;
   const [country, setCountry] = useState<string>("all");
   const [bulkSending, setBulkSending] = useState(false);
+  const [bulkApproving, setBulkApproving] = useState(false);
+  const [portfolioSending, setPortfolioSending] = useState(false);
   const [bulkDeleting, setBulkDeleting] = useState(false);
   const [dispatching, setDispatching] = useState(false);
+  const [senderEmails, setSenderEmails] = useState<Partial<Record<Campaign, string>>>({});
 
   const loadStats = useCallback(async (forCampaign: Campaign) => {
     const cached = statsCacheRef.current[forCampaign];
@@ -984,7 +1004,21 @@ export function OutreachScreen() {
     void loadStats("pesttrace");
     void loadStats("weathers");
     void loadStats("jgdevs");
+    void loadStats("breazy");
     // eslint-disable-next-line react-hooks/exhaustive-deps -- prefetch once on mount
+  }, []);
+
+  useEffect(() => {
+    void Promise.all(
+      ALL_CAMPAIGNS.map(async (c) => {
+        const res = await fetch(`/api/outreach-prospects/send?campaign=${c}`);
+        if (!res.ok) return;
+        const data = (await res.json()) as { fromEmail?: string };
+        if (typeof data.fromEmail === "string" && data.fromEmail.trim()) {
+          setSenderEmails((prev) => ({ ...prev, [c]: data.fromEmail!.trim() }));
+        }
+      }),
+    );
   }, []);
 
   const filterByCountry = (prospects: Prospect[]) =>
@@ -1059,13 +1093,46 @@ export function OutreachScreen() {
     }
   };
 
-  const bulkSend = async () => {
-    setBulkSending(true);
+  const refreshAllCampaigns = useCallback(async () => {
+    await load(campaign);
+    await loadStats(campaign);
+    await Promise.all(ALL_CAMPAIGNS.map((c) => loadStats(c)));
+  }, [campaign, load, loadStats]);
+
+  const bulkApproveAll = async (scope: "all" | Campaign = "all") => {
+    setBulkApproving(true);
+    try {
+      const res = await fetch("/api/outreach-prospects", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ bulkApprove: true, campaign: scope }),
+      });
+      const data = (await res.json().catch(() => ({}))) as Record<string, unknown>;
+      if (!res.ok) {
+        toast.error(typeof data.error === "string" ? data.error : "Bulk approve failed");
+        return;
+      }
+      const approved = typeof data.approved === "number" ? data.approved : 0;
+      toast.success(
+        scope === "all"
+          ? `Approved ${approved} draft(s) across all businesses`
+          : `Approved ${approved} ${CAMPAIGN_META[scope].short} draft(s)`,
+      );
+      await refreshAllCampaigns();
+    } finally {
+      setBulkApproving(false);
+    }
+  };
+
+  const bulkSend = async (scope: "all" | Campaign = campaign) => {
+    const sending = scope === "all";
+    if (sending) setPortfolioSending(true);
+    else setBulkSending(true);
     try {
       const res = await fetch("/api/outreach-prospects/send", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ bulk: true, campaign }),
+        body: JSON.stringify({ bulk: true, campaign: scope }),
       });
       const data = await res.json().catch(() => ({})) as Record<string, unknown>;
       if (!res.ok) {
@@ -1081,31 +1148,38 @@ export function OutreachScreen() {
       }
       const sent = typeof data.sent === "number" ? data.sent : 0;
       const failed = typeof data.failed === "number" ? data.failed : 0;
+      const skippedUnconfigured =
+        typeof data.skippedUnconfigured === "number" ? data.skippedUnconfigured : 0;
       const firstError = typeof data.firstError === "string" ? data.firstError : null;
       const firstIssues = Array.isArray(data.firstIssues)
         ? `\n${(data.firstIssues as string[]).join("\n")}`
         : "";
       if (sent === 0 && failed > 0) {
-        // All sends failed — surface as an error toast with the underlying SMTP reason
-        // so the operator can act (commonly: Brevo IP allowlist, unverified sender, expired creds).
         toast.error(
-          `0 emails sent, ${failed} failed${firstError ? `:\n${firstError}` : ""}${firstIssues}`,
+          `0 emails sent, ${failed} failed${skippedUnconfigured ? ` (${skippedUnconfigured} unconfigured)` : ""}${firstError ? `:\n${firstError}` : ""}${firstIssues}`,
           { duration: 15000 },
         );
       } else if (failed > 0) {
-        // Partial failure — show as warning-style toast with the reason for the failed ones
         toast.error(
-          `Sent ${sent}, but ${failed} failed${firstError ? ` (${firstError})` : ""}${firstIssues}`,
+          `Sent ${sent}, but ${failed} failed${skippedUnconfigured ? ` (${skippedUnconfigured} unconfigured)` : ""}${firstError ? ` (${firstError})` : ""}${firstIssues}`,
           { duration: 12000 },
         );
       } else {
-        toast.success(`Sent ${sent} emails`);
+        toast.success(
+          scope === "all"
+            ? `Sent ${sent} email(s) across all businesses`
+            : `Sent ${sent} email(s)`,
+        );
       }
-      await load(campaign);
-    } finally { setBulkSending(false); }
+      await refreshAllCampaigns();
+    } finally {
+      if (sending) setPortfolioSending(false);
+      else setBulkSending(false);
+    }
   };
 
   const meta = CAMPAIGN_META[campaign];
+  const senderEmail = senderEmails[campaign] ?? meta.fromEmail;
   const reviewList = filterByCountry(reviewProspects);
   const approvedList = filterByCountry(approvedProspects);
   const sentList = filterByCountry(sentProspects);
@@ -1117,14 +1191,41 @@ export function OutreachScreen() {
 
   return (
     <div className="min-w-0 space-y-3">
-      {/* Campaign selector — switches the entire screen between PestTrace and Weathers */}
+      {/* Portfolio-wide approve / send — all businesses */}
+      <div className="flex flex-col gap-2 rounded-lg border border-dashed bg-card/50 p-3 sm:flex-row sm:items-center sm:justify-between">
+        <div className="min-w-0">
+          <p className="text-sm font-medium">Portfolio actions — all businesses</p>
+          <p className="text-xs text-muted-foreground">
+            Approve every draft in review or send every approved email across PestTrace, Weathers, JGDevs, and Breazy.
+          </p>
+        </div>
+        <div className="flex flex-wrap gap-2">
+          <Button
+            type="button"
+            variant="secondary"
+            className="h-9 text-xs"
+            disabled={bulkApproving || portfolioSending || bulkDeleting}
+            onClick={() => void bulkApproveAll("all")}
+          >
+            {bulkApproving ? "Approving…" : "Approve all drafts"}
+          </Button>
+          <Button
+            type="button"
+            className="h-9 text-xs"
+            disabled={portfolioSending || bulkApproving || bulkDeleting}
+            onClick={() => void bulkSend("all")}
+          >
+            {portfolioSending ? "Sending all…" : "Send all approved"}
+          </Button>
+        </div>
+      </div>
+
+      {/* Campaign selector */}
       <Tabs
         value={campaign}
-        onValueChange={(v) =>
-          setCampaign(v === "weathers" ? "weathers" : v === "jgdevs" ? "jgdevs" : "pesttrace")
-        }
+        onValueChange={(v) => setCampaign(resolveCampaign(v))}
       >
-        <TabsList className="grid w-full grid-cols-3 md:inline-flex">
+        <TabsList className="grid w-full grid-cols-2 sm:grid-cols-4 md:inline-flex">
           <TabsTrigger value="pesttrace" className="text-xs sm:text-sm">
             {CAMPAIGN_META.pesttrace.label}
           </TabsTrigger>
@@ -1133,6 +1234,9 @@ export function OutreachScreen() {
           </TabsTrigger>
           <TabsTrigger value="jgdevs" className="text-xs sm:text-sm">
             {CAMPAIGN_META.jgdevs.label}
+          </TabsTrigger>
+          <TabsTrigger value="breazy" className="text-xs sm:text-sm">
+            {CAMPAIGN_META.breazy.label}
           </TabsTrigger>
         </TabsList>
       </Tabs>
@@ -1145,7 +1249,7 @@ export function OutreachScreen() {
           </p>
           <p className="text-xs text-muted-foreground">{meta.blurb}</p>
           <p className="mt-1 text-[11px] text-muted-foreground">
-            Sender: <span className="font-mono">{meta.fromEmail}</span> · Target: {meta.countries}
+            Sender: <span className="font-mono">{senderEmail}</span> · Target: {meta.countries}
           </p>
         </div>
         <Button
@@ -1263,7 +1367,7 @@ export function OutreachScreen() {
           />
           {filterByCountry(hotProspects).length
             ? filterByCountry(hotProspects).map((p) => (
-                <ProspectCard key={String(p.id)} prospect={p} mode="sent" onRefresh={refreshProspects} />
+                <ProspectCard key={String(p.id)} prospect={p} mode="sent" onRefresh={refreshProspects} senderEmails={senderEmails} />
               ))
             : empty("No hot leads for this campaign yet — clicks on your booking/signup link appear here.")}
         </TabsContent>
@@ -1277,8 +1381,23 @@ export function OutreachScreen() {
             disabled={bulkDeleting}
             onDelete={() => void bulkDeleteProspects(reviewList, "drafts in review")}
           />
+          {reviewList.length > 0 ? (
+            <div className="flex justify-end">
+              <Button
+                type="button"
+                variant="secondary"
+                className="h-8 text-xs"
+                disabled={bulkApproving || bulkDeleting}
+                onClick={() => void bulkApproveAll(campaign)}
+              >
+                {bulkApproving ? "Approving…" : `Approve all ${meta.short} drafts`}
+              </Button>
+            </div>
+          ) : null}
           {reviewList.length
-            ? reviewList.map((p) => <ProspectCard key={String(p.id)} prospect={p} mode="review" onRefresh={refreshProspects} />)
+            ? reviewList.map((p) => (
+                <ProspectCard key={String(p.id)} prospect={p} mode="review" onRefresh={refreshProspects} senderEmails={senderEmails} />
+              ))
             : empty(`No ${meta.short} emails to review — click "Run ${meta.short} engine" above to generate new drafts.`)}
         </TabsContent>
 
@@ -1305,7 +1424,9 @@ export function OutreachScreen() {
             </div>
           )}
           {approvedList.length
-            ? approvedList.map((p) => <ProspectCard key={String(p.id)} prospect={p} mode="approved" onRefresh={refreshProspects} />)
+            ? approvedList.map((p) => (
+                <ProspectCard key={String(p.id)} prospect={p} mode="approved" onRefresh={refreshProspects} senderEmails={senderEmails} />
+              ))
             : empty("No approved emails — approve items from the Review tab.")}
         </TabsContent>
 
@@ -1316,7 +1437,9 @@ export function OutreachScreen() {
             onDelete={() => void bulkDeleteProspects(sentList, "sent emails")}
           />
           {sentList.length
-            ? sentList.map((p) => <ProspectCard key={String(p.id)} prospect={p} mode="sent" onRefresh={refreshProspects} />)
+            ? sentList.map((p) => (
+                <ProspectCard key={String(p.id)} prospect={p} mode="sent" onRefresh={refreshProspects} senderEmails={senderEmails} />
+              ))
             : empty("No emails sent yet.")}
         </TabsContent>
 
@@ -1327,7 +1450,9 @@ export function OutreachScreen() {
             onDelete={() => void bulkDeleteProspects(rejectedList, "rejected prospects")}
           />
           {rejectedList.length
-            ? rejectedList.map((p) => <ProspectCard key={String(p.id)} prospect={p} mode="rejected" onRefresh={refreshProspects} />)
+            ? rejectedList.map((p) => (
+                <ProspectCard key={String(p.id)} prospect={p} mode="rejected" onRefresh={refreshProspects} senderEmails={senderEmails} />
+              ))
             : empty("No rejected prospects.")}
         </TabsContent>
       </Tabs>

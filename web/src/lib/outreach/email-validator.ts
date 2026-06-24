@@ -79,6 +79,7 @@ const PORTFOLIO_URL_HOSTS = [
   "pesttrace.com",
   "weatherspestsolutions.co.uk",
   "jgdev.co.uk",
+  "jordans-e-website.vercel.app",
 ];
 
 function isTemplateOrPortfolioUrl(raw: string): boolean {

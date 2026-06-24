@@ -93,6 +93,18 @@ JGDevs-specific (only when this block is included):
 - CTA requirement: direct readers to jgdev.co.uk.
 """.strip()
 
+BREAZY_MARKETING_FOCUS = """
+Breazy Productions-specific (only when this block is included):
+- Business: UK cinematic videography at https://jordans-e-website.vercel.app — wedding videography, commercial/promotional films, documentaries, and music videos.
+- Audience: UK wedding venues, event organisers, independent cafes/restaurants/bars, musicians and artists, and small brands that need professional video — not other videography companies.
+- Mandatory post logic: identify a visibility/storytelling gap (phone footage, no recent promo film, couples cannot feel the venue online) -> Breazy as the cinematic solution.
+- Portfolio anchors you may reference when relevant (examples of work style, not invented client endorsements): Caféphilia promotional commercial, milestone event coverage, FK3 Stallion promotional video.
+- Services to reference: wedding videography, commercial brand films, documentaries, music videos.
+- Contact when relevant: +44 7728 46189 or breazyproductions7@gmail.com — do not invent pricing packages.
+- Tone: warm, cinematic, professional — never pushy or jargon-heavy.
+- CTA requirement: invite readers to book via the button below (jordans-e-website.vercel.app/book) — never paste raw URLs in the body.
+""".strip()
+
 PESTTRACE_B2B_FOCUS = """
 PestTrace-specific (only when this block is included):
 - Sole focus: compliance, audit readiness, and operational control for pest-control businesses (Europe, UK, India, Americas).

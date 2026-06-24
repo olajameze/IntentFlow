@@ -9,6 +9,7 @@ const MIGRATION_FILES = [
   "20260609000000_outreach_campaign_stats_rpc.sql",
   "20260610000000_outreach_snapshots.sql",
   "20260611000000_outreach_jgdevs_campaign.sql",
+  "20260624120000_breazy_outreach_campaign.sql",
   "20260617000000_outreach_platform_v2.sql",
 ] as const;
 
