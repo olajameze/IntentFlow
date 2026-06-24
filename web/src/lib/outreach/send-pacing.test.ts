@@ -9,7 +9,7 @@ describe("countSendsInWindow", () => {
     const sb = {
       from: () => ({
         select: () => ({
-          eq: (_col: string, _val: string) => ({
+          eq: () => ({
             in: (col: string, values: string[]) => {
               filters.push(`${col}=${values.join("|")}`);
               return {
