@@ -549,9 +549,9 @@ def _campaign_smtp(cfg: CampaignConfig) -> dict[str, Any]:
         return os.getenv(name, "").strip().strip('"').strip("'")
 
     is_pesttrace = cfg.id == "pesttrace"
-    host = _e(cfg.smtp_host_env) or (smtp_host() if is_pesttrace else "")
-    user = _e(cfg.smtp_user_env) or (smtp_user() if is_pesttrace else "")
-    password = _e(cfg.smtp_password_env) or (smtp_password() if is_pesttrace else "")
+    host = _e(cfg.smtp_host_env) or (smtp_host() or "")
+    user = _e(cfg.smtp_user_env) or (smtp_user() or "")
+    password = _e(cfg.smtp_password_env) or (smtp_password() or "")
     try:
         port = int(_e(cfg.smtp_port_env) or smtp_port())
     except ValueError:

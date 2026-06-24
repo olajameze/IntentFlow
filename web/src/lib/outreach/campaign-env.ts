@@ -80,6 +80,7 @@ export function getBaseConfig(campaign: string, overrides?: { fromName?: string 
     envVal(keys.fromName) ||
     (isPesttrace ? envVal(CAMPAIGN_ENV.pesttrace.fromName) : undefined) ||
     keys.defaultFromName;
+  // Never fall back to OUTREACH_FROM_EMAIL for non-pesttrace (that caused wrong sender bug).
   const fromEmail =
     envVal(keys.fromEmail) ||
     envVal(keys.smtpUser) ||
@@ -92,11 +93,11 @@ export function getBaseConfig(campaign: string, overrides?: { fromName?: string 
 export function getSmtpConfig(campaign: string, overrides?: { fromName?: string }) {
   const key = resolveCampaignEnvKey(campaign);
   const keys = CAMPAIGN_ENV[key];
-  const isPesttrace = key === "pesttrace";
-  const host = envVal(keys.smtpHost) || (isPesttrace ? envVal("SMTP_HOST") : undefined);
-  const user = envVal(keys.smtpUser) || (isPesttrace ? envVal("SMTP_USER") : undefined);
-  const password = envVal(keys.smtpPassword) || (isPesttrace ? envVal("SMTP_PASSWORD") : undefined);
-  const portRaw = envVal(keys.smtpPort) || (isPesttrace ? envVal("SMTP_PORT") : undefined) || "587";
+  // Campaign-specific SMTP first; shared Brevo relay (SMTP_*) is OK for all brands.
+  const host = envVal(keys.smtpHost) || envVal("SMTP_HOST");
+  const user = envVal(keys.smtpUser) || envVal("SMTP_USER");
+  const password = envVal(keys.smtpPassword) || envVal("SMTP_PASSWORD");
+  const portRaw = envVal(keys.smtpPort) || envVal("SMTP_PORT") || "587";
   const port = parseInt(portRaw, 10);
   const { fromName, fromEmail, replyTo } = getBaseConfig(campaign, overrides);
   return { host, user, password, port, fromName, fromEmail, replyTo, configured: !!(host && user && password) };
@@ -123,21 +124,25 @@ export function isConfiguredForCampaign(campaign: string): { ok: boolean; hint?:
   const resendCfg = getResendConfig(campaign);
   const key = resolveCampaignEnvKey(campaign);
   const keys = CAMPAIGN_ENV[key];
+  const base = getBaseConfig(campaign);
+  const fromOk = key === "pesttrace" || Boolean(base.fromEmail?.trim());
 
-  const ok =
+  const transportOk =
     provider === "smtp"
       ? smtpCfg.configured
       : provider === "resend"
         ? resendCfg.configured
         : smtpCfg.configured || resendCfg.configured;
 
+  const ok = transportOk && fromOk;
+
   if (ok) return { ok: true };
 
   const hintByKey: Partial<Record<LegacyCampaignId, string>> = {
-    weathers: `Set WEATHERS SMTP credentials in web/.env.local: ${keys.smtpHost}, ${keys.smtpUser}, ${keys.smtpPassword}.`,
-    jgdevs: `Set JGDEVS SMTP credentials in web/.env.local: ${keys.smtpHost}, ${keys.smtpUser}, ${keys.smtpPassword}.`,
-    breazy: `Set BREAZY SMTP credentials in web/.env.local: ${keys.smtpHost}, ${keys.smtpUser}, ${keys.smtpPassword}.`,
-    pesttrace: `Set SMTP_HOST, SMTP_USER, SMTP_PASSWORD (and OUTREACH_FROM_EMAIL) in web/.env.local.`,
+    weathers: `Set ${keys.fromEmail} and ensure SMTP is configured (shared ${CAMPAIGN_ENV.pesttrace.smtpHost} or ${keys.smtpHost}).`,
+    jgdevs: `Set ${keys.fromEmail} (e.g. hello@jgdev.co.uk) and ensure SMTP is configured — shared Brevo relay is fine; verify the From address in Brevo Senders.`,
+    breazy: `Set ${keys.fromEmail} and ensure SMTP is configured (shared Brevo relay or ${keys.smtpHost}).`,
+    pesttrace: `Set SMTP_HOST, SMTP_USER, SMTP_PASSWORD (and OUTREACH_FROM_EMAIL) in web/.env.local or Vercel env.`,
   };
   return { ok: false, hint: hintByKey[key] ?? hintByKey.pesttrace };
 }
