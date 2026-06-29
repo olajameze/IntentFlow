@@ -19,7 +19,7 @@ import {
   chartTooltipLabelStyle,
 } from "@/lib/chart-tooltip";
 import { useChartSvgColors } from "@/lib/use-chart-svg-colors";
-import { umamiPageviewsFromPayload } from "@/lib/umami-payload";
+import { claritySessionsFromPayload } from "@/lib/clarity-payload";
 import { latestSnapshotPerBusiness } from "@/lib/analytics-snapshots";
 import ConversionMetricsChart, { type ChartSnapshot } from "@/components/analytics/ConversionMetricsChart";
 
@@ -51,7 +51,7 @@ export function AnalyticsScreen() {
     return businesses.map((biz) => {
       const id = String(biz.id);
       const latest = latestByBiz.get(id);
-      const traffic = latest ? umamiPageviewsFromPayload(latest.payload) : 0;
+      const traffic = latest ? claritySessionsFromPayload(latest.payload) : 0;
       const rev = revenue
         .filter((row) => String(row.business_id) === id)
         .reduce((acc, row) => acc + Number(row.amount ?? 0), 0);
@@ -64,7 +64,7 @@ export function AnalyticsScreen() {
     return snapshots.slice(0, 12).map((snap, idx) => {
       return {
         label: `#${idx + 1}`,
-        traffic: umamiPageviewsFromPayload(snap.payload),
+        traffic: claritySessionsFromPayload(snap.payload),
         revenue: revenue[idx] ? Number((revenue[idx] as Record<string, unknown>).amount) : 0,
       };
     });
@@ -87,10 +87,9 @@ export function AnalyticsScreen() {
             <CardTitle className="text-base">No analytics snapshots</CardTitle>
           </CardHeader>
           <CardContent className="text-sm text-muted-foreground">
-            Run the engine traffic job so Umami stats are saved to Supabase, or confirm{" "}
-            <code className="rounded bg-muted px-1">/api/analytics-snapshots</code> returns rows. Traffic charts use the
-            same Umami payload shape as the engine (pageviews with <code className="rounded bg-muted px-1">.value</code>{" "}
-            on Umami Cloud).
+            Run the Clarity sync job so stats are saved to Supabase, or confirm{" "}
+            <code className="rounded bg-muted px-1">/api/analytics-snapshots</code> returns rows. Traffic charts use
+            Clarity session counts from the Data Export API (max 3-day window).
           </CardContent>
         </Card>
       ) : null}

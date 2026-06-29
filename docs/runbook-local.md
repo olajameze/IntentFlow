@@ -46,8 +46,8 @@ Minimum for Crew + copy generation without paid Gemini quota:
 
 Traffic snapshots from Umami Cloud:
 
-- `UMAMI_URL` (or reuse `NEXT_PUBLIC_UMAMI_URL` from web)
-- `UMAMI_API_TOKEN` — **`401`** from Umami means this token is wrong or missing
+- `CLARITY_API_TOKEN` (engine reads from `web/.env.local`)
+- `CLARITY_SNAPSHOT_DAYS` — optional, 1–3 (default 3)
 
 ## 3. Install & run web
 

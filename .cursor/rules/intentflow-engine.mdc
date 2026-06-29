@@ -13,7 +13,7 @@ alwaysApply: false
 - **LLM:**
   - **`ENGINE_USE_GROQ_ONLY`** or **`ENGINE_FORCE_GROQ`** → skip Gemini (**requires `GROQ_API_KEY`**). Use when Gemini free tier shows **`limit: 0`** / **429**.
   - Gemini retry: on quota-style errors → one Groq rerun; must clear **`agent.agent_executor`** after failed kickoff — see `engine/agents/orchestrator.py`.
-- **Umami:** **`UMAMI_API_TOKEN`** + **`UMAMI_URL`** (falls back to **`NEXT_PUBLIC_UMAMI_URL`**). **401** = bad/missing token.
+- **Clarity:** **`CLARITY_API_TOKEN`** (Data Export API). **401/403** = bad/missing token.
 - **Stripe decrypt:** **`STRIPE_SECRET_ENCRYPTION_KEY`** must match `web/` when reading encrypted Stripe columns.
 
 Operational doc: **`docs/runbook-local.md`**.
@@ -22,4 +22,4 @@ Official references:
 
 - CrewAI docs — https://docs.crewai.com/
 - Google AI rate limits — https://ai.google.dev/gemini-api/docs/rate-limits
-- Umami Cloud API — https://umami.is/docs/api
+- Clarity Data Export API — https://learn.microsoft.com/en-us/clarity/setup-and-installation/clarity-data-export-api

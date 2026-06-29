@@ -1,4 +1,4 @@
-import { umamiPageviewsFromPayload, umamiVisitorsFromPayload } from "@/lib/umami-payload";
+import { claritySessionsFromPayload, clarityUsersFromPayload, clarityWindowDaysFromPayload } from "@/lib/clarity-payload";
 
 export type AnalyticsSnapshotRow = {
   id?: string;
@@ -51,31 +51,34 @@ export function chartSnapshotsForBusiness(
 export function totalsFromLatestSnapshots(
   rows: AnalyticsSnapshotRow[],
   businessId: string | "all",
-): { pageviews: number; visitors: number; lastSyncedAt: string | null } {
+): { sessions: number; users: number; lastSyncedAt: string | null; windowDays: number } {
   const filtered = filterSnapshotsForBusiness(rows, businessId);
   if (businessId === "all") {
     const latest = latestSnapshotPerBusiness(filtered);
-    let pageviews = 0;
-    let visitors = 0;
+    let sessions = 0;
+    let users = 0;
     let lastSyncedAt: string | null = null;
-    for (const snap of latest.values()) {
-      pageviews += umamiPageviewsFromPayload(snap.payload);
-      visitors += umamiVisitorsFromPayload(snap.payload);
+    let windowDays = 3;
+    for (const snap of Array.from(latest.values())) {
+      sessions += claritySessionsFromPayload(snap.payload);
+      users += clarityUsersFromPayload(snap.payload);
+      windowDays = Math.max(windowDays, clarityWindowDaysFromPayload(snap.payload));
       const at = snap.captured_at ?? null;
       if (at && (!lastSyncedAt || capturedMs(snap) > Date.parse(lastSyncedAt))) {
         lastSyncedAt = at;
       }
     }
-    return { pageviews, visitors, lastSyncedAt };
+    return { sessions, users, lastSyncedAt, windowDays };
   }
 
   const sorted = [...filtered].sort((a, b) => capturedMs(b) - capturedMs(a));
   const latest = sorted[0];
-  if (!latest) return { pageviews: 0, visitors: 0, lastSyncedAt: null };
+  if (!latest) return { sessions: 0, users: 0, lastSyncedAt: null, windowDays: 3 };
   return {
-    pageviews: umamiPageviewsFromPayload(latest.payload),
-    visitors: umamiVisitorsFromPayload(latest.payload),
+    sessions: claritySessionsFromPayload(latest.payload),
+    users: clarityUsersFromPayload(latest.payload),
     lastSyncedAt: latest.captured_at ?? null,
+    windowDays: clarityWindowDaysFromPayload(latest.payload),
   };
 }
 

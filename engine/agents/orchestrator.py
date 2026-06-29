@@ -22,14 +22,14 @@ from crewai.tools import tool
 
 from agents.factory import agents_for_type
 from config import active_llm_summary, google_api_key, groq_api_key, llm_skip_google, ollama_fallback_enabled
-from crypto_util import decrypt_stripe_secret
+from crypto_util import decrypt_clarity_api_token, decrypt_stripe_secret
 from supabase_client import get_supabase
 from tools.copy_doctrine import JGDEVS_MARKETING_FOCUS, PESTTRACE_B2B_FOCUS, WEATHERS_SEASONAL_FOCUS
 from tools.llm import generate_personalised_copy, gemini_error_should_use_groq, groq_only_after_gemini_auth_failure
 from tools.persistence import persist_stripe_revenue, save_traffic_snapshot, sync_stripe_revenue_entries
 from tools.similarweb import scrape_similarweb_traffic
 from tools.stripe_revenue import fetch_stripe_revenue, fetch_stripe_transactions
-from tools.umami import fetch_umami_stats
+from tools.clarity import clarity_snapshot_days, fetch_clarity_live_insights
 
 
 def _extra_copy_doctrine_for_row(row: dict[str, Any]) -> str | None:
@@ -55,7 +55,7 @@ def _ctx(row: dict[str, Any]) -> str:
         "industry": row.get("industry"),
         "goals": row.get("goals"),
         "website": row.get("website_url"),
-        "umami_website_id": row.get("umami_website_id"),
+        "clarity_project_id": row.get("clarity_project_id"),
     }
     extra = _extra_copy_doctrine_for_row(row)
     if extra:
@@ -167,6 +167,18 @@ def load_active_businesses() -> list[dict[str, Any]]:
     return list(res.data or [])
 
 
+def _clarity_token_for_business(row: dict[str, Any]) -> str | None:
+    vaulted = decrypt_clarity_api_token(
+        row.get("clarity_api_token_ciphertext"),
+        row.get("clarity_api_token_iv"),
+        row.get("clarity_api_token_tag"),
+    )
+    if vaulted:
+        return vaulted
+    fallback = os.getenv("CLARITY_API_TOKEN", "").strip()
+    return fallback or None
+
+
 def run_traffic_only() -> None:
     """Snapshot job for GitHub Actions / cron."""
     businesses = load_active_businesses()
@@ -177,20 +189,19 @@ def run_traffic_only() -> None:
     except ValueError:
         days = 30
     start = end - timedelta(days=days)
+    clarity_days = clarity_snapshot_days()
     for b in businesses:
-        wid = b.get("umami_website_id")
-        if wid:
-            try:
-                stats = fetch_umami_stats(wid, start, end)
-                enriched = {
-                    **stats,
-                    "window_days": days,
-                    "window_start": start.isoformat(),
-                    "window_end": end.isoformat(),
-                }
-                save_traffic_snapshot(b.get("id"), enriched, source="umami", website_id=wid)
-            except Exception as exc:  # noqa: BLE001
-                print(f"Umami error for {b.get('name')}: {exc}")
+        pid = (b.get("clarity_project_id") or "").strip() if b.get("clarity_project_id") else ""
+        if pid:
+            token = _clarity_token_for_business(b)
+            if not token:
+                print(f"Clarity skipped for {b.get('name')}: no API token (Settings or CLARITY_API_TOKEN)")
+            else:
+                try:
+                    stats = fetch_clarity_live_insights(pid, clarity_days, token)
+                    save_traffic_snapshot(b.get("id"), stats, source="clarity", website_id=pid)
+                except Exception as exc:  # noqa: BLE001
+                    print(f"Clarity error for {b.get('name')}: {exc}")
 
         key = decrypt_stripe_secret(
             b.get("stripe_secret_ciphertext"),
@@ -228,24 +239,21 @@ def _domain_from_url(url: str | None) -> str:
 
 
 def _persist_snapshots_for_window(row: dict[str, Any], start: datetime, end: datetime) -> dict[str, str]:
-    """Write Umami + Stripe snapshots in-process (avoids LLMs chaining fetch+save tools; fixes Groq tool_use failures)."""
+    """Write Clarity + Stripe snapshots in-process (avoids LLMs chaining fetch+save tools; fixes Groq tool_use failures)."""
     bid = row.get("id")
-    wid = row.get("umami_website_id")
-    umami_summary = "Umami: skipped (no umami_website_id)."
-    _wid_lower = (wid or "").lower()
-    _junk = ("paste", "placeholder", "another-id", "your-umami")
-    if wid and any(j in _wid_lower for j in _junk):
-        umami_summary = (
-            "Umami: skipped (junk/placeholder umami_website_id — run Supabase migrations "
-            "or update businesses.umami_website_id)."
-        )
-    elif wid:
-        try:
-            stats = fetch_umami_stats(wid, start, end)
-            save_traffic_snapshot(bid, stats, source="umami", website_id=wid)
-            umami_summary = f"Umami: snapshot saved for website_id={wid}."
-        except Exception as exc:  # noqa: BLE001
-            umami_summary = f"Umami: error ({exc})"
+    pid = (row.get("clarity_project_id") or "").strip() if row.get("clarity_project_id") else ""
+    clarity_summary = "Clarity: skipped (no clarity_project_id)."
+    if pid:
+        token = _clarity_token_for_business(row)
+        if not token:
+            clarity_summary = "Clarity: skipped (no API token — save in Settings or set CLARITY_API_TOKEN)."
+        else:
+            try:
+                stats = fetch_clarity_live_insights(pid, clarity_snapshot_days(), token)
+                save_traffic_snapshot(bid, stats, source="clarity", website_id=pid)
+                clarity_summary = f"Clarity: snapshot saved for project_id={pid}."
+            except Exception as exc:  # noqa: BLE001
+                clarity_summary = f"Clarity: error ({exc})"
 
     rev_summary = "Stripe: skipped (no encrypted secret on file)."
     key = decrypt_stripe_secret(
@@ -267,7 +275,7 @@ def _persist_snapshots_for_window(row: dict[str, Any], start: datetime, end: dat
         except Exception as exc:  # noqa: BLE001
             rev_summary = f"Stripe: error ({exc})"
 
-    return {"umami": umami_summary, "revenue": rev_summary}
+    return {"clarity": clarity_summary, "revenue": rev_summary}
 
 
 def run_crew_for_business(row: dict[str, Any]) -> str:
@@ -329,7 +337,7 @@ def run_crew_for_business(row: dict[str, Any]) -> str:
                 description=(
                     f"Business context: {ctx}\n"
                     f"Time window: {window_start} to {window_end}.\n"
-                    f"**Umami (already persisted server-side):** {snap['umami']}\n"
+                    f"**Clarity (already persisted server-side):** {snap['clarity']}\n"
                     f"Website domain for Similarweb (if you use it): {domain or 'unknown'}.\n"
                     + (
                         "Optionally call scrape_similarweb_traffic_tool(domain) once for a public benchmark. "
@@ -337,7 +345,7 @@ def run_crew_for_business(row: dict[str, Any]) -> str:
                         else "Do **not** call any tools. You may reference public traffic patterns only from general "
                         "knowledge — do not invent metrics. "
                     )
-                    + "Give a concise traffic narrative. Do not attempt Umami or database persistence tools."
+                    + "Give a concise traffic narrative. Do not attempt Clarity API or database persistence tools."
                 ),
                 agent=traffic,
                 expected_output="Brief traffic summary; note if Similarweb was used.",
@@ -387,7 +395,7 @@ def run_crew_for_business(row: dict[str, Any]) -> str:
                 description=(
                     f"Business context: {ctx}\n"
                     f"Pre-computed window {window_start}..{window_end}:\n"
-                    f"- {snap['umami']}\n"
+                    f"- {snap['clarity']}\n"
                     f"- {snap['revenue']}\n"
                     "Deliver a brief executive summary (max ~200 words) and 5 numbered next steps (no tool calls required)."
                 ),

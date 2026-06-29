@@ -1,6 +1,6 @@
 name: Traffic & Revenue Sync
 
-# Requires UMAMI_URL + UMAMI_API_TOKEN (same names as engine/.env — not NEXT_PUBLIC_*)
+# Requires CLARITY_API_TOKEN (Clarity → Settings → Data Export)
 on:
   workflow_dispatch: {}
   schedule:
@@ -20,10 +20,8 @@ jobs:
       SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
       NEXT_PUBLIC_SUPABASE_URL: ${{ secrets.NEXT_PUBLIC_SUPABASE_URL }}
       SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
-      UMAMI_URL: ${{ secrets.UMAMI_URL }}
-      UMAMI_API_TOKEN: ${{ secrets.UMAMI_API_TOKEN }}
-      UMAMI_CLOUD_REGION: ${{ secrets.UMAMI_CLOUD_REGION }}
-      TRAFFIC_SNAPSHOT_DAYS: "30"
+      CLARITY_API_TOKEN: ${{ secrets.CLARITY_API_TOKEN }}
+      CLARITY_SNAPSHOT_DAYS: "3"
       STRIPE_SECRET_ENCRYPTION_KEY: ${{ secrets.STRIPE_SECRET_ENCRYPTION_KEY }}
     defaults:
       run:
@@ -46,9 +44,8 @@ jobs:
             exit 1
           fi
           test -n "$SUPABASE_SERVICE_ROLE_KEY" || { echo "::error::Secret SUPABASE_SERVICE_ROLE_KEY is empty"; exit 1; }
-          test -n "$UMAMI_URL" || { echo "::error::Secret UMAMI_URL is empty"; exit 1; }
-          test -n "$UMAMI_API_TOKEN" || { echo "::error::Secret UMAMI_API_TOKEN is empty"; exit 1; }
-      - name: Traffic snapshots (Umami)
+          test -n "$CLARITY_API_TOKEN" || { echo "::error::Secret CLARITY_API_TOKEN is empty"; exit 1; }
+      - name: Traffic snapshots (Clarity)
         run: python main.py traffic
       - name: Revenue snapshots (Stripe)
         run: python main.py revenue

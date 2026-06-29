@@ -17,7 +17,10 @@ export type BusinessRow = {
   stripe_secret_ciphertext: string | null;
   stripe_secret_iv: string | null;
   stripe_secret_tag: string | null;
-  umami_website_id: string | null;
+  clarity_api_token_ciphertext: string | null;
+  clarity_api_token_iv: string | null;
+  clarity_api_token_tag: string | null;
+  clarity_project_id: string | null;
   active: boolean;
   created_at: string;
   updated_at: string;

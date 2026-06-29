@@ -30,11 +30,10 @@ type Biz = {
   industry?: string | null;
   website_url?: string | null;
   goals?: string | null;
-  umami_website_id?: string | null;
-  umami_share_url?: string | null;
   clarity_project_id?: string | null;
-  active: boolean;
+  has_clarity_token?: boolean;
   has_stripe?: boolean;
+  active: boolean;
 };
 
 type OutreachSettings = {
@@ -466,11 +465,8 @@ function OutreachPortfolioCard({ businesses }: { businesses: Biz[] }) {
 
 export function SettingsScreen() {
   const [businesses, setBusinesses] = useState<Biz[]>([]);
-  /** Per-business draft for Umami id (portfolio table edits). */
-  const [umamiDraft, setUmamiDraft] = useState<Record<string, string>>({});
-  /** Per-business Umami Share URL for live embed on Traffic tab. */
-  const [shareDraft, setShareDraft] = useState<Record<string, string>>({});
   const [clarityDraft, setClarityDraft] = useState<Record<string, string>>({});
+  const [clarityTokenDraft, setClarityTokenDraft] = useState<Record<string, string>>({});
   /** Per-business draft Stripe secret (never pre-filled from server). */
   const [stripeDraft, setStripeDraft] = useState<Record<string, string>>({});
   const [form, setForm] = useState({
@@ -480,7 +476,6 @@ export function SettingsScreen() {
     industry: "",
     website_url: "",
     goals: "",
-    umami_website_id: "",
     stripe_secret_key: "",
   });
 
@@ -516,7 +511,6 @@ export function SettingsScreen() {
         industry: form.industry || undefined,
         website_url: form.website_url || undefined,
         goals: form.goals || undefined,
-        umami_website_id: form.umami_website_id || undefined,
         stripe_secret_key: form.stripe_secret_key || undefined,
       }),
     });
@@ -539,33 +533,7 @@ export function SettingsScreen() {
       industry: "",
       website_url: "",
       goals: "",
-      umami_website_id: "",
       stripe_secret_key: "",
-    });
-    load();
-  };
-
-  const saveUmamiShareUrl = async (biz: Biz) => {
-    const raw = biz.id in shareDraft ? shareDraft[biz.id] : (biz.umami_share_url ?? "");
-    const trimmed = raw.trim();
-    const res = await fetch("/api/businesses", {
-      method: "PATCH",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        id: biz.id,
-        umami_share_url: trimmed ? trimmed : null,
-      }),
-    });
-    if (!res.ok) {
-      const data = await res.json().catch(() => ({}));
-      toast.error(typeof data.error === "string" ? data.error : "Could not save share URL");
-      return;
-    }
-    toast.success("Umami share URL saved");
-    setShareDraft((d) => {
-      const next = { ...d };
-      delete next[biz.id];
-      return next;
     });
     load();
   };
@@ -609,30 +577,24 @@ export function SettingsScreen() {
     load();
   };
 
-  const saveUmamiWebsiteId = async (biz: Biz) => {
-    const raw =
-      biz.id in umamiDraft ?
-        umamiDraft[biz.id]
-      : (biz.umami_website_id ?? "");
-    const trimmed = raw.trim();
-    const payload: { id: string; umami_website_id?: string | null } = { id: biz.id };
-    payload.umami_website_id =
-      trimmed ? trimmed : null;
-
+  const saveClarityApiToken = async (biz: Biz) => {
+    const token = (biz.id in clarityTokenDraft ? clarityTokenDraft[biz.id] : "").trim();
+    if (!token) {
+      toast.error("Paste the Clarity Data Export API token");
+      return;
+    }
     const res = await fetch("/api/businesses", {
       method: "PATCH",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(payload),
+      body: JSON.stringify({ id: biz.id, clarity_api_token: token }),
     });
     if (!res.ok) {
       const data = await res.json().catch(() => ({}));
-      const msg =
-        typeof data?.error === "string" ? data.error : data?.hint ?? "Could not save Umami ID";
-      toast.error(String(msg));
+      toast.error(typeof data.error === "string" ? data.error : "Could not save Clarity token");
       return;
     }
-    toast.success("Umami website id saved");
-    setUmamiDraft((d) => {
+    toast.success(`Clarity token saved for ${biz.name}`);
+    setClarityTokenDraft((d) => {
       const next = { ...d };
       delete next[biz.id];
       return next;
@@ -721,10 +683,6 @@ export function SettingsScreen() {
               <Textarea value={form.goals} onChange={(e) => setForm((f) => ({ ...f, goals: e.target.value }))} />
             </div>
             <div className="space-y-2 md:col-span-2">
-              <Label>Umami website id</Label>
-              <Input value={form.umami_website_id} onChange={(e) => setForm((f) => ({ ...f, umami_website_id: e.target.value }))} />
-            </div>
-            <div className="space-y-2 md:col-span-2">
               <Label>Stripe secret key (encrypted)</Label>
               <Input
                 type="password"
@@ -750,9 +708,8 @@ export function SettingsScreen() {
               <TableRow>
                 <TableHead>Name</TableHead>
                 <TableHead>Type</TableHead>
-                <TableHead>Umami website id</TableHead>
-                <TableHead>Share URL (live embed)</TableHead>
                 <TableHead>Clarity project ID</TableHead>
+                <TableHead>Clarity API token</TableHead>
                 <TableHead>Stripe</TableHead>
                 <TableHead className="text-right">Active</TableHead>
               </TableRow>
@@ -762,56 +719,6 @@ export function SettingsScreen() {
                 <TableRow key={biz.id}>
                   <TableCell className="font-medium">{biz.name}</TableCell>
                   <TableCell>{biz.type}</TableCell>
-                  <TableCell>
-                    <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
-                      <Input
-                        aria-label={`Umami id for ${biz.name}`}
-                        className="h-9 min-w-[12rem] font-mono text-xs"
-                        placeholder="Umami dashboard → Websites → Website ID"
-                        value={biz.id in umamiDraft ? umamiDraft[biz.id] : (biz.umami_website_id ?? "")}
-                        onChange={(e) =>
-                          setUmamiDraft((d) => ({
-                            ...d,
-                            [biz.id]: e.target.value,
-                          }))
-                        }
-                      />
-                      <Button
-                        type="button"
-                        variant="secondary"
-                        size="sm"
-                        className="h-9 shrink-0"
-                        onClick={() => void saveUmamiWebsiteId(biz)}
-                      >
-                        Save
-                      </Button>
-                    </div>
-                  </TableCell>
-                  <TableCell>
-                    <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
-                      <Input
-                        aria-label={`Umami share URL for ${biz.name}`}
-                        className="h-9 min-w-[14rem] font-mono text-xs"
-                        placeholder="https://cloud.umami.is/share/…"
-                        value={biz.id in shareDraft ? shareDraft[biz.id] : (biz.umami_share_url ?? "")}
-                        onChange={(e) =>
-                          setShareDraft((d) => ({
-                            ...d,
-                            [biz.id]: e.target.value,
-                          }))
-                        }
-                      />
-                      <Button
-                        type="button"
-                        variant="secondary"
-                        size="sm"
-                        className="h-9 shrink-0"
-                        onClick={() => void saveUmamiShareUrl(biz)}
-                      >
-                        Save
-                      </Button>
-                    </div>
-                  </TableCell>
                   <TableCell>
                     <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
                       <Input
@@ -837,6 +744,36 @@ export function SettingsScreen() {
                       >
                         Save
                       </Button>
+                    </div>
+                  </TableCell>
+                  <TableCell>
+                    <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
+                      <Input
+                        type="password"
+                        autoComplete="off"
+                        aria-label={`Clarity API token for ${biz.name}`}
+                        className="h-9 min-w-[12rem] font-mono text-xs"
+                        placeholder={biz.has_clarity_token ? "Replace token…" : "Data Export JWT"}
+                        value={biz.id in clarityTokenDraft ? clarityTokenDraft[biz.id] : ""}
+                        onChange={(e) =>
+                          setClarityTokenDraft((d) => ({
+                            ...d,
+                            [biz.id]: e.target.value,
+                          }))
+                        }
+                      />
+                      <Button
+                        type="button"
+                        variant="secondary"
+                        size="sm"
+                        className="h-9 shrink-0"
+                        onClick={() => void saveClarityApiToken(biz)}
+                      >
+                        Save
+                      </Button>
+                      {biz.has_clarity_token ? (
+                        <span className="text-xs text-muted-foreground shrink-0">Vaulted</span>
+                      ) : null}
                     </div>
                   </TableCell>
                   <TableCell>
@@ -882,6 +819,11 @@ export function SettingsScreen() {
               ))}
             </TableBody>
           </Table>
+          <p className="mt-4 text-sm text-muted-foreground">
+            Clarity Data Export tokens are generated <strong>inside each Clarity project</strong> (Settings → Data Export).
+            Paste one token per brand here — they are encrypted with the same vault as Stripe keys. Clarity only shows the
+            token once when you create it.
+          </p>
         </CardContent>
       </Card>
 
@@ -940,7 +882,7 @@ export function SettingsScreen() {
           <CardTitle className="text-base">Environment</CardTitle>
         </CardHeader>
         <CardContent className="space-y-2 text-sm text-muted-foreground">
-          <p>Set `NEXT_PUBLIC_SUPABASE_URL`, `SUPABASE_SERVICE_ROLE_KEY`, `STRIPE_SECRET_ENCRYPTION_KEY`, and `NEXT_PUBLIC_UMAMI_URL` in Vercel.</p>
+          <p>Set `NEXT_PUBLIC_SUPABASE_URL`, `SUPABASE_SERVICE_ROLE_KEY`, `STRIPE_SECRET_ENCRYPTION_KEY`, and `CLARITY_API_TOKEN` in Vercel.</p>
           <p>Umami deploys as a separate Vercel project — point the URL here for script tags + server pulls.</p>
         </CardContent>
       </Card>

@@ -1,6 +1,5 @@
 import { NextResponse } from "next/server";
 import { encryptSecret } from "@/lib/crypto";
-import { normalizeUmamiShareUrl, umamiShareUrlInvalidMessage } from "@/lib/umami-share-url";
 import { clarityProjectIdInvalidMessage, normalizeClarityProjectId } from "@/lib/clarity";
 import { withSupabaseRoute } from "@/lib/with-supabase-route";
 import { supabaseErrorResponse } from "@/lib/supabase-error-response";
@@ -30,7 +29,7 @@ function websiteUrlInvalidResponse() {
         formErrors: [] as string[],
         fieldErrors: {
           website_url: [
-            "Invalid URL — use a full link like https://example.com (or leave Website empty; do not paste the Umami id here)",
+            "Invalid URL — use a full link like https://example.com (or leave Website empty)",
           ],
         },
       },
@@ -42,15 +41,21 @@ function websiteUrlInvalidResponse() {
 function toSafeBusiness(b: Record<string, unknown>) {
   const {
     stripe_secret_ciphertext,
-    stripe_secret_iv: _iv,
-    stripe_secret_tag: _tag,
+    stripe_secret_iv: _siv,
+    stripe_secret_tag: _stag,
+    clarity_api_token_ciphertext,
+    clarity_api_token_iv: _civ,
+    clarity_api_token_tag: _ctag,
     ...rest
   } = b;
-  void _iv;
-  void _tag;
+  void _siv;
+  void _stag;
+  void _civ;
+  void _ctag;
   return {
     ...rest,
     has_stripe: Boolean(stripe_secret_ciphertext),
+    has_clarity_token: Boolean(clarity_api_token_ciphertext),
   };
 }
 
@@ -62,11 +67,10 @@ const businessSchema = z.object({
   social_accounts: z.record(z.string(), z.string()).optional(),
   website_url: z.string().optional(),
   goals: z.string().optional(),
-  umami_website_id: z.string().nullable().optional(),
-  umami_share_url: z.string().nullable().optional(),
   clarity_project_id: z.string().nullable().optional(),
   active: z.boolean().optional(),
   stripe_secret_key: z.string().optional(),
+  clarity_api_token: z.string().optional(),
 });
 
 export async function GET() {
@@ -101,18 +105,23 @@ export async function POST(req: Request) {
   } catch {
     return websiteUrlInvalidResponse();
   }
-  let umami_share_url: string | null = null;
-  if (body.umami_share_url !== undefined) {
-    umami_share_url = normalizeUmamiShareUrl(body.umami_share_url);
-    if (body.umami_share_url && body.umami_share_url.trim() && !umami_share_url) {
-      return NextResponse.json({ error: umamiShareUrlInvalidMessage() }, { status: 400 });
-    }
-  }
   let clarity_project_id: string | null = null;
   if (body.clarity_project_id !== undefined) {
     clarity_project_id = normalizeClarityProjectId(body.clarity_project_id);
     if (body.clarity_project_id && String(body.clarity_project_id).trim() && !clarity_project_id) {
       return NextResponse.json({ error: clarityProjectIdInvalidMessage() }, { status: 400 });
+    }
+  }
+  let clarityFields: Record<string, string | null> = {};
+  if (body.clarity_api_token && master) {
+    const raw = body.clarity_api_token.trim();
+    if (raw) {
+      const enc = encryptSecret(raw, master);
+      clarityFields = {
+        clarity_api_token_ciphertext: enc.ciphertext,
+        clarity_api_token_iv: enc.iv,
+        clarity_api_token_tag: enc.tag,
+      };
     }
   }
   const insert = {
@@ -123,11 +132,10 @@ export async function POST(req: Request) {
     social_accounts: body.social_accounts ?? {},
     website_url,
     goals: body.goals ?? null,
-    umami_website_id: body.umami_website_id ?? null,
-    umami_share_url,
     clarity_project_id,
     active: body.active ?? true,
     ...stripeFields,
+    ...clarityFields,
   };
   return withSupabaseRoute(async (sb) => {
     const { data, error } = await sb.from("businesses").insert(insert).select("*").single();
@@ -154,13 +162,6 @@ export async function PATCH(req: Request) {
       return websiteUrlInvalidResponse();
     }
   }
-  if (body.umami_share_url !== undefined) {
-    const share = normalizeUmamiShareUrl(body.umami_share_url);
-    if (body.umami_share_url && String(body.umami_share_url).trim() && !share) {
-      return NextResponse.json({ error: umamiShareUrlInvalidMessage() }, { status: 400 });
-    }
-    update.umami_share_url = share;
-  }
   if (body.clarity_project_id !== undefined) {
     const clarityId = normalizeClarityProjectId(body.clarity_project_id);
     if (body.clarity_project_id && String(body.clarity_project_id).trim() && !clarityId) {
@@ -173,8 +174,8 @@ export async function PATCH(req: Request) {
       value === undefined ||
       key === "id" ||
       key === "stripe_secret_key" ||
+      key === "clarity_api_token" ||
       key === "website_url" ||
-      key === "umami_share_url" ||
       key === "clarity_project_id"
     )
       return;
@@ -189,6 +190,22 @@ export async function PATCH(req: Request) {
     update.stripe_secret_iv = enc.iv;
     update.stripe_secret_tag = enc.tag;
     delete update.stripe_secret_key;
+  }
+  if (body.clarity_api_token !== undefined) {
+    if (!master) {
+      return NextResponse.json({ error: "STRIPE_SECRET_ENCRYPTION_KEY not set" }, { status: 400 });
+    }
+    const raw = String(body.clarity_api_token ?? "").trim();
+    if (!raw) {
+      update.clarity_api_token_ciphertext = null;
+      update.clarity_api_token_iv = null;
+      update.clarity_api_token_tag = null;
+    } else {
+      const enc = encryptSecret(raw, master);
+      update.clarity_api_token_ciphertext = enc.ciphertext;
+      update.clarity_api_token_iv = enc.iv;
+      update.clarity_api_token_tag = enc.tag;
+    }
   }
   return withSupabaseRoute(async (sb) => {
     const { data, error } = await sb.from("businesses").update(update).eq("id", id).select("*").single();

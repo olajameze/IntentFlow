@@ -1,13 +1,13 @@
 # IntentFlow — Omni-Channel Marketing Engine
 
-Privacy-first portfolio operations: **Umami** analytics (no Google Analytics), **Stripe** revenue ingestion, **CrewAI** agents, and a **mobile-first Next.js 14 PWA** that scales to unlimited businesses in Supabase.
+Privacy-first portfolio operations: **Microsoft Clarity** analytics, **Stripe** revenue ingestion, **CrewAI** agents, and a **mobile-first Next.js 14 PWA** that scales to unlimited businesses in Supabase.
 
 ## Repository layout
 
 | Path | Purpose |
 | --- | --- |
 | `web/` | Next.js 14 (App Router) dashboard + Route Handlers |
-| `engine/` | Python 3.11 CrewAI orchestrator + Umami/Stripe tools |
+| `engine/` | Python 3.11 CrewAI orchestrator + Clarity/Stripe tools |
 | `supabase/migrations/` | SQL for Postgres (run in Supabase) |
 | `.github/workflows/` | Scheduled GitHub Actions (free tier) |
 | `requirements.md` | Product copy voice, approvals behaviour, reference PDF index |
@@ -28,13 +28,14 @@ Privacy-first portfolio operations: **Umami** analytics (no Google Analytics), *
 - `NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY` (SSR / middleware session refresh when auth cookies exist)
 - `SUPABASE_SERVICE_ROLE_KEY` (server-only — required for `/api/*` admin routes)
 - `STRIPE_SECRET_ENCRYPTION_KEY` — long random string (e.g. `openssl rand -hex 32`); must match Python engine + GitHub Actions; never `NEXT_PUBLIC_*`.
-- `NEXT_PUBLIC_UMAMI_URL` — origin of your Umami deployment (e.g. `https://your-umami.vercel.app`)
+- `CLARITY_API_TOKEN` — Clarity project → Settings → Data Export → Generate API token (for `/api/clarity-sync` and `python main.py traffic`)
+- `CLARITY_SNAPSHOT_DAYS` — optional, 1–3 (Clarity API limit; default 3)
 
 ### `engine/.env` (see `engine/.env.example`)
 
 - `SUPABASE_URL` — same value as `NEXT_PUBLIC_SUPABASE_URL`
 - `SUPABASE_SERVICE_ROLE_KEY`
-- `UMAMI_URL`, `UMAMI_API_TOKEN` — from the Umami UI (`Settings → API`)
+- `CLARITY_API_TOKEN` — same token as web (engine reads from `web/.env.local` when present)
 - `GROQ_API_KEY` for CrewAI / copy tools (set this for **Groq-only**: omit `GOOGLE_API_KEY` or leave it empty — the engine skips Gemini automatically)
 - **`ENGINE_USE_GROQ_ONLY=1`** (optional — force Groq even if a `GOOGLE_API_KEY` line exists in `engine/.env`)
 - `STRIPE_SECRET_ENCRYPTION_KEY` — identical to the web app
@@ -44,24 +45,25 @@ Privacy-first portfolio operations: **Umami** analytics (no Google Analytics), *
 | Symptom | Likely fix |
 | --- | --- |
 | Gemini **429** / `RESOURCE_EXHAUSTED` / `limit: 0` / auth errors | Prefer **Groq-only**: set **`GROQ_API_KEY`** and **remove** `GOOGLE_API_KEY` (or use **`ENGINE_USE_GROQ_ONLY=1`** / **`ENGINE_FORCE_GROQ=1`** if a Google key remains in `engine/.env`). |
-| Umami **401** in engine logs | **Umami Cloud** is not the same as self-hosted: use a **Cloud API key** (`UMAMI_API_KEY` or `UMAMI_API_TOKEN`) and header `x-umami-api-key` against `https://api.umami.is/v1` — the engine maps this automatically when `UMAMI_URL` is `https://cloud.umami.is`. Do not use a Bearer JWT from `cloud.umami.is/api/auth/login` for Cloud. Self-hosted: `Bearer` + `UMAMI_URL` pointing at your instance. See [Umami Cloud API key](https://docs.umami.is/docs/cloud/api-key). |
+| Clarity sync **401/403** | Regenerate the Data Export token in Clarity → Settings → Data Export. Set **`CLARITY_API_TOKEN`** in `web/.env.local` and GitHub secret **`CLARITY_API_TOKEN`**. |
 | Dashboard API **503** with service-role hint | Add **`NEXT_PUBLIC_SUPABASE_URL`** + **`SUPABASE_SERVICE_ROLE_KEY`** to `web/.env.local`; restart **`npm run dev`**. Probe **`GET http://localhost:3000/api/health`**. |
 | Groq **retry still calls Gemini** | Engine must reset **`agent.agent_executor`** and pass **`chat_llm`** on the Groq **`Crew`** (see latest `engine/agents/orchestrator.py`). |
 | **`/api/publish-approved`** rejects Facebook publish | Provide **`FACEBOOK_PAGE_ID`** + **`FACEBOOK_PAGE_ACCESS_TOKEN`**, or numbered **`FACEBOOK_PAGE_ID_N`** credentials per business. |
-| **Traffic / analytics show 0** | Rows come from **`analytics_snapshots`** (engine or GitHub Actions). Run **`python main.py traffic`** with valid **`UMAMI_*`** + **`umami_website_id`**. UI expects Umami **`pageviews.value`** shape (fixed in `web/src/lib/umami-payload.ts`). |
+| **Traffic / analytics show 0** | Rows come from **`analytics_snapshots`** (engine or GitHub Actions). Run **`python main.py traffic`** with valid **`CLARITY_API_TOKEN`** + each business **`clarity_project_id`**. Clarity API only covers the last **1–3 days** per sync. |
 | **PWA does not install in dev** | PWAs are **off in development** by default. Use **`npm run build && npm start`**, Vercel preview, or set **`NEXT_PUBLIC_ENABLE_PWA_DEV=1`** in `web/.env.local`. |
 | **Vercel: “No python entrypoint” / Python build** | Vercel picks the [Python runtime](https://vercel.com/docs/functions/runtimes/python#python-entrypoints) when it sees **`requirements.txt`**, **`pyproject.toml`**, or **`Pipfile`**. This repo has **`engine/requirements.txt`** (CrewAI — not deployed on Vercel). Set **Root Directory** to **`web`** ([monorepo guide](https://vercel.com/docs/monorepos), [Root Directory](https://vercel.com/docs/deployments/configure-a-build#root-directory)) and ensure **Framework Preset** is **Next.js**, not Python. Repo root **`.vercelignore`** excludes **`engine/`** if the Git root is mistakenly used as the project root. |
 | **Vercel: “Next.js output directory `.next` was not found”** | The Next build writes **`web/.next`**. In Vercel → **Settings → General → Root Directory**, set **`web`** (must match the folder that contains **`next.config.mjs`**). Remove any root **`vercel.json`** that builds with `--prefix web` while the Git root is still the project root. |
 
 **Cold start checklist:** [`docs/runbook-local.md`](docs/runbook-local.md).
 
-## 3. Umami on Vercel + Supabase
+## 3. Microsoft Clarity
 
-1. Fork [Umami](https://github.com/umami-software/umami) as its own GitHub repo.
-2. Create a second Vercel project targeting that repo.
-3. In Umami’s environment variables, set `DATABASE_URL` to the Supabase Postgres connection string (use the **connection pooling** string; free tier includes enough row headroom for analytics metadata).
-4. Deploy, create an admin user, add **one website per business**, copy each **Website ID** into `businesses.umami_website_id` via the dashboard Settings screen.
-5. In Umami, generate an **API token** and use it for `UMAMI_API_TOKEN`.
+1. Sign up at [clarity.microsoft.com](https://clarity.microsoft.com/) (Microsoft account).
+2. Create **one project per website** → copy each **Project ID** from Setup.
+3. Save each ID in **Settings → Active portfolio → Clarity project ID**.
+4. Clarity → **Settings → Data Export → Generate API token** → set **`CLARITY_API_TOKEN`** in `web/.env.local` and GitHub Actions secrets.
+5. Paste the tracking snippet from the **Traffic → Tracking code** tab on each site.
+6. Click **Sync now** on Traffic (or run **`python main.py traffic`**) — max **3-day** lookback, **10 requests/project/day**.
 
 ## 4. Python engine
 
@@ -135,8 +137,7 @@ Visit `http://localhost:3000` — the installable PWA manifest is `public/manife
 
 ### Traffic & analytics look empty or always zero
 
-- The dashboard reads **`analytics_snapshots`** in Supabase (written by **`python main.py traffic`**, **`python main.py full`**, or scheduled Actions) — not live Umami from the browser. Confirm **`UMAMI_URL`**, **`UMAMI_API_TOKEN`**, and each business **`umami_website_id`**, then run the engine.
-- **Umami Cloud** returns metrics like `{ "pageviews": { "value": 123 } }`. The UI normalises that shape (older code expected flat numbers and showed **0**).
+- The dashboard reads **`analytics_snapshots`** in Supabase (written by **`python main.py traffic`**, **`python main.py full`**, or scheduled Actions). Confirm **`CLARITY_API_TOKEN`** and each business **`clarity_project_id`**, then run the engine or **Sync now** on Traffic.
 
 ### E2E tests (Playwright)
 
@@ -163,12 +164,12 @@ Docs: [Playwright](https://playwright.dev/docs/intro), [Next.js Playwright guide
 
 ## 6. GitHub Actions (free)
 
-Add repository secrets: **`SUPABASE_URL`** (recommended) — or **`NEXT_PUBLIC_SUPABASE_URL`** with the **same Supabase HTTPS URL** if you already use that name in GitHub/Vercel; **`SUPABASE_SERVICE_ROLE_KEY`**; **`UMAMI_URL`** (not `NEXT_PUBLIC_UMAMI_URL`); **`UMAMI_API_TOKEN`**; **`STRIPE_SECRET_ENCRYPTION_KEY`**; plus **`GOOGLE_API_KEY`** / **`GROQ_API_KEY`** for the daily marketing job.
+Add repository secrets: **`SUPABASE_URL`** (recommended) — or **`NEXT_PUBLIC_SUPABASE_URL`** with the **same Supabase HTTPS URL** if you already use that name in GitHub/Vercel; **`SUPABASE_SERVICE_ROLE_KEY`**; **`CLARITY_API_TOKEN`**; **`STRIPE_SECRET_ENCRYPTION_KEY`**; plus **`GOOGLE_API_KEY`** / **`GROQ_API_KEY`** for the daily marketing job.
 
 Workflows:
 
 - `marketing-engine.yml` — daily `python main.py full`
-- `traffic-revenue-sync.yml` — Umami + Stripe snapshots every four hours
+- `traffic-revenue-sync.yml` — Clarity + Stripe snapshots every four hours
 - `revenue-sync.yml` — Stripe-focused snapshots every six hours
 - `e2e-web.yml` — Playwright smoke + API contracts on `web/` changes (optional **`vars.ENFORCE_HEALTH_OK`** + matching Supabase secrets required for strict health)
 

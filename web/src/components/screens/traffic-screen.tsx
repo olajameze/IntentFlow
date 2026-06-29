@@ -5,7 +5,6 @@ import { ChevronDown, CloudSync, ExternalLink, Globe, LineChart as LineIcon, Loa
 import { toast } from "sonner";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Button } from "@/components/ui/button";
 import {
@@ -25,7 +24,7 @@ import {
   chartTooltipLabelStyle,
 } from "@/lib/chart-tooltip";
 import { useChartSvgColors } from "@/lib/use-chart-svg-colors";
-import { umamiPageviewsFromPayload, umamiVisitorsFromPayload } from "@/lib/umami-payload";
+import { claritySessionsFromPayload } from "@/lib/clarity-payload";
 import {
   chartSnapshotsForBusiness,
   filterSnapshotsForBusiness,
@@ -33,8 +32,6 @@ import {
   totalsFromLatestSnapshots,
 } from "@/lib/analytics-snapshots";
 import { cn } from "@/lib/utils";
-import { umamiCloudPortfolioUrl, umamiCloudWebsiteUrl } from "@/lib/umami-dashboard-url";
-import { normalizeUmamiShareUrl } from "@/lib/umami-share-url";
 import {
   clarityDashboardUrl,
   clarityProjectsHomeUrl,
@@ -53,20 +50,13 @@ export function TrafficScreen() {
   const [snapshots, setSnapshots] = useState<Record<string, unknown>[]>([]);
   const [selected, setSelected] = useState<string>("all");
   const [trafficSyncDispatching, setTrafficSyncDispatching] = useState(false);
-  const [umamiSyncing, setUmamiSyncing] = useState(false);
-  const [umamiHealth, setUmamiHealth] = useState<{
+  const [claritySyncing, setClaritySyncing] = useState(false);
+  const [clarityHealth, setClarityHealth] = useState<{
+    configured: boolean;
     keyValid: boolean;
     keyMessage?: string;
-    websiteCount?: number;
-    hint?: string;
+    windowDays?: number;
   } | null>(null);
-  const [shareDraft, setShareDraft] = useState("");
-  const [shareSaving, setShareSaving] = useState(false);
-
-  async function reloadBusinesses() {
-    const b = await fetch("/api/businesses");
-    if (b.ok) setBusinesses(await b.json());
-  }
 
   async function reloadSnapshots() {
     const s = await fetch("/api/analytics-snapshots");
@@ -83,28 +73,28 @@ export function TrafficScreen() {
   }, []);
 
   useEffect(() => {
-    fetch("/api/umami-sync")
+    fetch("/api/clarity-sync")
       .then((r) => r.json())
       .then((data: Record<string, unknown>) => {
-        setUmamiHealth({
+        setClarityHealth({
+          configured: Boolean(data.configured),
           keyValid: Boolean(data.keyValid),
           keyMessage: typeof data.keyMessage === "string" ? data.keyMessage : undefined,
-          websiteCount: typeof data.websiteCount === "number" ? data.websiteCount : undefined,
-          hint: typeof data.hint === "string" ? data.hint : undefined,
+          windowDays: typeof data.windowDays === "number" ? data.windowDays : undefined,
         });
       })
-      .catch(() => setUmamiHealth(null));
-  }, [umamiSyncing, snapshots.length]);
+      .catch(() => setClarityHealth(null));
+  }, [claritySyncing, snapshots.length]);
 
-  const runUmamiSync = async () => {
-    setUmamiSyncing(true);
+  const runClaritySync = async () => {
+    setClaritySyncing(true);
     try {
-      const res = await fetch("/api/umami-sync", { method: "POST" });
+      const res = await fetch("/api/clarity-sync", { method: "POST" });
       const data = (await res.json().catch(() => ({}))) as Record<string, unknown>;
       if (res.ok && data.ok) {
         await reloadSnapshots();
         toast.success(
-          `Umami synced — ${String(data.synced ?? 0)} business(es), last ${String(data.windowDays ?? 30)} days.`,
+          `Clarity synced — ${String(data.synced ?? 0)} business(es), last ${String(data.windowDays ?? 3)} day(s).`,
           { duration: 8000 },
         );
         return;
@@ -116,16 +106,12 @@ export function TrafficScreen() {
           String((failed[0] as { detail?: string }).detail ?? "")
         : "";
       const msg = typeof data.error === "string" ? data.error : `HTTP ${res.status}`;
-      const hint =
-        typeof data.hint === "string" ? data.hint
-        : firstDetail.includes("401") ?
-          "Regenerate your Umami Cloud API key (Settings → API keys) and update UMAMI_API_TOKEN."
-        : firstDetail || "";
+      const hint = typeof data.hint === "string" ? data.hint : firstDetail || "";
       toast.error(hint ? `${msg}\n\n${hint}` : msg, { duration: 15_000 });
     } catch {
-      toast.error("Could not reach /api/umami-sync");
+      toast.error("Could not reach /api/clarity-sync");
     } finally {
-      setUmamiSyncing(false);
+      setClaritySyncing(false);
     }
   };
 
@@ -174,9 +160,7 @@ export function TrafficScreen() {
     }
   };
 
-  const totals = useMemo(() => {
-    return totalsFromLatestSnapshots(snapshots, selected);
-  }, [snapshots, selected]);
+  const totals = useMemo(() => totalsFromLatestSnapshots(snapshots, selected), [snapshots, selected]);
 
   const filteredSnaps = useMemo(
     () => filterSnapshotsForBusiness(snapshots, selected),
@@ -186,7 +170,7 @@ export function TrafficScreen() {
   const chartData = useMemo(() => {
     return chartSnapshotsForBusiness(snapshots, selected, 14).map((snap) => ({
       label: formatSnapshotLabel(String(snap.captured_at ?? "")),
-      value: umamiPageviewsFromPayload(snap.payload),
+      value: claritySessionsFromPayload(snap.payload),
     }));
   }, [snapshots, selected]);
 
@@ -196,63 +180,9 @@ export function TrafficScreen() {
     return b?.name ? String(b.name) : "Selected business";
   }, [businesses, selected]);
 
-  const umamiBase = process.env.NEXT_PUBLIC_UMAMI_URL ?? "https://your-umami.vercel.app";
   const activeBusiness = businesses.find(
     (b) => String(b.id).toLowerCase() === selected.toLowerCase(),
   );
-  const selectedBusinessId =
-    selected === "all" ? String(businesses[0]?.id ?? "") : selected;
-  const shareBusiness =
-    selected === "all"
-      ? businesses.find((b) => String(b.umami_share_url ?? "").trim())
-      : activeBusiness;
-  const activeShareUrl = normalizeUmamiShareUrl(
-    String(shareBusiness?.umami_share_url ?? ""),
-  );
-
-  useEffect(() => {
-    const stored = String(shareBusiness?.umami_share_url ?? "");
-    setShareDraft(stored);
-  }, [shareBusiness?.id, shareBusiness?.umami_share_url]);
-
-  const saveShareUrl = async () => {
-    const bizId = String(shareBusiness?.id ?? selectedBusinessId);
-    if (!bizId) {
-      toast.error("Select a business first");
-      return;
-    }
-    setShareSaving(true);
-    try {
-      const res = await fetch("/api/businesses", {
-        method: "PATCH",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          id: bizId,
-          umami_share_url: shareDraft.trim() || null,
-        }),
-      });
-      const data = await res.json().catch(() => ({}));
-      if (!res.ok) {
-        toast.error(typeof data.error === "string" ? data.error : "Could not save share URL");
-        return;
-      }
-      toast.success("Share URL saved — live view updated");
-      await reloadBusinesses();
-    } finally {
-      setShareSaving(false);
-    }
-  };
-
-  const websiteId =
-    selected === "all"
-      ? businesses[0]?.umami_website_id
-      : activeBusiness?.umami_website_id;
-
-  const liveUmamiUrl =
-    selected === "all"
-      ? umamiCloudPortfolioUrl()
-      : umamiCloudWebsiteUrl(String(websiteId ?? "")) ?? umamiCloudPortfolioUrl();
-
   const clarityBusiness =
     selected === "all"
       ? businesses.find((b) => String(b.clarity_project_id ?? "").trim())
@@ -262,7 +192,7 @@ export function TrafficScreen() {
   const clarityLiveUrl =
     clarityDashboardUrl(clarityProjectId) ?? clarityProjectsHomeUrl();
 
-  const snippet = `<script async src="${umamiBase}/script.js" data-website-id="${websiteId ? String(websiteId) : "YOUR_WEBSITE_ID"}"></script>`;
+  const windowLabel = `${totals.windowDays}d`;
 
   return (
     <Tabs defaultValue="overview" className="min-w-0">
@@ -273,50 +203,18 @@ export function TrafficScreen() {
       </TabsList>
 
       <TabsContent value="overview" className="min-w-0 space-y-4">
-        {umamiHealth && !umamiHealth.keyValid ? (
+        {clarityHealth && !clarityHealth.configured ? (
           <Card className="border-amber-500/40 bg-amber-500/5">
             <CardHeader>
-              <CardTitle className="text-base">Auto-sync needs a paid Umami API key</CardTitle>
+              <CardTitle className="text-base">Clarity API token required for sync</CardTitle>
             </CardHeader>
-            <CardContent className="space-y-3 text-sm text-muted-foreground">
+            <CardContent className="space-y-2 text-sm text-muted-foreground">
               <p>
-                IntentFlow pulls traffic into the dashboard via the Umami Cloud API. On the free Hobby plan, Umami often
-                asks you to upgrade before you can create an API key — and the key in{" "}
-                <code className="rounded bg-muted px-1">.env.local</code> is being rejected (
-                <strong className="text-foreground">{umamiHealth.keyMessage ?? "Unauthorized"}</strong>).
+                Save a Clarity Data Export token for each brand in{" "}
+                <strong>Settings → Active portfolio → Clarity API token</strong> (one token per Clarity project).
+                Optional fallback: <code className="rounded bg-muted px-1">CLARITY_API_TOKEN</code> in{" "}
+                <code className="rounded bg-muted px-1">web/.env.local</code>.
               </p>
-              <p>
-                <strong className="text-foreground">Your sites still collect data</strong> in Umami Cloud. Use the{" "}
-                <strong>Live view</strong> tab (Share URL embed, free) or <strong>Open live Umami</strong> below. Snapshot
-                charts here stay stale until API access is available.
-              </p>
-              <ul className="list-disc space-y-1 pl-5">
-                <li>
-                  <strong>Free:</strong> open the Umami dashboard (button below) — same numbers as{" "}
-                  <a
-                    href="https://cloud.umami.is/analytics/eu/dashboard"
-                    className="text-primary underline-offset-4 hover:underline"
-                    target="_blank"
-                    rel="noopener noreferrer"
-                  >
-                    cloud.umami.is
-                  </a>
-                </li>
-                <li>
-                  <strong>~$9/mo:</strong> Umami Cloud Basic — unlocks API keys for automatic Sync now
-                </li>
-                <li>
-                  <strong>$0:</strong> self-host Umami (MIT license) — full API with username/password; see README
-                </li>
-              </ul>
-            </CardContent>
-          </Card>
-        ) : null}
-
-        {umamiHealth?.keyValid ? (
-          <Card className="border-emerald-500/30 bg-emerald-500/5">
-            <CardContent className="py-3 text-sm text-muted-foreground">
-              Umami Cloud connected — {umamiHealth.websiteCount ?? 0} website(s) visible to this API key.
             </CardContent>
           </Card>
         ) : null}
@@ -355,7 +253,7 @@ export function TrafficScreen() {
               />
             </div>
             <p className="mt-1 text-xs text-muted-foreground">
-              Latest Umami window (30d):{" "}
+              Latest Clarity window ({windowLabel}):{" "}
               <span className="font-medium text-foreground">{portfolioLabel}</span>
               {totals.lastSyncedAt ?
                 <> · last synced {formatSnapshotLabel(totals.lastSyncedAt)}</>
@@ -365,7 +263,7 @@ export function TrafficScreen() {
           <div className="flex flex-col items-stretch gap-2 sm:flex-row sm:items-center sm:gap-3">
             <span className="flex items-center gap-1 text-sm text-muted-foreground">
               <Globe className="h-4 w-4" />
-              GDPR-friendly · no cookies
+              Free · heatmaps & replays
             </span>
             <Button
               type="button"
@@ -378,29 +276,15 @@ export function TrafficScreen() {
             </Button>
             <Button
               type="button"
-              variant="outline"
-              className="h-10 shrink-0"
-              onClick={() => window.open(liveUmamiUrl, "_blank", "noopener,noreferrer")}
-            >
-              <ExternalLink className="mr-2 h-4 w-4" />
-              Open Umami
-            </Button>
-            <Button
-              type="button"
               variant="default"
               className="h-10 shrink-0"
-              onClick={runUmamiSync}
-              disabled={umamiSyncing || umamiHealth?.keyValid === false}
-              title={
-                umamiHealth?.keyValid === false ?
-                  "Requires a valid Umami Cloud API key (paid plan or self-hosted)"
-                : undefined
-              }
+              onClick={runClaritySync}
+              disabled={claritySyncing || clarityHealth?.configured === false}
             >
-              {umamiSyncing ?
+              {claritySyncing ?
                 <Loader2 className="mr-2 h-4 w-4 animate-spin" />
               : <RefreshCw className="mr-2 h-4 w-4" />}
-              {umamiSyncing ? "Syncing Umami…" : "Sync now"}
+              {claritySyncing ? "Syncing Clarity…" : "Sync now"}
             </Button>
             <Button
               type="button"
@@ -420,17 +304,17 @@ export function TrafficScreen() {
         <div className="grid gap-4 md:grid-cols-3">
           <Card>
             <CardHeader>
-              <CardTitle className="text-base">Pageviews (latest sync)</CardTitle>
-              <p className="text-xs text-muted-foreground">Rolling 30-day window · {portfolioLabel}</p>
+              <CardTitle className="text-base">Sessions (latest sync)</CardTitle>
+              <p className="text-xs text-muted-foreground">Clarity window · {windowLabel} · {portfolioLabel}</p>
             </CardHeader>
-            <CardContent className="text-3xl font-semibold">{totals.pageviews}</CardContent>
+            <CardContent className="text-3xl font-semibold">{totals.sessions}</CardContent>
           </Card>
           <Card>
             <CardHeader>
-              <CardTitle className="text-base">Visitors (latest sync)</CardTitle>
-              <p className="text-xs text-muted-foreground">Rolling 30-day window · {portfolioLabel}</p>
+              <CardTitle className="text-base">Users (latest sync)</CardTitle>
+              <p className="text-xs text-muted-foreground">Distinct users · {windowLabel}</p>
             </CardHeader>
-            <CardContent className="text-3xl font-semibold">{totals.visitors || "—"}</CardContent>
+            <CardContent className="text-3xl font-semibold">{totals.users || "—"}</CardContent>
           </Card>
           <Card>
             <CardHeader>
@@ -438,8 +322,8 @@ export function TrafficScreen() {
               <p className="text-xs text-muted-foreground">{portfolioLabel}</p>
             </CardHeader>
             <CardContent className="text-sm text-muted-foreground">
-              Live Umami Cloud (EU) → <code className="rounded bg-muted px-1">analytics_snapshots</code>. Use{" "}
-              <strong>Sync now</strong> or run <code className="rounded bg-muted px-1">python main.py traffic</code>.
+              Microsoft Clarity Data Export API →{" "}
+              <code className="rounded bg-muted px-1">analytics_snapshots</code>. Max 3-day lookback, 10 requests/project/day.
             </CardContent>
           </Card>
         </div>
@@ -451,11 +335,8 @@ export function TrafficScreen() {
             </CardHeader>
             <CardContent className="space-y-2 text-sm text-muted-foreground">
               <p>
-                No Umami snapshots for this filter yet. Click <strong>Sync now</strong> above (requires{" "}
-                <code className="rounded bg-muted px-1">UMAMI_API_TOKEN</code>,{" "}
-                <code className="rounded bg-muted px-1">UMAMI_URL</code>, and{" "}
-                <code className="rounded bg-muted px-1">UMAMI_CLOUD_REGION=eu</code> in{" "}
-                <code className="rounded bg-muted px-1">web/.env.local</code>), or run{" "}
+                Add a Clarity project ID and API token in Settings (one token per project from Clarity → Data Export),
+                then click <strong>Sync now</strong> or run{" "}
                 <code className="rounded bg-muted px-1">cd engine &amp;&amp; python main.py traffic</code>.
               </p>
             </CardContent>
@@ -471,7 +352,7 @@ export function TrafficScreen() {
               </CardTitle>
               <p className="mt-1 text-xs text-muted-foreground">{portfolioLabel}</p>
             </div>
-            <span className="text-xs text-muted-foreground">Last payloads</span>
+            <span className="text-xs text-muted-foreground">Sessions per sync</span>
           </CardHeader>
           <CardContent className="min-w-0">
             <ResponsiveContainer width="100%" height={256}>
@@ -488,7 +369,7 @@ export function TrafficScreen() {
                 <Line
                   type="monotone"
                   dataKey="value"
-                  name="Pageviews"
+                  name="Sessions"
                   stroke={svg.chart1}
                   strokeWidth={2.5}
                   dot={{ r: 3, fill: svg.chart1, stroke: svg.card, strokeWidth: 2 }}
@@ -527,7 +408,7 @@ export function TrafficScreen() {
       <TabsContent value="live" className="min-w-0 space-y-4">
         <Card className="border-primary/30 bg-primary/5">
           <CardHeader>
-            <CardTitle className="text-base">Microsoft Clarity (your choice)</CardTitle>
+            <CardTitle className="text-base">Microsoft Clarity dashboard</CardTitle>
           </CardHeader>
           <CardContent className="space-y-3 text-sm text-muted-foreground">
             <p>
@@ -535,22 +416,6 @@ export function TrafficScreen() {
               <strong>Settings → Active portfolio → Clarity project ID</strong>, paste the tracking snippet on each site
               (Tracking tab), then open your dashboard here.
             </p>
-            <ol className="list-decimal space-y-1 pl-5">
-              <li>
-                Sign up at{" "}
-                <a
-                  href="https://clarity.microsoft.com/"
-                  className="text-primary underline-offset-4 hover:underline"
-                  target="_blank"
-                  rel="noopener noreferrer"
-                >
-                  clarity.microsoft.com
-                </a>{" "}
-                (Microsoft account)
-              </li>
-              <li>Add a project per website → copy the <strong>Project ID</strong> from Setup</li>
-              <li>Save it in Settings, then use <strong>Tracking code → Microsoft Clarity</strong></li>
-            </ol>
             <Button
               type="button"
               variant="default"
@@ -566,78 +431,6 @@ export function TrafficScreen() {
             ) : null}
           </CardContent>
         </Card>
-
-        <Card>
-          <CardHeader>
-            <CardTitle className="text-base">Umami Share URL (optional embed)</CardTitle>
-          </CardHeader>
-          <CardContent className="space-y-3 text-sm text-muted-foreground">
-            <p>
-              Optional: embed Umami stats if you created a Share URL on the free Hobby plan (separate from Clarity).
-            </p>
-            <ol className="list-decimal space-y-1 pl-5">
-              <li>Umami → select a website → <strong>Edit</strong></li>
-              <li>Scroll to <strong>Share URL</strong> → create / copy link</li>
-              <li>Paste below and click Save (or save in Settings → Active portfolio)</li>
-            </ol>
-            <div className="flex flex-col gap-2 sm:flex-row">
-              <Input
-                className="font-mono text-xs"
-                placeholder="https://cloud.umami.is/share/…"
-                value={shareDraft}
-                onChange={(e) => setShareDraft(e.target.value)}
-                aria-label="Umami share URL"
-              />
-              <Button type="button" className="shrink-0" disabled={shareSaving} onClick={() => void saveShareUrl()}>
-                {shareSaving ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
-                Save share URL
-              </Button>
-            </div>
-            {selected === "all" && !shareBusiness ? (
-              <p className="text-amber-700 dark:text-amber-400">
-                Filter to one business, or add a share URL for at least one brand in Settings.
-              </p>
-            ) : null}
-          </CardContent>
-        </Card>
-
-        {activeShareUrl ? (
-          <Card className="overflow-hidden">
-            <CardHeader className="flex flex-row items-center justify-between gap-2">
-              <div>
-                <CardTitle className="text-base">
-                  {String(shareBusiness?.name ?? portfolioLabel)}
-                </CardTitle>
-                <p className="text-xs text-muted-foreground">Embedded from Umami Share URL</p>
-              </div>
-              <Button
-                type="button"
-                variant="outline"
-                size="sm"
-                onClick={() => window.open(activeShareUrl, "_blank", "noopener,noreferrer")}
-              >
-                <ExternalLink className="mr-2 h-4 w-4" />
-                Open in tab
-              </Button>
-            </CardHeader>
-            <CardContent className="p-0">
-              <iframe
-                src={activeShareUrl}
-                title={`Live Umami analytics — ${String(shareBusiness?.name ?? "business")}`}
-                className="h-[min(720px,75vh)] w-full border-0 bg-background"
-                loading="lazy"
-                referrerPolicy="no-referrer-when-downgrade"
-              />
-            </CardContent>
-          </Card>
-        ) : (
-          <Card className="border-dashed">
-            <CardContent className="py-10 text-center text-sm text-muted-foreground">
-              Paste a Share URL above to embed live traffic here.
-            </CardContent>
-          </Card>
-        )}
-
       </TabsContent>
 
       <TabsContent value="tracking" className="min-w-0 space-y-3">
@@ -649,16 +442,7 @@ export function TrafficScreen() {
             <p className="text-sm text-muted-foreground">
               Paste inside <code className="rounded bg-muted px-1">{`<head>`}</code> or before{" "}
               <code className="rounded bg-muted px-1">{`</body>`}</code> on{" "}
-              <span className="font-medium text-foreground">{portfolioLabel}</span>. Project ID from{" "}
-              <a
-                href="https://clarity.microsoft.com/"
-                className="text-primary underline-offset-4 hover:underline"
-                target="_blank"
-                rel="noopener noreferrer"
-              >
-                Clarity → Setup
-              </a>
-              , saved in Settings.
+              <span className="font-medium text-foreground">{portfolioLabel}</span>.
             </p>
             <Textarea readOnly value={claritySnippet} className="min-h-[140px] font-mono text-xs" />
             <div className="flex flex-wrap gap-2">
@@ -683,32 +467,9 @@ export function TrafficScreen() {
           </CardContent>
         </Card>
 
-        <Card>
-          <CardHeader>
-            <CardTitle className="text-base">Umami (optional)</CardTitle>
-          </CardHeader>
-          <CardContent className="space-y-3">
-            <p className="text-sm text-muted-foreground">
-              Optional cookieless tracker — paste before <code className="rounded bg-muted px-1">{`</body>`}</code> if you
-              still use Umami alongside Clarity.
-            </p>
-            <Textarea readOnly value={snippet} className="min-h-[120px] font-mono text-xs" />
-            <div className="flex flex-wrap gap-2">
-              <Button
-                type="button"
-                onClick={() => navigator.clipboard.writeText(snippet)}
-                variant="secondary"
-                className="h-11"
-              >
-                Copy Umami snippet
-              </Button>
-            </div>
-          </CardContent>
-        </Card>
-
         <Card className="overflow-hidden">
           <CardHeader>
-            <CardTitle className="text-base">Device mix</CardTitle>
+            <CardTitle className="text-base">Sync history</CardTitle>
             <p className="text-xs text-muted-foreground">{portfolioLabel}</p>
           </CardHeader>
           <CardContent className="min-w-0">
@@ -723,7 +484,7 @@ export function TrafficScreen() {
                   itemStyle={chartTooltipItemStyle}
                   cursor={{ fill: svg.muted }}
                 />
-                <Bar dataKey="value" name="Pageviews" fill={svg.chart2} radius={[6, 6, 0, 0]} maxBarSize={48} />
+                <Bar dataKey="value" name="Sessions" fill={svg.chart2} radius={[6, 6, 0, 0]} maxBarSize={48} />
               </BarChart>
             </ResponsiveContainer>
           </CardContent>

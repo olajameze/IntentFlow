@@ -73,11 +73,8 @@ def _apply_web_env_local_overrides() -> None:
         "OUTREACH_PUBLIC_BASE_URL",
         "OUTREACH_SNAPSHOT_ENABLED",
         "OUTREACH_VISUAL_AUDIT_ENABLED",
-        "UMAMI_URL",
-        "UMAMI_API_KEY",
-        "UMAMI_API_TOKEN",
-        "UMAMI_CLOUD_REGION",
-        "UMAMI_API_CLIENT_ENDPOINT",
+        "CLARITY_API_TOKEN",
+        "CLARITY_SNAPSHOT_DAYS",
         "TRAFFIC_SNAPSHOT_DAYS",
     ):
         raw = vals.get(key)
@@ -153,29 +150,19 @@ def llm_skip_google() -> bool:
 
 
 @lru_cache
-def umami_url() -> str | None:
-    v = _env_first("UMAMI_URL", "NEXT_PUBLIC_UMAMI_URL")
+def clarity_api_token() -> str | None:
+    v = os.getenv("CLARITY_API_TOKEN", "").strip()
     return v or None
 
 
 @lru_cache
-def umami_api_client_endpoint() -> str | None:
-    """Optional API root, e.g. self-hosted `https://host/api` or Cloud `https://api.umami.is/v1`."""
-    v = os.getenv("UMAMI_API_CLIENT_ENDPOINT", "").strip().strip('"').strip("'")
-    return v or None
-
-
-@lru_cache
-def umami_api_token() -> str | None:
-    v = os.getenv("UMAMI_API_TOKEN", "").strip()
-    return v or None
-
-
-@lru_cache
-def umami_api_key() -> str | None:
-    """Umami Cloud API key (falls back to UMAMI_API_TOKEN if you store the key there)."""
-    v = _env_first("UMAMI_API_KEY", "UMAMI_API_TOKEN")
-    return v or None
+def clarity_snapshot_days() -> int:
+    raw = os.getenv("CLARITY_SNAPSHOT_DAYS", "3").strip()
+    try:
+        days = int(raw)
+    except ValueError:
+        days = 3
+    return max(1, min(3, days))
 
 
 @lru_cache

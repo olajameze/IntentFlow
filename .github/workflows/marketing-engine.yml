@@ -1,6 +1,6 @@
 name: Marketing Engine (Daily)
 
-# Repo → Settings → Secrets and variables → Actions (use UMAMI_URL, not NEXT_PUBLIC_UMAMI_URL)
+# Repo → Settings → Secrets and variables → Actions
 on:
   workflow_dispatch: {}
   schedule:
@@ -30,10 +30,8 @@ jobs:
       OLLAMA_BASE_URL: "http://127.0.0.1:11434"
       OLLAMA_TEXT_MODEL: "llama3.2:1b"
       OLLAMA_TIMEOUT_SEC: "180"
-      UMAMI_URL: ${{ secrets.UMAMI_URL }}
-      UMAMI_API_TOKEN: ${{ secrets.UMAMI_API_TOKEN }}
-      UMAMI_CLOUD_REGION: ${{ secrets.UMAMI_CLOUD_REGION }}
-      TRAFFIC_SNAPSHOT_DAYS: "30"
+      CLARITY_API_TOKEN: ${{ secrets.CLARITY_API_TOKEN }}
+      CLARITY_SNAPSHOT_DAYS: "3"
       STRIPE_SECRET_ENCRYPTION_KEY: ${{ secrets.STRIPE_SECRET_ENCRYPTION_KEY }}
       # Pace Groq/API calls between portfolio brands (seconds). Set 0 to disable.
       ENGINE_SLEEP_BETWEEN_BUSINESSES_SEC: "20"
@@ -78,8 +76,7 @@ jobs:
           if [ -n "${GOOGLE_API_KEY:-}" ]; then
             echo "::notice::GOOGLE_API_KEY is present but ignored because ENGINE_USE_GROQ_ONLY=1 / ENGINE_FORCE_GROQ=1."
           fi
-          test -n "${UMAMI_URL:-}" || { echo "::error::Secret UMAMI_URL is empty"; exit 1; }
-          test -n "${UMAMI_API_TOKEN:-}" || { echo "::error::Secret UMAMI_API_TOKEN is empty"; exit 1; }
+          test -n "${CLARITY_API_TOKEN:-}" || { echo "::error::Secret CLARITY_API_TOKEN is empty"; exit 1; }
           echo "::notice::LLM chain: Groq (primary) → Ollama llama3.2:1b (fallback) → safe placeholder"
       # Install and start Ollama so it is available as a fallback if Groq rate-limits.
       # The pull (~770 MB) runs in parallel with the import check to save time.

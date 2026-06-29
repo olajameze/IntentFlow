@@ -22,15 +22,16 @@ import {
   chartTooltipLabelStyle,
 } from "@/lib/chart-tooltip";
 import { useChartSvgColors } from "@/lib/use-chart-svg-colors";
-import { umamiPageviewsFromPayload, umamiVisitorsFromPayload } from "@/lib/umami-payload";
+import { claritySessionsFromPayload, clarityUsersFromPayload, clarityWindowDaysFromPayload } from "@/lib/clarity-payload";
 import { chartSnapshotsForBusiness, latestSnapshotPerBusiness } from "@/lib/analytics-snapshots";
+import { clarityDashboardUrl } from "@/lib/clarity";
 import ConversionMetricsChart, { type ChartSnapshot } from "@/components/analytics/ConversionMetricsChart";
 
 type Business = {
   id: string;
   name: string;
   type: string;
-  umami_website_id: string | null;
+  clarity_project_id?: string | null;
   active: boolean;
 };
 
@@ -100,7 +101,7 @@ export function HomeOverview() {
   const portfolioSparkData = useMemo(() => {
     return chartSnapshotsForBusiness(snapshots, "all", 7).map((snap) => ({
       label: snap.captured_at ? format(new Date(String(snap.captured_at)), "MMM dd") : "—",
-      traffic: umamiPageviewsFromPayload(snap.payload),
+      traffic: claritySessionsFromPayload(snap.payload),
       revenue: 0,
     }));
   }, [snapshots]);
@@ -189,19 +190,22 @@ export function HomeOverview() {
       <div className="grid gap-4 md:grid-cols-2">
         {businesses.map((biz) => {
           const latest = latestByBusiness.get(biz.id);
-          const pv = latest ? umamiPageviewsFromPayload(latest.payload) : 0;
-          const uv = latest ? umamiVisitorsFromPayload(latest.payload) : 0;
-          const views = latest ? pv : "—";
-          const uniq = latest ? uv : "—";
+          const sessions = latest ? claritySessionsFromPayload(latest.payload) : 0;
+          const users = latest ? clarityUsersFromPayload(latest.payload) : 0;
+          const windowDays = latest ? clarityWindowDaysFromPayload(latest.payload) : 3;
+          const views = latest ? sessions : "—";
+          const uniq = latest ? users : "—";
           const bizSparkData = chartSnapshotsForBusiness(snapshots, biz.id, 7).map((snap) => ({
               label: snap.captured_at ? format(new Date(String(snap.captured_at)), "MMM dd") : "—",
-              traffic: umamiPageviewsFromPayload(snap.payload),
+              traffic: claritySessionsFromPayload(snap.payload),
               revenue: 0,
             }));
           const revToday = revenue
             .filter((r) => r.business_id === biz.id)
             .reduce((acc, row) => acc + Number(row.amount ?? 0), 0);
           const leadCount = leads.filter((l) => l.business_id === biz.id).length;
+          const clarityUrl = biz.clarity_project_id ? clarityDashboardUrl(biz.clarity_project_id) : null;
+          const trackerBadge = biz.clarity_project_id ? "Clarity" : "No tracker";
 
           return (
             <Card key={biz.id} className="border-border/60 shadow-sm">
@@ -210,7 +214,7 @@ export function HomeOverview() {
                   <CardTitle className="text-lg font-semibold">{biz.name}</CardTitle>
                   <p className="text-xs uppercase text-muted-foreground">{biz.type.replaceAll("_", " ")}</p>
                 </div>
-                <Badge variant="outline">{biz.umami_website_id ? "Umami" : "No tracker"}</Badge>
+                <Badge variant="outline">{trackerBadge}</Badge>
               </CardHeader>
               <CardContent className="space-y-4">
                 <div className="grid grid-cols-3 gap-3 text-sm">
@@ -219,9 +223,22 @@ export function HomeOverview() {
                     <p className="text-2xl font-semibold">{leadCount}</p>
                   </div>
                   <div>
-                    <p className="text-muted-foreground">Traffic (30d)</p>
+                    <p className="text-muted-foreground">Traffic ({windowDays}d)</p>
                     <p className="text-2xl font-semibold">{views}</p>
-                    <p className="text-xs text-muted-foreground">Visitors {uniq}</p>
+                    <p className="text-xs text-muted-foreground">
+                      {latest ? `${uniq} users · synced` : "Run Clarity sync"}
+                    </p>
+                    {clarityUrl ?
+                      <a
+                        href={clarityUrl}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="mt-1 inline-flex items-center gap-1 text-xs text-primary underline-offset-4 hover:underline"
+                      >
+                        Open Clarity
+                        <ArrowUpRight className="h-3 w-3" />
+                      </a>
+                    : null}
                   </div>
                   <div>
                     <p className="text-muted-foreground">Revenue (loaded)</p>
@@ -273,7 +290,7 @@ export function HomeOverview() {
                   <div className="mt-1 flex items-center justify-between text-[11px] text-muted-foreground">
                     <span className="flex items-center gap-1">
                       <Activity className="h-3 w-3" />
-                      Sync history (Umami)
+                      {latest ? "Clarity snapshot history" : "Sync Clarity for charts"}
                     </span>
                     <ArrowUpRight className="h-4 w-4" />
                   </div>
@@ -295,8 +312,8 @@ export function HomeOverview() {
         </CardHeader>
         <CardContent className="grid gap-3 text-sm text-muted-foreground md:grid-cols-3">
           <p>
-            Umami captures cookieless analytics; drop the tracking snippet from the Traffic → Tracking tab for each
-            brand.
+            Traffic numbers come from Microsoft Clarity sync (1–3 day window). Use <strong>Open Clarity</strong> for live
+            heatmaps and session replay.
           </p>
           <p>Stripe keys are AES sealed server-side — never shipped to the browser.</p>
           <p>Agents run on GitHub Actions daily at 08:00 — adjust cron as needed.</p>

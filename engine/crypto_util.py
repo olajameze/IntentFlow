@@ -7,8 +7,6 @@ from __future__ import annotations
 
 import base64
 import hashlib
-import os
-from typing import Tuple
 
 from cryptography.hazmat.primitives.ciphers.aead import AESGCM
 
@@ -41,3 +39,8 @@ def decrypt_stripe_secret(ciphertext_b64: str | None, iv_b64: str | None, tag_b6
         return plain.decode("utf-8")
     except Exception:
         return None
+
+
+def decrypt_clarity_api_token(ciphertext_b64: str | None, iv_b64: str | None, tag_b64: str | None) -> str | None:
+    """Decrypt per-business Clarity token (same AES-GCM vault as Stripe)."""
+    return decrypt_stripe_secret(ciphertext_b64, iv_b64, tag_b64)
