@@ -26,11 +26,19 @@ _SEO_KEYWORDS = ("seo", "google", "local", "find us", "opening hours", "opening 
 _TRUST_KEYWORDS = ("about", "team", "certified", "qualified", "reviews", "testimonial", "trust")
 
 
+def _visual_audit(research: dict[str, Any]) -> dict[str, Any]:
+    raw = research.get("visual_audit")
+    return raw if isinstance(raw, dict) else {}
+
+
 def compute_site_score_breakdown(research: dict[str, Any]) -> dict[str, int]:
     sample = (research.get("page_text_sample") or "").lower()
     page_len = int(research.get("page_text_length") or 0)
     has_https = bool(research.get("has_https"))
     has_contact = bool(research.get("has_contact_page"))
+    visual = _visual_audit(research)
+    signals = visual.get("signals") if isinstance(visual.get("signals"), dict) else {}
+    page_status = str(visual.get("page_status") or "ok")
 
     local_seo = 55
     mobile = 50
@@ -65,6 +73,24 @@ def compute_site_score_breakdown(research: dict[str, Any]) -> dict[str, int]:
     if not has_https:
         trust -= 10
 
+    if signals:
+        if not signals.get("has_viewport_meta"):
+            mobile -= 15
+        load_ms = int(signals.get("load_time_ms") or visual.get("load_time_ms") or 0)
+        if load_ms > 4000:
+            mobile -= 12
+        form_count = int(signals.get("form_count") or 0)
+        tel_links = int(signals.get("tel_links") or 0)
+        if form_count == 0 and tel_links == 0:
+            booking -= 12
+        if not str(signals.get("h1") or "").strip():
+            trust -= 10
+
+    if page_status in {"unreachable", "parked", "error"}:
+        mobile -= 20
+        booking -= 15
+        trust -= 10
+
     return {
         "local_seo_visibility": _clamp(local_seo),
         "mobile_experience": _clamp(mobile),
@@ -83,7 +109,46 @@ def compute_overall_site_score(breakdown: dict[str, int]) -> int:
     return _clamp(int(round(weighted)))
 
 
+def _observation_gaps(research: dict[str, Any]) -> list[dict[str, str]] | None:
+    visual = _visual_audit(research)
+    observations = visual.get("observations")
+    if not isinstance(observations, list) or len(observations) < 2:
+        return None
+    gaps: list[dict[str, str]] = []
+    for i, obs in enumerate(observations[:4]):
+        text = str(obs).strip()
+        if not text:
+            continue
+        title = text.split(".")[0].strip()
+        if len(title) > 72:
+            title = title[:69].rstrip() + "…"
+        gaps.append(
+            {
+                "id": f"visual-{i + 1}",
+                "title": title or f"Observation {i + 1}",
+                "severity": "high" if i == 0 else "medium",
+                "detail": text,
+            }
+        )
+    if len(gaps) >= 2 and len(gaps) < 3:
+        gaps.append(
+            {
+                "id": "visual-3",
+                "title": "Mobile clarity",
+                "severity": "medium",
+                "detail": (
+                    "Make services and contact paths obvious above the fold so visitors know what you do and how to reach you."
+                ),
+            }
+        )
+    return gaps if len(gaps) >= 3 else None
+
+
 def _template_gaps(research: dict[str, Any], breakdown: dict[str, int]) -> list[dict[str, str]]:
+    visual_gaps = _observation_gaps(research)
+    if visual_gaps:
+        return visual_gaps
+
     dims = [
         ("local_seo_visibility", "Local SEO visibility", "Customers may not find you when searching in your area on Google."),
         ("mobile_experience", "Mobile experience", "Most visitors browse on a phone — slow or cramped pages lose enquiries quickly."),
@@ -118,6 +183,29 @@ def _recommendations(breakdown: dict[str, int]) -> list[str]:
     return recs[:3]
 
 
+def _build_visual_audit_payload(research: dict[str, Any]) -> dict[str, Any] | None:
+    visual = _visual_audit(research)
+    if not visual:
+        return None
+    payload: dict[str, Any] = {
+        "page_status": str(visual.get("page_status") or "ok"),
+        "observations": visual.get("observations") or [],
+    }
+    if visual.get("screenshot_path"):
+        payload["screenshot_path"] = str(visual["screenshot_path"])
+    if visual.get("load_time_ms") is not None:
+        payload["load_time_ms"] = int(visual["load_time_ms"])
+    signals = visual.get("signals")
+    if isinstance(signals, dict) and signals:
+        payload["signals"] = {
+            "has_viewport_meta": bool(signals.get("has_viewport_meta")),
+            "form_count": int(signals.get("form_count") or 0),
+            "tel_links": int(signals.get("tel_links") or 0),
+            "h1": str(signals.get("h1") or "")[:200],
+        }
+    return payload
+
+
 def build_site_score_payload(prospect: dict[str, Any], research: dict[str, Any]) -> dict[str, Any]:
     name = (prospect.get("name") or "").strip() or "Your business"
     website = (prospect.get("website_url") or "").strip() or None
@@ -129,8 +217,9 @@ def build_site_score_payload(prospect: dict[str, Any], research: dict[str, Any])
     overall = compute_overall_site_score(breakdown)
     gaps = _template_gaps(research, breakdown)
     now = datetime.now(timezone.utc).isoformat()
+    visual_payload = _build_visual_audit_payload(research)
 
-    return {
+    payload: dict[str, Any] = {
         "snapshot_type": "site_score",
         "version": 1,
         "company_name": name,
@@ -152,6 +241,9 @@ def build_site_score_payload(prospect: dict[str, Any], research: dict[str, Any])
         ),
         "generated_at": now,
     }
+    if visual_payload:
+        payload["visual_audit"] = visual_payload
+    return payload
 
 
 def generate_site_score_snapshot(

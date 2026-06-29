@@ -55,6 +55,21 @@ export const riskBriefPayloadSchema = z.object({
   generated_at: z.string(),
 });
 
+export const visualAuditSchema = z.object({
+  page_status: z.enum(["ok", "unreachable", "parked", "error"]),
+  observations: z.array(z.string()).min(1).max(5),
+  screenshot_path: z.string().optional(),
+  load_time_ms: z.number().int().optional(),
+  signals: z
+    .object({
+      has_viewport_meta: z.boolean(),
+      form_count: z.number().int(),
+      tel_links: z.number().int(),
+      h1: z.string(),
+    })
+    .optional(),
+});
+
 export const siteScorePayloadSchema = z.object({
   snapshot_type: z.literal("site_score"),
   version: z.literal(1),
@@ -75,12 +90,14 @@ export const siteScorePayloadSchema = z.object({
   jgdevs_fit: z.string(),
   disclaimer: z.string(),
   generated_at: z.string(),
+  visual_audit: visualAuditSchema.optional(),
 });
 
 export type SnapshotGap = z.infer<typeof snapshotGapSchema>;
 export type AuditSnapshotPayload = z.infer<typeof auditSnapshotPayloadSchema>;
 export type RiskBriefPayload = z.infer<typeof riskBriefPayloadSchema>;
 export type SiteScorePayload = z.infer<typeof siteScorePayloadSchema>;
+export type VisualAuditPayload = z.infer<typeof visualAuditSchema>;
 
 export type SnapshotPayload =
   | { campaign: "pesttrace"; payload: AuditSnapshotPayload }

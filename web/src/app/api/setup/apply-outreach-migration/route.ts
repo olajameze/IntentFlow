@@ -60,6 +60,7 @@ export async function POST(req: Request) {
         "20260610000000_outreach_snapshots",
         "20260611000000_outreach_jgdevs_campaign",
         "20260617000000_outreach_platform_v2",
+        "20260629000000_outreach_audit_storage",
       ],
     });
   } catch (e) {

@@ -19,6 +19,7 @@ type ViewProps = {
   parsed: SnapshotPayload;
   prospectId: string;
   baseUrl: string;
+  screenshotUrl?: string | null;
 };
 
 function ScoreBar({
@@ -215,10 +216,22 @@ function WeathersView({ payload, prospectId, baseUrl }: { payload: RiskBriefPayl
   );
 }
 
-function JgdevsView({ payload, prospectId, baseUrl }: { payload: SiteScorePayload; prospectId: string; baseUrl: string }) {
+function JgdevsView({
+  payload,
+  prospectId,
+  baseUrl,
+  screenshotUrl,
+}: {
+  payload: SiteScorePayload;
+  prospectId: string;
+  baseUrl: string;
+  screenshotUrl?: string | null;
+}) {
   const siteUrl = jgdevSiteUrl(prospectId);
   const ctaHref = baseUrl ? trackedClickUrl(prospectId, siteUrl, baseUrl) : siteUrl;
   const band = scoreBand(payload.overall_score);
+  const visual = payload.visual_audit;
+  const pageStatus = visual?.page_status ?? "ok";
 
   return (
     <SnapshotShell
@@ -230,6 +243,15 @@ function JgdevsView({ payload, prospectId, baseUrl }: { payload: SiteScorePayloa
     >
       <h1 className={styles.title}>{payload.company_name}</h1>
       {payload.website ? <p className={styles.website}>{payload.website}</p> : null}
+      {pageStatus !== "ok" ? (
+        <div className={styles.statusBanner} data-status={pageStatus}>
+          {pageStatus === "unreachable"
+            ? "We could not load this homepage — it may be down or blocking automated visits."
+            : pageStatus === "parked"
+              ? "This domain appears parked or placeholder — customers may not find a working business site."
+              : "The homepage returned very little content — it may not represent your business well online."}
+        </div>
+      ) : null}
       <div className={styles.scoreBlock}>
         <div className={styles.scoreLabel}>Overall site score</div>
         <div className={styles.scoreValue} data-band={band}>
@@ -237,6 +259,31 @@ function JgdevsView({ payload, prospectId, baseUrl }: { payload: SiteScorePayloa
           <span className={styles.scoreDenom}>/100</span>
         </div>
       </div>
+      {screenshotUrl && pageStatus === "ok" ? (
+        <section className={styles.section}>
+          <h2 className={styles.sectionTitle}>Mobile homepage preview</h2>
+          <div className={styles.screenshotCard}>
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <img
+              src={screenshotUrl}
+              alt={`Mobile homepage preview for ${payload.company_name}`}
+              className={styles.screenshotImg}
+            />
+          </div>
+        </section>
+      ) : null}
+      {visual?.observations?.length ? (
+        <section className={styles.section}>
+          <h2 className={styles.sectionTitle}>What we noticed on your site</h2>
+          <ul className={styles.observationList}>
+            {visual.observations.map((obs) => (
+              <li key={obs} className={styles.observationItem}>
+                {obs}
+              </li>
+            ))}
+          </ul>
+        </section>
+      ) : null}
       <section className={styles.section}>
         <h2 className={styles.sectionTitle}>Score breakdown</h2>
         <ScoreBar variant="jgdevs" label="Local SEO visibility" value={payload.score_breakdown.local_seo_visibility} />
@@ -268,12 +315,19 @@ function JgdevsView({ payload, prospectId, baseUrl }: { payload: SiteScorePayloa
   );
 }
 
-export function CampaignSnapshotView({ parsed, prospectId, baseUrl }: ViewProps) {
+export function CampaignSnapshotView({ parsed, prospectId, baseUrl, screenshotUrl }: ViewProps) {
   if (parsed.campaign === "weathers") {
     return <WeathersView payload={parsed.payload} prospectId={prospectId} baseUrl={baseUrl} />;
   }
   if (parsed.campaign === "jgdevs") {
-    return <JgdevsView payload={parsed.payload} prospectId={prospectId} baseUrl={baseUrl} />;
+    return (
+      <JgdevsView
+        payload={parsed.payload}
+        prospectId={prospectId}
+        baseUrl={baseUrl}
+        screenshotUrl={screenshotUrl}
+      />
+    );
   }
   return <PesttraceView payload={parsed.payload} prospectId={prospectId} baseUrl={baseUrl} />;
 }

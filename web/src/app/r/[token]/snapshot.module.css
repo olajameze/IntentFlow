@@ -261,3 +261,45 @@
   line-height: 1.55;
   color: #374151;
 }
+
+.statusBanner {
+  margin: 0 0 16px;
+  padding: 12px 14px;
+  border-radius: 8px;
+  font-size: 13px;
+  line-height: 1.5;
+  background: #fef3c7;
+  color: #92400e;
+  border: 1px solid #fcd34d;
+}
+
+.statusBanner[data-status="unreachable"] {
+  background: #fee2e2;
+  color: #991b1b;
+  border-color: #fca5a5;
+}
+
+.screenshotCard {
+  border: 1px solid #e5e7eb;
+  border-radius: 10px;
+  overflow: hidden;
+  background: #f3f4f6;
+}
+
+.screenshotImg {
+  display: block;
+  width: 100%;
+  height: auto;
+}
+
+.observationList {
+  margin: 0;
+  padding-left: 20px;
+  font-size: 14px;
+  line-height: 1.6;
+}
+
+.observationItem {
+  margin-bottom: 10px;
+  color: #374151;
+}

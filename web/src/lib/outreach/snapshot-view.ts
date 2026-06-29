@@ -82,3 +82,22 @@ export const SCORE_BAND_COLORS = {
   amber: "#d97706",
   green: "#059669",
 } as const;
+
+const AUDIT_BUCKET = "outreach-audit";
+
+/** Signed URL for a visual audit screenshot stored in Supabase Storage. */
+export async function getAuditScreenshotUrl(
+  sb: SupabaseClient,
+  storagePath: string | null | undefined,
+  expiresInSec = 3600,
+): Promise<string | null> {
+  const path = (storagePath || "").trim();
+  if (!path) return null;
+  try {
+    const { data, error } = await sb.storage.from(AUDIT_BUCKET).createSignedUrl(path, expiresInSec);
+    if (error || !data?.signedUrl) return null;
+    return data.signedUrl;
+  } catch {
+    return null;
+  }
+}

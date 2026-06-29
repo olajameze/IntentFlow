@@ -3,7 +3,7 @@ import type { Metadata } from "next";
 import { getSupabaseAdmin } from "@/lib/supabase-admin";
 import { getPublicBaseUrl } from "@/lib/outreach/public-base-url";
 import { parseSnapshotPayloadByCampaign } from "@/lib/outreach/snapshot-types";
-import { isSnapshotToken, recordSnapshotView } from "@/lib/outreach/snapshot-view";
+import { isSnapshotToken, recordSnapshotView, getAuditScreenshotUrl } from "@/lib/outreach/snapshot-view";
 import { CampaignSnapshotView, snapshotPageTitle } from "./snapshot-views";
 
 export const dynamic = "force-dynamic";
@@ -53,7 +53,17 @@ export default async function SnapshotPage({ params }: Props) {
   const prospectId = viewMeta?.prospectId ?? row.prospect_id;
   const baseUrl = getPublicBaseUrl();
 
+  let screenshotUrl: string | null = null;
+  if (parsed.campaign === "jgdevs" && parsed.payload.visual_audit?.screenshot_path) {
+    screenshotUrl = await getAuditScreenshotUrl(sb, parsed.payload.visual_audit.screenshot_path);
+  }
+
   return (
-    <CampaignSnapshotView parsed={parsed} prospectId={prospectId} baseUrl={baseUrl} />
+    <CampaignSnapshotView
+      parsed={parsed}
+      prospectId={prospectId}
+      baseUrl={baseUrl}
+      screenshotUrl={screenshotUrl}
+    />
   );
 }

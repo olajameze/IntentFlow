@@ -964,6 +964,7 @@ Weakness to reference: {weakness}
 Write the email body. Rules:
 - Tone: helpful and practical — not salesy.
 - Do NOT mention UK unless country is UK or IE.
+- Weave the weakness above naturally into one sentence (specific, observable — not generic).
 - Structure:
   1. One sentence: we put together a site score snapshot for {name} based on their website.
   2. Two sentences: what it covers (local SEO visibility, mobile experience, booking/enquiry flow, trust signals).

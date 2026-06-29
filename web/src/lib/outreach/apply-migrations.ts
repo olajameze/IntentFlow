@@ -11,6 +11,7 @@ const MIGRATION_FILES = [
   "20260611000000_outreach_jgdevs_campaign.sql",
   "20260624120000_breazy_outreach_campaign.sql",
   "20260617000000_outreach_platform_v2.sql",
+  "20260629000000_outreach_audit_storage.sql",
 ] as const;
 
 export function outreachMigrationPaths(): string[] {

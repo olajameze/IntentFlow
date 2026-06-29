@@ -19,6 +19,7 @@ from supabase_client import get_supabase
 from tools.llm import generate_outreach_copy
 from tools.outreach_sector import classify_sector
 from tools.prospect_scraper import _fetch  # noqa: PLC2701
+from tools.visual_audit import run_visual_audit, visual_audit_enabled
 
 logger = logging.getLogger(__name__)
 
@@ -211,6 +212,33 @@ def research_prospect(prospect: dict[str, Any]) -> dict[str, Any]:
         research["contact_name"] = _extract_contact_name(combined_html, page_text, name)
     if not research.get("reviews_snippet"):
         research["reviews_snippet"] = _extract_reviews_snippet(page_text)
+
+    campaign = str(prospect.get("campaign") or "").strip().lower()
+    pid = prospect.get("id")
+    if campaign == "jgdevs" and visual_audit_enabled(campaign) and pid:
+        try:
+            visual = run_visual_audit(
+                website,
+                prospect_id=str(pid),
+                campaign_id=campaign,
+                company_name=name,
+            )
+            if visual:
+                research["visual_audit"] = visual
+                if visual.get("page_text_sample"):
+                    research["page_text_sample"] = visual["page_text_sample"]
+                if visual.get("page_text_length"):
+                    research["page_text_length"] = visual["page_text_length"]
+                observations = visual.get("observations") or []
+                if isinstance(observations, list) and observations:
+                    research["weaknesses"] = [str(o) for o in observations[:3]]
+                signals = visual.get("signals") or {}
+                if isinstance(signals, dict):
+                    if signals.get("form_count", 0) > 0 or signals.get("tel_links", 0) > 0:
+                        research["has_contact_page"] = True
+        except Exception as exc:  # noqa: BLE001
+            logger.warning("[prospect_research] visual audit failed for %s: %s", website, exc)
+
     return research
 
 
