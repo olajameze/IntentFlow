@@ -171,13 +171,24 @@ def run_traffic_only() -> None:
     """Snapshot job for GitHub Actions / cron."""
     businesses = load_active_businesses()
     end = datetime.now(timezone.utc)
-    start = end - timedelta(days=1)
+    raw_days = os.getenv("TRAFFIC_SNAPSHOT_DAYS", "30").strip()
+    try:
+        days = max(1, min(90, int(raw_days)))
+    except ValueError:
+        days = 30
+    start = end - timedelta(days=days)
     for b in businesses:
         wid = b.get("umami_website_id")
         if wid:
             try:
                 stats = fetch_umami_stats(wid, start, end)
-                save_traffic_snapshot(b.get("id"), stats, source="umami", website_id=wid)
+                enriched = {
+                    **stats,
+                    "window_days": days,
+                    "window_start": start.isoformat(),
+                    "window_end": end.isoformat(),
+                }
+                save_traffic_snapshot(b.get("id"), enriched, source="umami", website_id=wid)
             except Exception as exc:  # noqa: BLE001
                 print(f"Umami error for {b.get('name')}: {exc}")
 

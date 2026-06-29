@@ -72,6 +72,13 @@ def _apply_web_env_local_overrides() -> None:
         "BREAZY_SMTP_PASSWORD",
         "OUTREACH_PUBLIC_BASE_URL",
         "OUTREACH_SNAPSHOT_ENABLED",
+        "OUTREACH_VISUAL_AUDIT_ENABLED",
+        "UMAMI_URL",
+        "UMAMI_API_KEY",
+        "UMAMI_API_TOKEN",
+        "UMAMI_CLOUD_REGION",
+        "UMAMI_API_CLIENT_ENDPOINT",
+        "TRAFFIC_SNAPSHOT_DAYS",
     ):
         raw = vals.get(key)
         if raw is None:

@@ -1,5 +1,7 @@
 import { NextResponse } from "next/server";
 import { encryptSecret } from "@/lib/crypto";
+import { normalizeUmamiShareUrl, umamiShareUrlInvalidMessage } from "@/lib/umami-share-url";
+import { clarityProjectIdInvalidMessage, normalizeClarityProjectId } from "@/lib/clarity";
 import { withSupabaseRoute } from "@/lib/with-supabase-route";
 import { supabaseErrorResponse } from "@/lib/supabase-error-response";
 import { z } from "zod";
@@ -61,6 +63,8 @@ const businessSchema = z.object({
   website_url: z.string().optional(),
   goals: z.string().optional(),
   umami_website_id: z.string().nullable().optional(),
+  umami_share_url: z.string().nullable().optional(),
+  clarity_project_id: z.string().nullable().optional(),
   active: z.boolean().optional(),
   stripe_secret_key: z.string().optional(),
 });
@@ -97,6 +101,20 @@ export async function POST(req: Request) {
   } catch {
     return websiteUrlInvalidResponse();
   }
+  let umami_share_url: string | null = null;
+  if (body.umami_share_url !== undefined) {
+    umami_share_url = normalizeUmamiShareUrl(body.umami_share_url);
+    if (body.umami_share_url && body.umami_share_url.trim() && !umami_share_url) {
+      return NextResponse.json({ error: umamiShareUrlInvalidMessage() }, { status: 400 });
+    }
+  }
+  let clarity_project_id: string | null = null;
+  if (body.clarity_project_id !== undefined) {
+    clarity_project_id = normalizeClarityProjectId(body.clarity_project_id);
+    if (body.clarity_project_id && String(body.clarity_project_id).trim() && !clarity_project_id) {
+      return NextResponse.json({ error: clarityProjectIdInvalidMessage() }, { status: 400 });
+    }
+  }
   const insert = {
     name: body.name,
     type: body.type,
@@ -106,6 +124,8 @@ export async function POST(req: Request) {
     website_url,
     goals: body.goals ?? null,
     umami_website_id: body.umami_website_id ?? null,
+    umami_share_url,
+    clarity_project_id,
     active: body.active ?? true,
     ...stripeFields,
   };
@@ -134,8 +154,30 @@ export async function PATCH(req: Request) {
       return websiteUrlInvalidResponse();
     }
   }
+  if (body.umami_share_url !== undefined) {
+    const share = normalizeUmamiShareUrl(body.umami_share_url);
+    if (body.umami_share_url && String(body.umami_share_url).trim() && !share) {
+      return NextResponse.json({ error: umamiShareUrlInvalidMessage() }, { status: 400 });
+    }
+    update.umami_share_url = share;
+  }
+  if (body.clarity_project_id !== undefined) {
+    const clarityId = normalizeClarityProjectId(body.clarity_project_id);
+    if (body.clarity_project_id && String(body.clarity_project_id).trim() && !clarityId) {
+      return NextResponse.json({ error: clarityProjectIdInvalidMessage() }, { status: 400 });
+    }
+    update.clarity_project_id = clarityId;
+  }
   (Object.entries(body) as [string, unknown][]).forEach(([key, value]) => {
-    if (value === undefined || key === "id" || key === "stripe_secret_key" || key === "website_url") return;
+    if (
+      value === undefined ||
+      key === "id" ||
+      key === "stripe_secret_key" ||
+      key === "website_url" ||
+      key === "umami_share_url" ||
+      key === "clarity_project_id"
+    )
+      return;
     update[key] = value;
   });
   if (body.stripe_secret_key) {

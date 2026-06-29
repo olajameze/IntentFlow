@@ -20,6 +20,7 @@ import {
 } from "@/lib/chart-tooltip";
 import { useChartSvgColors } from "@/lib/use-chart-svg-colors";
 import { umamiPageviewsFromPayload } from "@/lib/umami-payload";
+import { latestSnapshotPerBusiness } from "@/lib/analytics-snapshots";
 import ConversionMetricsChart, { type ChartSnapshot } from "@/components/analytics/ConversionMetricsChart";
 
 export function AnalyticsScreen() {
@@ -46,11 +47,11 @@ export function AnalyticsScreen() {
   }, []);
 
   const merged = useMemo(() => {
+    const latestByBiz = latestSnapshotPerBusiness(snapshots);
     return businesses.map((biz) => {
       const id = String(biz.id);
-      const traffic = snapshots
-        .filter((s) => String(s.business_id) === id)
-        .reduce((acc, s) => acc + umamiPageviewsFromPayload(s.payload), 0);
+      const latest = latestByBiz.get(id);
+      const traffic = latest ? umamiPageviewsFromPayload(latest.payload) : 0;
       const rev = revenue
         .filter((row) => String(row.business_id) === id)
         .reduce((acc, row) => acc + Number(row.amount ?? 0), 0);

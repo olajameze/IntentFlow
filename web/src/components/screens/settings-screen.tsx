@@ -31,6 +31,8 @@ type Biz = {
   website_url?: string | null;
   goals?: string | null;
   umami_website_id?: string | null;
+  umami_share_url?: string | null;
+  clarity_project_id?: string | null;
   active: boolean;
   has_stripe?: boolean;
 };
@@ -466,6 +468,9 @@ export function SettingsScreen() {
   const [businesses, setBusinesses] = useState<Biz[]>([]);
   /** Per-business draft for Umami id (portfolio table edits). */
   const [umamiDraft, setUmamiDraft] = useState<Record<string, string>>({});
+  /** Per-business Umami Share URL for live embed on Traffic tab. */
+  const [shareDraft, setShareDraft] = useState<Record<string, string>>({});
+  const [clarityDraft, setClarityDraft] = useState<Record<string, string>>({});
   /** Per-business draft Stripe secret (never pre-filled from server). */
   const [stripeDraft, setStripeDraft] = useState<Record<string, string>>({});
   const [form, setForm] = useState({
@@ -536,6 +541,56 @@ export function SettingsScreen() {
       goals: "",
       umami_website_id: "",
       stripe_secret_key: "",
+    });
+    load();
+  };
+
+  const saveUmamiShareUrl = async (biz: Biz) => {
+    const raw = biz.id in shareDraft ? shareDraft[biz.id] : (biz.umami_share_url ?? "");
+    const trimmed = raw.trim();
+    const res = await fetch("/api/businesses", {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        id: biz.id,
+        umami_share_url: trimmed ? trimmed : null,
+      }),
+    });
+    if (!res.ok) {
+      const data = await res.json().catch(() => ({}));
+      toast.error(typeof data.error === "string" ? data.error : "Could not save share URL");
+      return;
+    }
+    toast.success("Umami share URL saved");
+    setShareDraft((d) => {
+      const next = { ...d };
+      delete next[biz.id];
+      return next;
+    });
+    load();
+  };
+
+  const saveClarityProjectId = async (biz: Biz) => {
+    const raw = biz.id in clarityDraft ? clarityDraft[biz.id] : (biz.clarity_project_id ?? "");
+    const trimmed = raw.trim();
+    const res = await fetch("/api/businesses", {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        id: biz.id,
+        clarity_project_id: trimmed ? trimmed : null,
+      }),
+    });
+    if (!res.ok) {
+      const data = await res.json().catch(() => ({}));
+      toast.error(typeof data.error === "string" ? data.error : "Could not save Clarity project ID");
+      return;
+    }
+    toast.success("Clarity project ID saved");
+    setClarityDraft((d) => {
+      const next = { ...d };
+      delete next[biz.id];
+      return next;
     });
     load();
   };
@@ -696,6 +751,8 @@ export function SettingsScreen() {
                 <TableHead>Name</TableHead>
                 <TableHead>Type</TableHead>
                 <TableHead>Umami website id</TableHead>
+                <TableHead>Share URL (live embed)</TableHead>
+                <TableHead>Clarity project ID</TableHead>
                 <TableHead>Stripe</TableHead>
                 <TableHead className="text-right">Active</TableHead>
               </TableRow>
@@ -725,6 +782,58 @@ export function SettingsScreen() {
                         size="sm"
                         className="h-9 shrink-0"
                         onClick={() => void saveUmamiWebsiteId(biz)}
+                      >
+                        Save
+                      </Button>
+                    </div>
+                  </TableCell>
+                  <TableCell>
+                    <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
+                      <Input
+                        aria-label={`Umami share URL for ${biz.name}`}
+                        className="h-9 min-w-[14rem] font-mono text-xs"
+                        placeholder="https://cloud.umami.is/share/…"
+                        value={biz.id in shareDraft ? shareDraft[biz.id] : (biz.umami_share_url ?? "")}
+                        onChange={(e) =>
+                          setShareDraft((d) => ({
+                            ...d,
+                            [biz.id]: e.target.value,
+                          }))
+                        }
+                      />
+                      <Button
+                        type="button"
+                        variant="secondary"
+                        size="sm"
+                        className="h-9 shrink-0"
+                        onClick={() => void saveUmamiShareUrl(biz)}
+                      >
+                        Save
+                      </Button>
+                    </div>
+                  </TableCell>
+                  <TableCell>
+                    <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
+                      <Input
+                        aria-label={`Clarity project id for ${biz.name}`}
+                        className="h-9 min-w-[10rem] font-mono text-xs"
+                        placeholder="e.g. kq8x9abc12"
+                        value={
+                          biz.id in clarityDraft ? clarityDraft[biz.id] : (biz.clarity_project_id ?? "")
+                        }
+                        onChange={(e) =>
+                          setClarityDraft((d) => ({
+                            ...d,
+                            [biz.id]: e.target.value,
+                          }))
+                        }
+                      />
+                      <Button
+                        type="button"
+                        variant="secondary"
+                        size="sm"
+                        className="h-9 shrink-0"
+                        onClick={() => void saveClarityProjectId(biz)}
                       >
                         Save
                       </Button>

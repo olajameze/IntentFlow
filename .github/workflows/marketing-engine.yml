@@ -32,6 +32,8 @@ jobs:
       OLLAMA_TIMEOUT_SEC: "180"
       UMAMI_URL: ${{ secrets.UMAMI_URL }}
       UMAMI_API_TOKEN: ${{ secrets.UMAMI_API_TOKEN }}
+      UMAMI_CLOUD_REGION: ${{ secrets.UMAMI_CLOUD_REGION }}
+      TRAFFIC_SNAPSHOT_DAYS: "30"
       STRIPE_SECRET_ENCRYPTION_KEY: ${{ secrets.STRIPE_SECRET_ENCRYPTION_KEY }}
       # Pace Groq/API calls between portfolio brands (seconds). Set 0 to disable.
       ENGINE_SLEEP_BETWEEN_BUSINESSES_SEC: "20"

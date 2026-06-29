@@ -23,6 +23,7 @@ import {
 } from "@/lib/chart-tooltip";
 import { useChartSvgColors } from "@/lib/use-chart-svg-colors";
 import { umamiPageviewsFromPayload, umamiVisitorsFromPayload } from "@/lib/umami-payload";
+import { chartSnapshotsForBusiness, latestSnapshotPerBusiness } from "@/lib/analytics-snapshots";
 import ConversionMetricsChart, { type ChartSnapshot } from "@/components/analytics/ConversionMetricsChart";
 
 type Business = {
@@ -94,28 +95,23 @@ export function HomeOverview() {
     load();
   }, []);
 
-  const sparkData = useMemo(() => {
-    const days = Array.from({ length: 7 }).map((_, idx) => {
-      const d = new Date();
-      d.setDate(d.getDate() - (6 - idx));
-      return format(d, "MMM dd");
-    });
-    return days.map((label, idx) => {
-      const subset = snapshots.slice(idx * 3, idx * 3 + 10);
-      const views = subset.reduce((acc, snap) => acc + umamiPageviewsFromPayload(snap.payload), 0);
-      const revSlice = revenue.filter((_, i) => i % 7 === idx);
-      const rev = revSlice.reduce((acc, row) => acc + Number(row.amount ?? 0), 0);
-      return { label, traffic: views, revenue: rev };
-    });
-  }, [snapshots, revenue]);
+  const latestByBusiness = useMemo(() => latestSnapshotPerBusiness(snapshots), [snapshots]);
+
+  const portfolioSparkData = useMemo(() => {
+    return chartSnapshotsForBusiness(snapshots, "all", 7).map((snap) => ({
+      label: snap.captured_at ? format(new Date(String(snap.captured_at)), "MMM dd") : "—",
+      traffic: umamiPageviewsFromPayload(snap.payload),
+      revenue: 0,
+    }));
+  }, [snapshots]);
 
   const conversionChartData = useMemo((): ChartSnapshot[] => {
-    return sparkData.map((row) => ({
+    return portfolioSparkData.map((row) => ({
       period: row.label,
       revenue: row.revenue,
       traffic: row.traffic,
     }));
-  }, [sparkData]);
+  }, [portfolioSparkData]);
 
   const runEngine = async () => {
     setDispatching(true);
@@ -192,12 +188,16 @@ export function HomeOverview() {
 
       <div className="grid gap-4 md:grid-cols-2">
         {businesses.map((biz) => {
-          const bizSnaps = snapshots.filter((s) => String(s.business_id) === biz.id);
-          const latestPayload = bizSnaps[0]?.payload;
-          const pv = umamiPageviewsFromPayload(latestPayload);
-          const uv = umamiVisitorsFromPayload(latestPayload);
-          const views = bizSnaps.length ? pv : "—";
-          const uniq = bizSnaps.length ? uv : "—";
+          const latest = latestByBusiness.get(biz.id);
+          const pv = latest ? umamiPageviewsFromPayload(latest.payload) : 0;
+          const uv = latest ? umamiVisitorsFromPayload(latest.payload) : 0;
+          const views = latest ? pv : "—";
+          const uniq = latest ? uv : "—";
+          const bizSparkData = chartSnapshotsForBusiness(snapshots, biz.id, 7).map((snap) => ({
+              label: snap.captured_at ? format(new Date(String(snap.captured_at)), "MMM dd") : "—",
+              traffic: umamiPageviewsFromPayload(snap.payload),
+              revenue: 0,
+            }));
           const revToday = revenue
             .filter((r) => r.business_id === biz.id)
             .reduce((acc, row) => acc + Number(row.amount ?? 0), 0);
@@ -219,7 +219,7 @@ export function HomeOverview() {
                     <p className="text-2xl font-semibold">{leadCount}</p>
                   </div>
                   <div>
-                    <p className="text-muted-foreground">Traffic</p>
+                    <p className="text-muted-foreground">Traffic (30d)</p>
                     <p className="text-2xl font-semibold">{views}</p>
                     <p className="text-xs text-muted-foreground">Visitors {uniq}</p>
                   </div>
@@ -231,7 +231,7 @@ export function HomeOverview() {
                 <div className="w-full min-w-0 rounded-lg border bg-muted/30 p-2">
                   <div className="h-28 w-full min-w-0">
                     <ResponsiveContainer width="100%" height={112}>
-                      <LineChart data={sparkData} margin={{ top: 4, right: 4, left: -16, bottom: 0 }}>
+                      <LineChart data={bizSparkData.length ? bizSparkData : portfolioSparkData} margin={{ top: 4, right: 4, left: -16, bottom: 0 }}>
                         <CartesianGrid stroke={svg.border} strokeDasharray="3 3" vertical={false} opacity={0.4} />
                         <XAxis dataKey="label" hide />
                         <YAxis hide />
@@ -273,7 +273,7 @@ export function HomeOverview() {
                   <div className="mt-1 flex items-center justify-between text-[11px] text-muted-foreground">
                     <span className="flex items-center gap-1">
                       <Activity className="h-3 w-3" />
-                      7d trend (proxy)
+                      Sync history (Umami)
                     </span>
                     <ArrowUpRight className="h-4 w-4" />
                   </div>
