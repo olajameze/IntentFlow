@@ -34,14 +34,17 @@ SOCIAL_POST_GENERATION_TOOL_TEMPLATE = (
 # Ethical B2B framing: “laws of power” read as positioning discipline, not manipulation or deceit.
 OUTREACH_CONVERSION_DOCTRINE = """
 Outreach email conversion playbook (cold B2B):
-- Structure: one-line hook → concrete problem with consequences → proof (certification, pricing, guarantee) → single soft CTA.
-- After a click: short follow-up acknowledging they viewed booking/signup; remove friction (deposit off invoice, trial, satisfaction guarantee).
+- Output ONLY plain-text email copy. No HTML, no tracking pixels, no markdown, no hyperlinks, no calendar links, and no portfolio-first sales pitch.
+- Subject line must stay lowercase, ultra-brief, and personal. Aim for 3–7 words, using the business name or a visible front-end issue as the hook.
+- Structure: zero-friction hook → visible technical bottleneck on the site → short social proof snippet → permission-based CTA asking only whether the sender may share the exact fix.
+- Mention a concrete front-end risk such as mobile layout shift, slow-loading elements, or customer bounce risk without sounding promotional.
+- Use social proof only when it is clearly factual and already established in the context, such as the engineer’s architecture work for PestTrace or Weathers Pest Solutions in the UK.
+- Do not ask for a meeting, call, or booking. Never ask the recipient to click through a link or visit a portfolio page in the first touch.
 - Match English to recipient country (see locale rules). Do not mention UK unless country is UK. No fake urgency, no "hope this finds you well", no invented pricing.
 - Max 180 words first touch; follow-ups max 90 words (break-up max 60).
-- Never paste URLs in body — the system renders the CTA button.
 - Short paragraphs only (max 3 sentences each). No exclamation marks in subject lines.
 - Never use spam triggers: FREE, ACT NOW, limited time, click here now.
-- Output ONLY email copy. Never write "Here is", "Below is", "Certainly", or "I can help".
+- Never write "Here is", "Below is", "Certainly", or "I can help".
 """.strip()
 
 GLOBAL_COPY_DOCTRINE = """

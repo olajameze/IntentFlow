@@ -10,6 +10,7 @@ if str(_ROOT) not in sys.path:
     sys.path.insert(0, str(_ROOT))
 
 from tools.email_validator import validate_outreach_copy  # noqa: E402
+from tools.prospect_scraper import _best_email  # noqa: E402
 
 CLEAN_SUBJECT = "Audit readiness for your pest control operation"
 CLEAN_BODY = (
@@ -71,3 +72,15 @@ def test_followup_word_limit():
     ok, issues = validate_outreach_copy("Follow up", long_body, "followup")
     assert ok is False
     assert any("word limit" in i for i in issues)
+
+
+def test_prefers_non_generic_contact_email():
+    chosen = _best_email(["hello@acme.example", "owner@acme.example"])
+    assert chosen == "owner@acme.example"
+
+
+def test_rejects_url_in_initial_body():
+    body = "Hi there, I noticed a mobile layout gap on your site at https://acme.example."
+    ok, issues = validate_outreach_copy("quick question", body, "initial")
+    assert ok is False
+    assert any("URL" in issue or "URLs" in issue for issue in issues)

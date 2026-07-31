@@ -8,6 +8,10 @@ import { formatMailError } from "@/lib/outreach/smtp-errors";
 
 export type SendResult = { messageId?: string; provider: "smtp" | "resend" };
 
+function looksLikeHtml(value: string): boolean {
+  return /<\s*(?:p|div|table|tr|td|a|body|html|span|strong|br)[\s>]/i.test(value);
+}
+
 function createSmtpTransporter(campaign: string, overrides?: { fromName?: string }) {
   const cfg = getSmtpConfig(campaign, overrides);
   if (!cfg.configured) throw new Error(`SMTP not configured for campaign '${campaign}'`);
@@ -57,6 +61,8 @@ async function sendEmailViaSmtp(
     headers["X-Mailin-custom"] = JSON.stringify({ prospect_id: meta.prospectId, campaign });
   }
 
+  const htmlPayload = looksLikeHtml(html) ? html : undefined;
+
   try {
     const info = await transporter.sendMail({
       from: `${cfg.fromName} <${cfg.fromEmail}>`,
@@ -64,7 +70,7 @@ async function sendEmailViaSmtp(
       to,
       subject,
       text: plain,
-      html,
+      ...(htmlPayload ? { html: htmlPayload } : {}),
       headers,
     });
     return { messageId: info.messageId, provider: "smtp" };
@@ -84,13 +90,14 @@ async function sendEmailViaResend(
   const cfg = getResendConfig(campaign, { fromName: meta?.fromName });
   if (!cfg.configured) throw new Error(`Resend not configured for campaign '${campaign}'`);
 
+  const htmlPayload = looksLikeHtml(html) ? html : undefined;
   const payload: Record<string, unknown> = {
     from: `${cfg.fromName} <${cfg.fromEmail}>`,
     to: [to],
     subject,
-    html,
     text: plain,
     reply_to: cfg.replyTo ?? cfg.fromEmail,
+    ...(htmlPayload ? { html: htmlPayload } : {}),
   };
   if (meta?.prospectId) {
     payload.tags = [

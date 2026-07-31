@@ -210,8 +210,11 @@ export function validateOutreachCopy(
     }
   }
 
+  const thirdPartyUrlCount = countUrls(bod);
+
   if (hasDuplicateSentence(bod)) issues.push("Body contains duplicated sentences");
-  if (countUrls(bod) > 2) issues.push("Body contains too many URLs");
+  if (kind === "initial" && thirdPartyUrlCount > 0) issues.push("Body contains URL links");
+  if (thirdPartyUrlCount > 2) issues.push("Body contains too many URLs");
   if (hasShoutyAllCapsWords(sub)) issues.push("Subject contains excessive capitalization");
   if (sub.includes("!")) issues.push("Subject contains exclamation mark");
 

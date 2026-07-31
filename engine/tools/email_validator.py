@@ -205,8 +205,8 @@ def validate_outreach_copy(
 
     if _has_duplicate_sentence(bod):
         issues.append("Body contains duplicated sentences")
-    if _count_urls(bod) > 2:
-        issues.append("Body contains too many URLs")
+    if _count_urls(bod) > 0:
+        issues.append("Body contains URL links")
     if _has_shouty_all_caps_words(sub):
         issues.append("Subject contains excessive capitalization")
     if "!" in sub:

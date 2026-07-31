@@ -53,7 +53,21 @@ _SKIP_DOMAINS = re.compile(
     re.IGNORECASE,
 )
 
-_PREFERRED_LOCAL = re.compile(r"^(info|contact|hello|enquiries|admin|office|mail|team|pest)@", re.IGNORECASE)
+_GENERIC_EMAIL_PREFIXES = (
+    "info",
+    "contact",
+    "hello",
+    "enquiries",
+    "admin",
+    "office",
+    "mail",
+    "team",
+    "support",
+    "sales",
+    "careers",
+    "jobs",
+    "pest",
+)
 
 
 def _extract_emails(html: str) -> list[str]:
@@ -75,10 +89,13 @@ def _extract_emails(html: str) -> list[str]:
 def _best_email(emails: list[str]) -> str | None:
     if not emails:
         return None
+    non_generic = []
     for e in emails:
-        if _PREFERRED_LOCAL.match(e):
-            return e
-    return emails[0]
+        prefix = e.split("@", 1)[0].strip().lower()
+        if prefix and any(prefix.startswith(f"{g}.") or prefix == g for g in _GENERIC_EMAIL_PREFIXES):
+            continue
+        non_generic.append(e)
+    return non_generic[0] if non_generic else emails[0]
 
 
 # ── HTTP fetch ────────────────────────────────────────────────────────────────

@@ -117,7 +117,10 @@ export function HomeOverview() {
   const runEngine = async () => {
     setDispatching(true);
     try {
-      const res = await fetch("/api/trigger-engine", { method: "POST" });
+      const res = await fetch("/api/trigger-engine", {
+        method: "POST",
+        cache: "no-store",
+      });
       const data = (await res.json().catch(() => ({}))) as Record<string, unknown>;
 
       const manualUrl =
@@ -143,6 +146,11 @@ export function HomeOverview() {
       const msg = typeof data.error === "string" ? data.error : `HTTP ${res.status}`;
       const hint = typeof data.hint === "string" ? data.hint : "";
       const openWorkflowUrl = typeof data.manualUrl === "string" ? data.manualUrl : githubMarketingWorkflowUrl();
+
+      if (manualUrl) {
+        window.open(manualUrl, "_blank", "noopener,noreferrer");
+      }
+
       toast.error(hint ? `${msg}\n\n${hint.slice(0, 280)}` : msg, {
         duration: 20_000,
         ...(openWorkflowUrl ?

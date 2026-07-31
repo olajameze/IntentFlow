@@ -18,10 +18,12 @@ Flow:
 from __future__ import annotations
 
 import os
+import random
 import re
 import smtplib
 import sys
-from datetime import datetime, timezone
+import time
+from datetime import datetime, timedelta, timezone
 from email.mime.multipart import MIMEMultipart
 from email.mime.text import MIMEText
 from pathlib import Path
@@ -402,19 +404,10 @@ def generate_outreach_email(
     if not body_text or body_text.startswith("[Draft"):
         body_text = fallback_body
 
-    # NOTE: the CTA URL and tracking pixel are injected at *send time* by the
-    # Next.js send route, because they need the absolute base URL of the app
-    # (so the tracking redirector points to /api/outreach-track/click etc).
-    # We render a placeholder CTA + pixel here so the email looks complete in
-    # the dashboard preview. The send route swaps the placeholders for real
-    # tracking URLs before delivery.
-    html_body = _render_html(
-        body_text,
-        cfg,
-        prospect_id=str(pid),
-        snapshot_primary=use_snapshot,
-        snapshot_secondary_label=_SNAPSHOT_SECONDARY_LABEL.get(cfg.id, cfg.cta_label),
-    )
+    # Store a clean plain-text version so the engine stays deliverability-safe.
+    # HTML rendering and tracking pixels are intentionally removed from the
+    # initial outreach body generation path.
+    plain_body = body_text.strip()
 
     from tools.ab_winner import apply_ab_winner_subjects, load_ab_winner
 
@@ -428,7 +421,7 @@ def generate_outreach_email(
             {
                 "email_subject": primary_subject,
                 "email_subject_b": challenger_subject,
-                "email_body": html_body,
+                "email_body": plain_body,
                 "status": "draft_ready",
                 "campaign": cfg.id,
                 "sector": sector,
@@ -583,21 +576,53 @@ def _campaign_smtp(cfg: CampaignConfig) -> dict[str, Any]:
     }
 
 
+def _domain_sent_count(domain: str, campaign_id: str) -> int:
+    """Count sent outreach emails for the same inbox domain in the last 24 hours."""
+    cutoff = (datetime.now(timezone.utc) - timedelta(days=1)).isoformat()
+    try:
+        sb = get_supabase()
+        resp = (
+            sb.table("outreach_prospects")
+            .select("email", "sent_at")
+            .eq("campaign", campaign_id)
+            .eq("status", "sent")
+            .gte("sent_at", cutoff)
+            .execute()
+        )
+        return sum(1 for row in (resp.data or []) if isinstance(row, dict) and str(row.get("email") or "").lower().endswith(f"@{domain}"))
+    except Exception:  # noqa: BLE001
+        return 0
+
+
+def _apply_throttle_for_domain(domain: str, campaign_id: str) -> bool:
+    """Block domain bursts beyond the human-mimicry limit.
+
+    The engine keeps a soft 20-email/day ceiling per inbox domain and applies a
+    randomized delivery cadence between 15 and 45 minutes before sending.
+    """
+    if _domain_sent_count(domain, campaign_id) >= 20:
+        print(f"[outreach_email] Domain throttle exceeded for {domain} — skip send")
+        return False
+    wait_seconds = random.randint(900, 2700)
+    time.sleep(wait_seconds)
+    return True
+
+
 def send_outreach_email(
     prospect: dict[str, Any],
     campaign: CampaignConfig | str | None = None,
 ) -> bool:
-    """Send the approved email draft to the prospect via the campaign's SMTP credentials.
+    """Send a plain-text outreach email draft to the prospect via the campaign's SMTP credentials.
 
     Raises ``SmtpNotConfiguredError`` if the campaign has no resolvable SMTP credentials.
     """
     pid = prospect.get("id")
     to_email = (prospect.get("email") or "").strip()
     subject = (prospect.get("email_subject") or "").strip()
-    html_body = (prospect.get("email_body") or "").strip()
+    plain_body = (prospect.get("email_body") or "").strip()
     name = (prospect.get("name") or "").strip()
 
-    if not to_email or not subject or not html_body:
+    if not to_email or not subject or not plain_body:
         print(f"[outreach_email] Missing fields for {name} — skipping send")
         return False
 
@@ -607,6 +632,14 @@ def send_outreach_email(
         cfg = get_campaign(
             campaign or str(prospect.get("campaign") or "").strip() or DEFAULT_CAMPAIGN_ID
         )
+
+    if cfg.id == "breazy":
+        print(f"[outreach_email] Breazy Productions is excluded from sending — skipping {to_email}")
+        return False
+
+    domain = to_email.rsplit("@", 1)[-1].lower()
+    if not _apply_throttle_for_domain(domain, cfg.id):
+        return False
 
     smtp = _campaign_smtp(cfg)
     if not (smtp["host"] and smtp["user"] and smtp["password"]):
@@ -625,10 +658,7 @@ def send_outreach_email(
     msg["To"] = to_email
     msg["Reply-To"] = from_addr
 
-    plain = re.sub(r"<[^>]+>", "", html_body).strip() if html_body else subject
-
-    msg.attach(MIMEText(plain, "plain", "utf-8"))
-    msg.attach(MIMEText(html_body, "html", "utf-8"))
+    msg.attach(MIMEText(plain_body, "plain", "utf-8"))
 
     try:
         with smtplib.SMTP(smtp["host"], smtp["port"], timeout=20) as server:
@@ -638,7 +668,6 @@ def send_outreach_email(
             server.login(smtp["user"], smtp["password"])
             server.sendmail(from_addr, [to_email], msg.as_string())
 
-        # Mark sent
         sb = get_supabase()
         sb.table("outreach_prospects").update(
             {
